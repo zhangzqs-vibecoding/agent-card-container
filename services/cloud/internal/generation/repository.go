@@ -15,11 +15,48 @@ type Repository interface {
 	Create(context.Context, *Session) error
 	Get(context.Context, string, string) (*Session, error)
 	Update(context.Context, string, string, func(*Session) error) (*Session, error)
+	GetSystem(context.Context, string) (*Session, error)
+	UpdateSystem(context.Context, string, func(*Session) error) (*Session, error)
+}
+
+func (repository *MemoryRepository) GetSystem(ctx context.Context, sessionID string) (*Session, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+	session, exists := repository.sessions[sessionID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	return cloneSession(session), nil
 }
 
 type MemoryRepository struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
+}
+
+func (repository *MemoryRepository) UpdateSystem(
+	ctx context.Context,
+	sessionID string,
+	change func(*Session) error,
+) (*Session, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	current, exists := repository.sessions[sessionID]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	candidate := cloneSession(current)
+	if err := change(candidate); err != nil {
+		return nil, err
+	}
+	repository.sessions[sessionID] = candidate
+	return cloneSession(candidate), nil
 }
 
 func NewMemoryRepository() *MemoryRepository {

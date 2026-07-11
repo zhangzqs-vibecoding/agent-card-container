@@ -115,6 +115,59 @@ func (service *Service) EventsAfter(ctx context.Context, userID, sessionID strin
 	return events, nil
 }
 
+func (service *Service) StartGenerating(ctx context.Context, sessionID string) (*Session, error) {
+	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+		_, err := session.Transition(StatusGenerating, Transition{
+			Stage:    "generating",
+			Message:  "编码 Agent 正在生成卡片",
+			Progress: 0.35,
+			At:       service.now(),
+		})
+		return err
+	})
+}
+
+func (service *Service) StartValidating(ctx context.Context, sessionID string) (*Session, error) {
+	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+		_, err := session.Transition(StatusValidating, Transition{
+			Stage:    "validating",
+			Message:  "正在执行安全和合同验证",
+			Progress: 0.75,
+			At:       service.now(),
+		})
+		return err
+	})
+}
+
+func (service *Service) MarkReady(ctx context.Context, sessionID, versionID string) (*Session, error) {
+	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+		_, err := session.Transition(StatusReady, Transition{
+			Stage:     "ready",
+			Message:   "卡片已生成并签名",
+			Progress:  1,
+			VersionID: versionID,
+			At:        service.now(),
+		})
+		return err
+	})
+}
+
+func (service *Service) MarkFailed(ctx context.Context, sessionID, code string) (*Session, error) {
+	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+		if session.IsTerminal() {
+			return nil
+		}
+		_, err := session.Transition(StatusFailed, Transition{
+			Stage:     "failed",
+			Message:   "生成的卡片未通过处理流程",
+			Progress:  1,
+			ErrorCode: code,
+			At:        service.now(),
+		})
+		return err
+	})
+}
+
 func summarize(prompt, locale string) RequirementSummary {
 	constraints := []string{"卡片必须通过能力代理访问宿主能力"}
 	lower := strings.ToLower(prompt)

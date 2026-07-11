@@ -48,6 +48,7 @@ type Transition struct {
 	Message   string
 	Progress  float64
 	VersionID string
+	ErrorCode string
 	At        time.Time
 }
 
@@ -59,6 +60,7 @@ type Event struct {
 	Message   string    `json:"message"`
 	Progress  float64   `json:"progress"`
 	VersionID string    `json:"versionId,omitempty"`
+	ErrorCode string    `json:"errorCode,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -188,6 +190,7 @@ func (session *Session) Transition(next Status, input Transition) (Event, error)
 		Message:   input.Message,
 		Progress:  input.Progress,
 		VersionID: input.VersionID,
+		ErrorCode: input.ErrorCode,
 		Timestamp: input.At.UTC(),
 	}
 	session.Events = append(session.Events, event)
