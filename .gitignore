@@ -1,0 +1,29 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+coverage/
+*.iml
+
+# Go
+bin/
+dist/
+*.test
+coverage.out
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Runtime data and secrets
+.env
+.env.*
+!.env.example
+data/
+artifacts/
+tmp/
+
