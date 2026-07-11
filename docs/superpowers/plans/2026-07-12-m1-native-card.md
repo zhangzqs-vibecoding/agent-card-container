@@ -73,15 +73,15 @@ Commit: feat: add native card state engine
 - Create: apps/desktop/lib/src/native_card/catalog_renderer.dart
 - Test: apps/desktop/test/native_card/native_card_renderer_test.dart
 
-- [ ] **Step 1: Write failing widget tests**
+- [x] **Step 1: Write failing widget tests**
 
 Cover Container, Row, Column, Stack, Grid, Scroll, Divider, Text, Icon, Badge, Progress, Button, TextInput, Checkbox, Select, Slider, List, KeyValue, EmptyState and ErrorState.
 
-- [ ] **Step 2: Implement catalog renderer**
+- [x] **Step 2: Implement catalog renderer**
 
 Each component has one focused render method. Bound values resolve from controller state. Unknown components cannot reach rendering because parsing rejects them.
 
-- [ ] **Step 3: Verify interactions**
+- [x] **Step 3: Verify interactions**
 
 Tap Button and edit fields, then assert controller state and rebuilt text.
 
