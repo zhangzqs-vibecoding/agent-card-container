@@ -27,6 +27,7 @@ type BuildInput struct {
 type BuildOutput struct {
 	Archive []byte
 	SHA256  string
+	KeyID   string
 }
 
 type Builder struct {
@@ -118,6 +119,7 @@ func (builder *Builder) Build(input BuildInput) (BuildOutput, error) {
 	return BuildOutput{
 		Archive: append([]byte(nil), archive.Bytes()...),
 		SHA256:  hex.EncodeToString(digest[:]),
+		KeyID:   builder.keyID,
 	}, nil
 }
 
