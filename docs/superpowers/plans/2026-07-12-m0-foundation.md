@@ -18,19 +18,19 @@
 - Create: README.md
 - Create: docs/superpowers/plans/2026-07-12-m0-foundation.md
 
-- [ ] **Step 1: Initialize repository**
+- [x] **Step 1: Initialize repository**
 
 Run: git init -b develop
 
 Expected: repository initialized on develop.
 
-- [ ] **Step 2: Verify baseline files**
+- [x] **Step 2: Verify baseline files**
 
 Run: rg --files . | sort
 
 Expected: design, plan, README, AGENTS and ignore files are present.
 
-- [ ] **Step 3: Commit baseline**
+- [x] **Step 3: Commit baseline**
 
 Run:
 
@@ -50,7 +50,7 @@ Expected: one root commit on develop.
 - Create: services/cloud/internal/app/app.go
 - Test: services/cloud/internal/app/app_test.go
 
-- [ ] **Step 1: Generate Flutter project**
+- [x] **Step 1: Generate Flutter project**
 
 Run:
 
@@ -60,7 +60,7 @@ FLUTTER_NO_VERSION_CHECK=true flutter create --platforms=windows,linux --org dev
 
 Expected: Flutter desktop project with Windows and Linux runners.
 
-- [ ] **Step 2: Write failing Go app test**
+- [x] **Step 2: Write failing Go app test**
 
 The test constructs app.New("test") and expects Name() to return "test".
 
@@ -68,11 +68,11 @@ Run: cd services/cloud && go test ./internal/app
 
 Expected: FAIL because package app does not exist.
 
-- [ ] **Step 3: Implement minimal Go app and command**
+- [x] **Step 3: Implement minimal Go app and command**
 
 Create a focused app.App type with Name and Run methods. Run starts the HTTP server supplied by later tasks; the command currently parses AGENTCARD_ADDR and builds the app.
 
-- [ ] **Step 4: Verify projects**
+- [x] **Step 4: Verify projects**
 
 Run:
 
@@ -83,7 +83,7 @@ cd ../../apps/desktop && FLUTTER_NO_VERSION_CHECK=true flutter test
 
 Expected: both commands pass.
 
-- [ ] **Step 5: Commit scaffold**
+- [x] **Step 5: Commit scaffold**
 
 Run:
 
@@ -103,7 +103,7 @@ git commit -m "build: scaffold desktop and cloud projects"
 - Create: apps/desktop/lib/src/contracts/card_definition.dart
 - Test: apps/desktop/test/contracts/card_definition_test.dart
 
-- [ ] **Step 1: Add valid fixtures and failing Go tests**
+- [x] **Step 1: Add valid fixtures and failing Go tests**
 
 Tests decode both fixtures and assert runtime, version, size and capability fields. A separate test rejects an unknown runtime.
 
@@ -111,7 +111,7 @@ Run: cd services/cloud && go test ./internal/contracts
 
 Expected: FAIL because CardDefinition and DecodeCardDefinition are missing.
 
-- [ ] **Step 2: Implement Go contract**
+- [x] **Step 2: Implement Go contract**
 
 Implement strict JSON decoding with DisallowUnknownFields and explicit validation for formatVersion, runtime, identifiers, sizes and entrypoint.
 
@@ -119,7 +119,7 @@ Run: cd services/cloud && go test ./internal/contracts
 
 Expected: PASS.
 
-- [ ] **Step 3: Add failing Dart contract tests**
+- [x] **Step 3: Add failing Dart contract tests**
 
 Tests parse the same repository fixtures and assert identical semantics; invalid runtime throws FormatException.
 
@@ -127,7 +127,7 @@ Run: cd apps/desktop && FLUTTER_NO_VERSION_CHECK=true flutter test test/contract
 
 Expected: FAIL because CardDefinition is missing.
 
-- [ ] **Step 4: Implement Dart contract**
+- [x] **Step 4: Implement Dart contract**
 
 Implement immutable value types and strict fromJson validation without depending on code generation.
 
@@ -135,7 +135,7 @@ Run: cd apps/desktop && FLUTTER_NO_VERSION_CHECK=true flutter test test/contract
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit contract**
+- [x] **Step 5: Commit contract**
 
 Run:
 
@@ -152,7 +152,7 @@ git commit -m "feat: define shared card contract"
 - Modify: services/cloud/internal/app/app.go
 - Modify: services/cloud/cmd/agentcard/main.go
 
-- [ ] **Step 1: Write failing HTTP test**
+- [x] **Step 1: Write failing HTTP test**
 
 Use httptest to call GET /healthz and assert status 200 plus JSON fields status=ok and service=agent-card-cloud.
 
@@ -160,11 +160,11 @@ Run: cd services/cloud && go test ./internal/httpapi
 
 Expected: FAIL because NewHandler is missing.
 
-- [ ] **Step 2: Implement minimal handler**
+- [x] **Step 2: Implement minimal handler**
 
 Use net/http ServeMux, explicit methods, JSON content type and a stable response struct.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run:
 
@@ -175,7 +175,7 @@ go vet ./...
 
 Expected: both commands pass.
 
-- [ ] **Step 4: Commit API**
+- [x] **Step 4: Commit API**
 
 Run:
 
@@ -191,7 +191,7 @@ git commit -m "feat: add cloud health api"
 - Create: apps/desktop/lib/src/runtime/local_runtime_server.dart
 - Test: apps/desktop/test/runtime/local_runtime_server_test.dart
 
-- [ ] **Step 1: Write failing loopback tests**
+- [x] **Step 1: Write failing loopback tests**
 
 Tests start the server, assert loopback address and nonzero random port, create two sessions, verify different hosts/tokens, reject an incorrect Host, and successfully fetch a registered in-memory index.html using the correct Host.
 
@@ -199,19 +199,19 @@ Run: cd apps/desktop && FLUTTER_NO_VERSION_CHECK=true flutter test test/runtime/
 
 Expected: FAIL because LocalRuntimeServer is missing.
 
-- [ ] **Step 2: Implement server**
+- [x] **Step 2: Implement server**
 
 Use HttpServer.bind(InternetAddress.loopbackIPv4, 0, shared: false). Session identity is generated with Random.secure. Requests are accepted only for an active exact Host. Serve only registered immutable byte resources with explicit MIME, CSP, nosniff and no-referrer headers.
 
-- [ ] **Step 3: Add RPC rejection tests**
+- [x] **Step 3: Add RPC rejection tests**
 
 Tests verify missing/incorrect bearer token, Origin mismatch, expired session, oversized JSON and unknown method return stable JSON-RPC errors.
 
-- [ ] **Step 4: Implement minimal runtime methods**
+- [x] **Step 4: Implement minimal runtime methods**
 
 Implement runtime.getContext and storage.get/set/delete/list with per-session in-memory storage and size checks. Persistent storage is added in M1.
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run:
 
@@ -224,7 +224,7 @@ FLUTTER_NO_VERSION_CHECK=true flutter test
 
 Expected: all commands pass.
 
-- [ ] **Step 6: Commit runtime**
+- [x] **Step 6: Commit runtime**
 
 Run:
 
@@ -242,7 +242,7 @@ git commit -m "feat: add local card runtime server"
 - Test: apps/desktop/test/app/agent_card_app_test.dart
 - Create: docs/verification/m0-linux-evidence.md
 
-- [ ] **Step 1: Write failing widget test**
+- [x] **Step 1: Write failing widget test**
 
 Pump AgentCardApp and assert the title, Agent panel affordance, empty workspace text, add-card action and runtime status indicator.
 
@@ -250,11 +250,11 @@ Run: cd apps/desktop && FLUTTER_NO_VERSION_CHECK=true flutter test test/app/agen
 
 Expected: FAIL because AgentCardApp is missing.
 
-- [ ] **Step 2: Implement desktop shell**
+- [x] **Step 2: Implement desktop shell**
 
 Build a Material 3 dark/light shell with navigation rail, an explicit empty 12-column workspace grid, collapsible Agent panel and runtime status. Keep state local and components focused.
 
-- [ ] **Step 3: Verify all M0 automated gates**
+- [x] **Step 3: Verify all M0 automated gates**
 
 Run:
 
@@ -265,11 +265,11 @@ cd ../../services/cloud && go test ./... && go vet ./...
 
 Expected: all commands pass.
 
-- [ ] **Step 4: Record platform evidence**
+- [x] **Step 4: Record platform evidence**
 
 Document the Linux-hosted automated results and explicitly list Windows-only WebView2, transparent overlay, DPI and IME checks as not yet executable on this host. Do not mark the Windows M0 gate passed.
 
-- [ ] **Step 5: Commit shell**
+- [x] **Step 5: Commit shell**
 
 Run:
 
