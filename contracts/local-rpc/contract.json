@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentcard.dev/contracts/local-rpc/contract.json",
+  "contractVersion": 1,
+  "methods": [
+    "runtime.getContext",
+    "storage.get",
+    "storage.set",
+    "storage.delete",
+    "storage.list",
+    "notification.show",
+    "clipboard.write",
+    "clipboard.read",
+    "host.openExternal",
+    "network.fetch",
+    "system.metrics.get",
+    "system.metrics.subscribe",
+    "system.metrics.unsubscribe",
+    "window.getState",
+    "window.detach",
+    "window.dock",
+    "window.setAlwaysOnTop",
+    "window.requestAttention"
+  ],
+  "events": [
+    "context.changed",
+    "theme.changed",
+    "online.changed",
+    "surface.changed",
+    "permission.changed",
+    "system.metrics",
+    "runtime.suspend",
+    "runtime.resume"
+  ],
+  "stableErrors": [
+    "INVALID_PARAMS",
+    "PERMISSION_REQUIRED",
+    "PERMISSION_DENIED",
+    "CAPABILITY_UNAVAILABLE",
+    "OFFLINE",
+    "RATE_LIMITED",
+    "TIMEOUT",
+    "SESSION_EXPIRED",
+    "INTERNAL"
+  ]
+}

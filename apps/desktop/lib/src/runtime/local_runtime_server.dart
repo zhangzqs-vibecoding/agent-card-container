@@ -3,22 +3,38 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import '../contracts/local_rpc_contract.dart';
+
 export 'runtime_session.dart';
 
 import 'runtime_session.dart';
 
 class LocalRuntimeServer {
-  LocalRuntimeServer._(this._server) {
+  LocalRuntimeServer._(
+    this._server,
+    this._rateLimit,
+    this._invocationTimeout,
+    this._maxResponseBytes,
+  ) {
     _subscription = _server.listen(_handleRequest);
   }
 
-  static Future<LocalRuntimeServer> start() async {
+  static Future<LocalRuntimeServer> start({
+    RuntimeRateLimit rateLimit = const RuntimeRateLimit(),
+    Duration invocationTimeout = const Duration(seconds: 10),
+    int maxResponseBytes = 1024 * 1024,
+  }) async {
     final server = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       0,
       shared: false,
     );
-    return LocalRuntimeServer._(server);
+    return LocalRuntimeServer._(
+      server,
+      rateLimit,
+      invocationTimeout,
+      maxResponseBytes,
+    );
   }
 
   static const _contentSecurityPolicy =
@@ -36,6 +52,9 @@ class LocalRuntimeServer {
       "form-action 'none'";
 
   final HttpServer _server;
+  final RuntimeRateLimit _rateLimit;
+  final Duration _invocationTimeout;
+  final int _maxResponseBytes;
   final _sessionsByAuthority = <String, RuntimeSession>{};
   late final StreamSubscription<HttpRequest> _subscription;
   final Random _random = Random.secure();
@@ -48,6 +67,8 @@ class LocalRuntimeServer {
     required String cardId,
     required String versionId,
     required Map<String, RuntimeResource> resources,
+    Set<String> declaredCapabilities = const {},
+    RuntimeRpcHandler? rpcHandler,
   }) {
     final id = _randomHex(16);
     final authority = '$id.localhost:$port';
@@ -59,16 +80,41 @@ class LocalRuntimeServer {
       cardId: cardId,
       versionId: versionId,
       resources: resources,
+      declaredCapabilities: declaredCapabilities,
+      rateLimit: _rateLimit,
+      rpcHandler: rpcHandler,
     );
     _sessionsByAuthority[authority] = session;
     return session;
   }
 
   void closeSession(String id) {
-    _sessionsByAuthority.removeWhere((_, session) => session.id == id);
+    final sessions = _sessionsByAuthority.values
+        .where((session) => session.id == id)
+        .toList(growable: false);
+    for (final session in sessions) {
+      session.closeEventSockets();
+      _sessionsByAuthority.remove(session.authority);
+    }
+  }
+
+  int publishEvent(String sessionId, String event, Object? payload) {
+    if (!LocalRpcContract.events.contains(event)) {
+      throw ArgumentError.value(event, 'event', 'unknown runtime event');
+    }
+    final session = _sessionsByAuthority.values
+        .where((candidate) => candidate.id == sessionId)
+        .firstOrNull;
+    if (session == null) {
+      throw StateError('runtime session is expired');
+    }
+    return session.publishEvent(event, payload);
   }
 
   Future<void> close() async {
+    for (final session in _sessionsByAuthority.values) {
+      session.closeEventSockets();
+    }
     _sessionsByAuthority.clear();
     await _subscription.cancel();
     await _server.close(force: true);
@@ -84,6 +130,20 @@ class LocalRuntimeServer {
 
     if (request.uri.path == '/v1/rpc') {
       await _handleRpc(request, session);
+      return;
+    }
+
+    if (request.uri.path == '/v1/events') {
+      await _handleEvents(request, session);
+      return;
+    }
+
+    if (request.uri.path == '/runtime/bootstrap.js') {
+      if (request.method != 'GET') {
+        await _closeWithStatus(request, HttpStatus.methodNotAllowed);
+        return;
+      }
+      await _serveBootstrap(request, session);
       return;
     }
 
@@ -156,6 +216,10 @@ class LocalRuntimeServer {
 
     final id = decoded['id'];
     final method = decoded['method']! as String;
+    if (!LocalRpcContract.methods.contains(method)) {
+      await _writeRpcError(request, id, -32601, 'Method not found');
+      return;
+    }
     final rawParams = decoded['params'];
     if (rawParams != null && rawParams is! Map<String, Object?>) {
       await _writeRpcError(request, id, -32602, 'Invalid params');
@@ -163,21 +227,113 @@ class LocalRuntimeServer {
     }
     final params = rawParams as Map<String, Object?>? ?? const {};
 
+    if (!session.allowRpc()) {
+      await _writeRpcError(
+        request,
+        id,
+        -32000,
+        'Rate limited',
+        stableCode: 'RATE_LIMITED',
+      );
+      return;
+    }
+
     try {
-      final result = _invoke(session, method, params);
+      final result = await _invoke(
+        session,
+        method,
+        params,
+      ).timeout(_invocationTimeout);
       await _writeRpcResult(request, id, result);
     } on _InvalidParams catch (error) {
       await _writeRpcError(request, id, -32602, error.message);
     } on _UnknownMethod {
       await _writeRpcError(request, id, -32601, 'Method not found');
+    } on RuntimeRpcException catch (error) {
+      await _writeRpcError(
+        request,
+        id,
+        -32000,
+        error.message,
+        stableCode: error.code,
+      );
+    } on TimeoutException {
+      await _writeRpcError(
+        request,
+        id,
+        -32000,
+        'Invocation timed out',
+        stableCode: 'TIMEOUT',
+      );
+    } catch (_) {
+      await _writeRpcError(
+        request,
+        id,
+        -32000,
+        'Internal error',
+        stableCode: 'INTERNAL',
+      );
     }
   }
 
-  Object? _invoke(
+  Future<void> _handleEvents(
+    HttpRequest request,
+    RuntimeSession session,
+  ) async {
+    if (request.headers.value('Origin') != session.origin) {
+      await _closeWithStatus(request, HttpStatus.forbidden);
+      return;
+    }
+    if (!WebSocketTransformer.isUpgradeRequest(request)) {
+      await _closeWithStatus(request, HttpStatus.badRequest);
+      return;
+    }
+    final socket = await WebSocketTransformer.upgrade(request);
+    var authenticated = false;
+    socket.listen(
+      (message) {
+        if (authenticated || message is! String) {
+          return;
+        }
+        try {
+          final decoded = jsonDecode(message);
+          if (decoded is Map<String, Object?> &&
+              decoded['type'] == 'authenticate' &&
+              decoded['token'] == session.token) {
+            authenticated = true;
+            session.attachEventSocket(socket);
+            socket.add(jsonEncode({'type': 'authenticated'}));
+            return;
+          }
+        } on FormatException {
+          // Invalid authentication frames are closed below.
+        }
+        unawaited(
+          socket.close(
+            WebSocketStatus.policyViolation,
+            'invalid event authentication',
+          ),
+        );
+      },
+      onDone: () => session.detachEventSocket(socket),
+      onError: (_) => session.detachEventSocket(socket),
+      cancelOnError: true,
+    );
+  }
+
+  Future<Object?> _invoke(
     RuntimeSession session,
     String method,
     Map<String, Object?> params,
-  ) {
+  ) async {
+    final capability = _requiredCapability(method);
+    if (capability != null &&
+        !session.declaredCapabilities.contains(capability)) {
+      throw const RuntimeRpcException(
+        'PERMISSION_DENIED',
+        'Capability was not declared by the card',
+      );
+    }
     switch (method) {
       case 'runtime.getContext':
         return {
@@ -208,8 +364,31 @@ class LocalRuntimeServer {
         final keys = session.storage.keys.toList()..sort();
         return {'keys': keys};
       default:
-        throw const _UnknownMethod();
+        final handler = session.rpcHandler;
+        if (handler == null) {
+          throw const RuntimeRpcException(
+            'CAPABILITY_UNAVAILABLE',
+            'Capability is unavailable',
+          );
+        }
+        return handler(session.rpcContext, method, params);
     }
+  }
+
+  String? _requiredCapability(String method) {
+    if (method == 'runtime.getContext') {
+      return null;
+    }
+    if (method.startsWith('storage.')) {
+      return 'storage';
+    }
+    if (method.startsWith('window.')) {
+      return 'window.manageSelf';
+    }
+    if (method.startsWith('system.metrics.')) {
+      return 'system.metrics.read';
+    }
+    return method;
   }
 
   String _storageKey(Map<String, Object?> params) {
@@ -224,25 +403,84 @@ class LocalRuntimeServer {
     HttpRequest request,
     Object? id,
     Object? result,
-  ) {
-    return _writeRpcResponse(request, {
-      'jsonrpc': '2.0',
-      'id': id,
-      'result': result,
-    });
+  ) async {
+    final body = {'jsonrpc': '2.0', 'id': id, 'result': result};
+    if (utf8.encode(jsonEncode(body)).length > _maxResponseBytes) {
+      await _writeRpcError(
+        request,
+        id,
+        -32000,
+        'Response exceeds size limit',
+        stableCode: 'INTERNAL',
+      );
+      return;
+    }
+    await _writeRpcResponse(request, body);
   }
 
   Future<void> _writeRpcError(
     HttpRequest request,
     Object? id,
     int code,
-    String message,
-  ) {
+    String message, {
+    String? stableCode,
+  }) {
     return _writeRpcResponse(request, {
       'jsonrpc': '2.0',
       'id': id,
-      'error': {'code': code, 'message': message},
+      'error': {
+        'code': code,
+        'message': message,
+        if (stableCode != null) 'data': {'code': stableCode},
+      },
     });
+  }
+
+  Future<void> _serveBootstrap(
+    HttpRequest request,
+    RuntimeSession session,
+  ) async {
+    final token = jsonEncode(session.token);
+    final source =
+        '(function(){\n'
+        '  "use strict";\n'
+        '  const token = $token;\n'
+        '  let nextId = 1;\n'
+        '  const handlers = new Map();\n'
+        '  async function invoke(method, params) {\n'
+        '    const response = await fetch("/v1/rpc", {\n'
+        '      method: "POST",\n'
+        '      headers: {\n'
+        '        "Authorization": "Bearer " + token,\n'
+        '        "Content-Type": "application/json",\n'
+        '        "X-AgentCard-RPC-Version": "1"\n'
+        '      },\n'
+        '      body: JSON.stringify({jsonrpc:"2.0",id:nextId++,method:method,params:params||{}})\n'
+        '    });\n'
+        '    const payload = await response.json();\n'
+        '    if (payload.error) { const error = new Error(payload.error.message); error.code = payload.error.data && payload.error.data.code; throw error; }\n'
+        '    return payload.result;\n'
+        '  }\n'
+        '  const socket = new WebSocket((location.protocol==="https:"?"wss://":"ws://")+location.host+"/v1/events");\n'
+        '  socket.addEventListener("open", function(){socket.send(JSON.stringify({type:"authenticate",token:token}));});\n'
+        '  socket.addEventListener("message", function(event){const message=JSON.parse(event.data);const list=handlers.get(message.event)||[];list.forEach(function(handler){handler(message.payload);});});\n'
+        '  window.agentCard = Object.freeze({\n'
+        '    getContext: function(){return invoke("runtime.getContext");},\n'
+        '    invoke: invoke,\n'
+        '    subscribe: function(event, handler){const list=handlers.get(event)||[];list.push(handler);handlers.set(event,list);return function(){handlers.set(event,(handlers.get(event)||[]).filter(function(item){return item!==handler;}));};}\n'
+        '  });\n'
+        '})();\n';
+    request.response.statusCode = HttpStatus.ok;
+    request.response.headers.contentType = ContentType(
+      'application',
+      'javascript',
+      charset: 'utf-8',
+    );
+    request.response.headers.set('Cache-Control', 'no-store');
+    request.response.headers.set('X-Content-Type-Options', 'nosniff');
+    request.response.headers.set('Referrer-Policy', 'no-referrer');
+    request.response.write(source);
+    await request.response.close();
   }
 
   Future<void> _writeRpcResponse(
@@ -289,4 +527,11 @@ class _InvalidParams implements Exception {
 
 class _UnknownMethod implements Exception {
   const _UnknownMethod();
+}
+
+class RuntimeRpcException implements Exception {
+  const RuntimeRpcException(this.code, this.message);
+
+  final String code;
+  final String message;
 }

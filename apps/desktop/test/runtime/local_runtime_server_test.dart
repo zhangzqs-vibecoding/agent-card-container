@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -41,6 +42,37 @@ void main() {
       expect(first.token, isNot(second.token));
       expect(first.origin, startsWith('http://'));
     });
+
+    test(
+      'serves a dynamic bootstrap SDK without putting token in URL',
+      () async {
+        final session = server.createSession(
+          instanceId: 'instance-1',
+          cardId: 'card-one',
+          versionId: 'version-one',
+          resources: const {},
+        );
+
+        final response = await _request(
+          server,
+          '/runtime/bootstrap.js',
+          authority: session.authority,
+        );
+
+        expect(response.statusCode, HttpStatus.ok);
+        expect(
+          response.headers.contentType?.mimeType,
+          'application/javascript',
+        );
+        expect(response.headers.value('cache-control'), 'no-store');
+        expect(response.body, contains('window.agentCard'));
+        expect(response.body, contains(session.token));
+        expect(response.body, contains('/v1/rpc'));
+        expect(response.body, contains('/v1/events'));
+        expect(session.origin, isNot(contains(session.token)));
+        expect(session.resources.toString(), isNot(contains(session.token)));
+      },
+    );
 
     test(
       'serves registered resources only for the exact session host',
@@ -114,6 +146,7 @@ void main() {
         cardId: 'card-one',
         versionId: 'version-one',
         resources: const {},
+        declaredCapabilities: const {'storage'},
       );
 
       final context = await _rpc(
@@ -184,6 +217,7 @@ void main() {
         cardId: 'card-one',
         versionId: 'version-one',
         resources: const {},
+        declaredCapabilities: const {'storage'},
       );
       await _rpc(
         server,
@@ -221,6 +255,7 @@ void main() {
         cardId: 'card-one',
         versionId: 'version-one',
         resources: const {},
+        declaredCapabilities: const {'storage'},
       );
       final chunk = List.filled(200000, 'x').join();
       Map<String, Object?>? response;
@@ -270,6 +305,181 @@ void main() {
 
       expect(response.statusCode, HttpStatus.requestEntityTooLarge);
     });
+
+    test('rate limits each session with a stable error code', () async {
+      await server.close();
+      server = await LocalRuntimeServer.start(
+        rateLimit: const RuntimeRateLimit(refillPerSecond: 0, burst: 2),
+      );
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+      );
+
+      await _rpc(server, session, id: 1, method: 'runtime.getContext');
+      await _rpc(server, session, id: 2, method: 'runtime.getContext');
+      final limited = await _rpc(
+        server,
+        session,
+        id: 3,
+        method: 'runtime.getContext',
+      );
+
+      expect((limited['error'] as Map<String, Object?>)['data'], {
+        'code': 'RATE_LIMITED',
+      });
+    });
+
+    test('authenticates WebSocket events without token in the URL', () async {
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+      );
+      final socket = await WebSocket.connect(
+        'ws://127.0.0.1:${server.port}/v1/events',
+        headers: {
+          HttpHeaders.hostHeader: session.authority,
+          'Origin': session.origin,
+        },
+      );
+      addTearDown(socket.close);
+      final messages = StreamIterator<dynamic>(socket);
+
+      socket.add(jsonEncode({'type': 'authenticate', 'token': session.token}));
+      expect(await messages.moveNext(), isTrue);
+      expect(jsonDecode(messages.current as String), {'type': 'authenticated'});
+
+      final seq = server.publishEvent(session.id, 'theme.changed', {
+        'theme': 'dark',
+      });
+      expect(seq, 1);
+      expect(await messages.moveNext(), isTrue);
+      expect(jsonDecode(messages.current as String), {
+        'seq': 1,
+        'event': 'theme.changed',
+        'payload': {'theme': 'dark'},
+      });
+      await messages.cancel();
+    });
+
+    test('rejects invalid event authentication and unknown events', () async {
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+      );
+      final socket = await WebSocket.connect(
+        'ws://127.0.0.1:${server.port}/v1/events',
+        headers: {
+          HttpHeaders.hostHeader: session.authority,
+          'Origin': session.origin,
+        },
+      );
+      socket.add(jsonEncode({'type': 'authenticate', 'token': 'wrong'}));
+      await socket.drain<void>().timeout(const Duration(seconds: 2));
+
+      expect(socket.closeCode, WebSocketStatus.policyViolation);
+      expect(
+        () => server.publishEvent(session.id, 'shell.output', const {}),
+        throwsArgumentError,
+      );
+    });
+
+    test('forwards only registered capability methods to the host', () async {
+      final calls = <String>[];
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+        declaredCapabilities: const {'notification.show'},
+        rpcHandler: (context, method, params) async {
+          calls.add('${context.instanceId}:$method');
+          return {'accepted': params['title']};
+        },
+      );
+
+      final allowed = await _rpc(
+        server,
+        session,
+        id: 1,
+        method: 'notification.show',
+        params: {'title': '完成'},
+      );
+      final forbidden = await _rpc(
+        server,
+        session,
+        id: 2,
+        method: 'shell.execute',
+      );
+      final undeclared = await _rpc(
+        server,
+        session,
+        id: 3,
+        method: 'storage.get',
+        params: {'key': 'private'},
+      );
+
+      expect(allowed['result'], {'accepted': '完成'});
+      expect(calls, ['instance-1:notification.show']);
+      expect((forbidden['error'] as Map<String, Object?>)['code'], -32601);
+      expect((undeclared['error'] as Map<String, Object?>)['data'], {
+        'code': 'PERMISSION_DENIED',
+      });
+    });
+
+    test(
+      'maps host timeout and oversized responses to stable errors',
+      () async {
+        await server.close();
+        server = await LocalRuntimeServer.start(
+          invocationTimeout: const Duration(milliseconds: 10),
+          maxResponseBytes: 128,
+        );
+        final session = server.createSession(
+          instanceId: 'instance-1',
+          cardId: 'card-one',
+          versionId: 'version-one',
+          resources: const {},
+          declaredCapabilities: const {
+            'notification.show',
+            'system.metrics.read',
+          },
+          rpcHandler: (_, method, _) async {
+            if (method == 'notification.show') {
+              await Future<void>.delayed(const Duration(milliseconds: 50));
+              return null;
+            }
+            return {'body': List.filled(256, 'x').join()};
+          },
+        );
+
+        final timedOut = await _rpc(
+          server,
+          session,
+          id: 1,
+          method: 'notification.show',
+        );
+        final oversized = await _rpc(
+          server,
+          session,
+          id: 2,
+          method: 'system.metrics.get',
+        );
+
+        expect((timedOut['error'] as Map<String, Object?>)['data'], {
+          'code': 'TIMEOUT',
+        });
+        expect((oversized['error'] as Map<String, Object?>)['data'], {
+          'code': 'INTERNAL',
+        });
+      },
+    );
   });
 }
 
@@ -326,7 +536,7 @@ Future<_Response> _request(
       request.headers.set(entry.key, entry.value);
     }
     if (body != null) {
-      request.write(jsonEncode(body));
+      request.add(utf8.encode(jsonEncode(body)));
     }
     final response = await request.close();
     final responseBody = await utf8.decoder.bind(response).join();
