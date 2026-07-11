@@ -74,7 +74,7 @@ class CardDefinition {
   });
 
   factory CardDefinition.fromJson(Map<String, Object?> json) {
-    _rejectUnknown(json, _keys);
+    _rejectUnknown(json, jsonKeys);
     final definition = CardDefinition(
       formatVersion: _integer(json, 'formatVersion'),
       minHostVersion: _string(json, 'minHostVersion'),
@@ -99,7 +99,7 @@ class CardDefinition {
     return definition;
   }
 
-  static const _keys = {
+  static const jsonKeys = {
     'formatVersion',
     'minHostVersion',
     'cardId',

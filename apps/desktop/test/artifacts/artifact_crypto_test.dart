@@ -1,0 +1,45 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:agent_card_desktop/src/artifacts/artifact_crypto.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('canonical JSON sorts object keys recursively', () {
+    expect(
+      canonicalJson({
+        'z': 1,
+        'a': {
+          'd': true,
+          'b': [
+            3,
+            {'y': null, 'x': '值'},
+          ],
+        },
+      }),
+      '{"a":{"b":[3,{"x":"值","y":null}],"d":true},"z":1}',
+    );
+  });
+
+  test('native crypto hashes and verifies Ed25519 signatures', () {
+    final crypto = ArtifactCrypto.native();
+    final message = Uint8List.fromList(utf8.encode('agent-card'));
+    final keys = crypto.keyPairFromSeed(Uint8List(32)..[0] = 7);
+    final signature = crypto.signForTesting(message, keys.secretKey);
+
+    expect(
+      hexEncode(crypto.sha256(Uint8List.fromList(utf8.encode('abc')))),
+      'ba7816bf8f01cfea414140de5dae2223'
+      'b00361a396177a9cb410ff61f20015ad',
+    );
+    expect(crypto.verify(message, signature, keys.publicKey), isTrue);
+    expect(
+      crypto.verify(
+        Uint8List.fromList(utf8.encode('tampered')),
+        signature,
+        keys.publicKey,
+      ),
+      isFalse,
+    );
+  });
+}
