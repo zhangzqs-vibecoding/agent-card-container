@@ -1,0 +1,26 @@
+{
+  "formatVersion": 1,
+  "minHostVersion": "1.0.0",
+  "cardId": "card_pomodoro",
+  "versionId": "ver_pomodoro_1",
+  "displayVersion": "1.0.0",
+  "runtime": "native",
+  "stateSchemaVersion": 1,
+  "title": "番茄钟",
+  "description": "完全离线的番茄钟",
+  "entrypoint": "payload/native.json",
+  "catalogVersion": "1",
+  "minSize": {"width": 240, "height": 160},
+  "preferredSize": {"width": 360, "height": 240},
+  "maxSize": {"width": 720, "height": 480},
+  "capabilities": ["storage", "notification.show", "window.manageSelf"],
+  "networkPolicy": {"mode": "none", "domains": []},
+  "files": [
+    {
+      "path": "payload/native.json",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 1024
+    }
+  ],
+  "createdAt": "2026-07-12T00:00:00Z"
+}

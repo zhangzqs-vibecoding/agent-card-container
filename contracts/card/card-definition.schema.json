@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentcard.dev/contracts/card/card-definition.schema.json",
+  "title": "Agent Card Definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "minHostVersion",
+    "cardId",
+    "versionId",
+    "displayVersion",
+    "runtime",
+    "stateSchemaVersion",
+    "title",
+    "description",
+    "entrypoint",
+    "minSize",
+    "preferredSize",
+    "maxSize",
+    "capabilities",
+    "networkPolicy",
+    "files",
+    "createdAt"
+  ],
+  "properties": {
+    "formatVersion": {"const": 1},
+    "minHostVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "cardId": {"type": "string", "pattern": "^card_[A-Za-z0-9_-]+$"},
+    "versionId": {"type": "string", "pattern": "^ver_[A-Za-z0-9_-]+$"},
+    "displayVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "runtime": {"enum": ["native", "web"]},
+    "stateSchemaVersion": {"type": "integer", "minimum": 1},
+    "title": {"type": "string", "minLength": 1, "maxLength": 120},
+    "description": {"type": "string", "maxLength": 500},
+    "entrypoint": {"type": "string", "pattern": "^payload/(native\\.json|web/index\\.html)$"},
+    "catalogVersion": {"type": "string", "pattern": "^[0-9]+$"},
+    "minSize": {"$ref": "#/$defs/size"},
+    "preferredSize": {"$ref": "#/$defs/size"},
+    "maxSize": {"$ref": "#/$defs/size"},
+    "capabilities": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 80}
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "domains"],
+      "properties": {
+        "mode": {"enum": ["none", "proxy"]},
+        "domains": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 253}
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "size"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+          "size": {"type": "integer", "minimum": 0, "maximum": 8388608}
+        }
+      }
+    },
+    "createdAt": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"runtime": {"const": "native"}}},
+      "then": {
+        "required": ["catalogVersion"],
+        "properties": {"entrypoint": {"const": "payload/native.json"}}
+      }
+    },
+    {
+      "if": {"properties": {"runtime": {"const": "web"}}},
+      "then": {
+        "properties": {"entrypoint": {"const": "payload/web/index.html"}}
+      }
+    }
+  ],
+  "$defs": {
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": {"type": "number", "exclusiveMinimum": 0},
+        "height": {"type": "number", "exclusiveMinimum": 0}
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "minHostVersion": "1.0.0",
+  "cardId": "card_local_canvas",
+  "versionId": "ver_local_canvas_1",
+  "displayVersion": "1.0.0",
+  "runtime": "web",
+  "stateSchemaVersion": 1,
+  "title": "本地画板",
+  "description": "使用本地 JavaScript 运行的离线画板",
+  "entrypoint": "payload/web/index.html",
+  "minSize": {"width": 320, "height": 240},
+  "preferredSize": {"width": 640, "height": 480},
+  "maxSize": {"width": 1600, "height": 1200},
+  "capabilities": ["storage", "window.manageSelf"],
+  "networkPolicy": {"mode": "none", "domains": []},
+  "files": [
+    {
+      "path": "payload/web/index.html",
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "size": 2048
+    }
+  ],
+  "createdAt": "2026-07-12T00:00:00Z"
+}
