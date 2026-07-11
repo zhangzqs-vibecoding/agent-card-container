@@ -118,25 +118,28 @@ Commit: feat: enforce card capabilities
 - Test: apps/desktop/test/storage/local_database_test.dart
 - Modify: apps/desktop/lib/src/workspace/workspace_screen.dart
 
-- [ ] **Step 1: Add sqlite dependencies**
+- [x] **Step 1: Add SQLite runtime binding**
 
-Run: flutter pub add sqlite3 path_provider
+The configured pub mirror was unavailable, so M1 uses a minimal Dart FFI binding
+to the operating-system SQLite library without adding third-party packages.
+Linux tests load `libsqlite3.so.0`; Windows packaging must bundle and verify
+`sqlite3.dll` before the Windows release gate can pass.
 
 Expected: pubspec and lock contain compatible pinned versions.
 
-- [ ] **Step 2: Write failing repository tests**
+- [x] **Step 2: Write failing repository tests**
 
 Cover CardInstallation, CardInstance, workspace/overlay/detached Surface, PermissionGrant, placement updates, state namespaces and atomic version switches.
 
-- [ ] **Step 3: Implement schema and repositories**
+- [x] **Step 3: Implement schema and repositories**
 
 Only the main Engine opens the database for writes. Enable foreign keys and WAL. Apply numbered migrations in one transaction.
 
-- [ ] **Step 4: Render a persisted NativeCard in the workspace**
+- [x] **Step 4: Render a persisted NativeCard in the workspace**
 
 Replace the empty state when repository contains an instance; preserve the empty state for a fresh database.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run: flutter analyze, flutter test and flutter build bundle.
 

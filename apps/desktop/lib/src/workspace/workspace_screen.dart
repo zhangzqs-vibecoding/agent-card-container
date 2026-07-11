@@ -1,9 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../native_card/native_card_controller.dart';
+import '../native_card/native_card_renderer.dart';
+import 'workspace_card.dart';
+
 class WorkspaceScreen extends StatefulWidget {
-  const WorkspaceScreen({super.key, this.runtimePort});
+  const WorkspaceScreen({
+    super.key,
+    this.runtimePort,
+    this.workspaceCards = const [],
+  });
 
   final int? runtimePort;
+  final List<WorkspaceCard> workspaceCards;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -41,6 +50,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     VerticalDivider(width: 1, color: colors.outlineVariant),
                     Expanded(
                       child: _WorkspaceCanvas(
+                        cards: widget.workspaceCards,
                         agentPanelOpen: _agentPanelOpen,
                         onOpenAgentPanel: () {
                           setState(() => _agentPanelOpen = true);
@@ -288,126 +298,215 @@ class _NavItem extends StatelessWidget {
 
 class _WorkspaceCanvas extends StatelessWidget {
   const _WorkspaceCanvas({
+    required this.cards,
     required this.agentPanelOpen,
     required this.onOpenAgentPanel,
   });
 
+  final List<WorkspaceCard> cards;
   final bool agentPanelOpen;
   final VoidCallback onOpenAgentPanel;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Stack(
-      children: [
-        const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
-        Positioned(
-          left: 28,
-          top: 24,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '工作区',
-                style: TextStyle(
-                  fontFamily: 'Bahnschrift',
-                  fontWeight: FontWeight.w700,
-                  fontSize: 22,
-                  letterSpacing: .2,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '卡片会吸附到 12 列网格 · 0 个实例',
-                style: TextStyle(color: colors.onSurfaceVariant, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        Center(
-          child: Container(
-            width: 430,
-            padding: const EdgeInsets.fromLTRB(36, 32, 36, 34),
-            decoration: BoxDecoration(
-              color: const Color(0xE6121718),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: const Color(0xFF303839)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x73000000),
-                  blurRadius: 40,
-                  offset: Offset(0, 20),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF202728),
-                    borderRadius: BorderRadius.circular(17),
-                    border: Border.all(color: const Color(0xFF3B4445)),
-                  ),
-                  child: const Icon(
-                    Icons.dashboard_customize_outlined,
-                    color: Color(0xFFE8FF47),
-                    size: 27,
-                  ),
-                ),
-                const SizedBox(height: 22),
-                const Text(
-                  '和 Agent 对话，生成你的第一张卡片',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    height: 1.35,
-                  ),
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  '优先生成原生卡片，复杂的本地逻辑会自动切换为 CodeCard。',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: colors.onSurfaceVariant,
-                    fontSize: 12,
-                    height: 1.55,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('生成卡片'),
-                  style: FilledButton.styleFrom(
-                    foregroundColor: const Color(0xFF111414),
-                    backgroundColor: const Color(0xFFE8FF47),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columnWidth = (constraints.maxWidth - 56) / 12;
+        return Stack(
+          children: [
+            const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
+            Positioned(
+              left: 28,
+              top: 24,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '工作区',
+                    style: TextStyle(
+                      fontFamily: 'Bahnschrift',
+                      fontWeight: FontWeight.w700,
+                      fontSize: 22,
+                      letterSpacing: .2,
                     ),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '卡片会吸附到 12 列网格 · ${cards.length} 个实例',
+                    style: TextStyle(
+                      color: colors.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (cards.isEmpty)
+              Center(
+                child: Container(
+                  width: 430,
+                  padding: const EdgeInsets.fromLTRB(36, 32, 36, 34),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE6121718),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: const Color(0xFF303839)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x73000000),
+                        blurRadius: 40,
+                        offset: Offset(0, 20),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 58,
+                        height: 58,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF202728),
+                          borderRadius: BorderRadius.circular(17),
+                          border: Border.all(color: const Color(0xFF3B4445)),
+                        ),
+                        child: const Icon(
+                          Icons.dashboard_customize_outlined,
+                          color: Color(0xFFE8FF47),
+                          size: 27,
+                        ),
+                      ),
+                      const SizedBox(height: 22),
+                      const Text(
+                        '和 Agent 对话，生成你的第一张卡片',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      Text(
+                        '优先生成原生卡片，复杂的本地逻辑会自动切换为 CodeCard。',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors.onSurfaceVariant,
+                          fontSize: 12,
+                          height: 1.55,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        onPressed: () {},
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('生成卡片'),
+                        style: FilledButton.styleFrom(
+                          foregroundColor: const Color(0xFF111414),
+                          backgroundColor: const Color(0xFFE8FF47),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            for (final card in cards)
+              Positioned(
+                left: 28 + card.instance.placement.x * columnWidth,
+                top: 80 + card.instance.placement.y * 80,
+                width: card.instance.placement.width * columnWidth - 12,
+                height: card.instance.placement.height * 80 - 12,
+                child: _WorkspaceCardView(
+                  key: ValueKey(card.instance.instanceId),
+                  card: card,
+                ),
+              ),
+            if (!agentPanelOpen)
+              Positioned(
+                key: const Key('open-agent-panel'),
+                right: 18,
+                top: 18,
+                child: IconButton.filledTonal(
+                  tooltip: '打开 Agent Studio',
+                  onPressed: onOpenAgentPanel,
+                  icon: const Icon(Icons.auto_awesome_rounded),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _WorkspaceCardView extends StatefulWidget {
+  const _WorkspaceCardView({required this.card, super.key});
+
+  final WorkspaceCard card;
+
+  @override
+  State<_WorkspaceCardView> createState() => _WorkspaceCardViewState();
+}
+
+class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
+  late NativeCardController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _createController();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkspaceCardView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.card.instance.versionId != widget.card.instance.versionId) {
+      _controller.dispose();
+      _createController();
+    }
+  }
+
+  void _createController() {
+    _controller = NativeCardController({
+      ...widget.card.spec.initialState,
+      ...widget.card.persistedState,
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: const Color(0xF21A2021),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF394142)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x4D000000),
+            blurRadius: 24,
+            offset: Offset(0, 12),
           ),
-        ),
-        if (!agentPanelOpen)
-          Positioned(
-            key: const Key('open-agent-panel'),
-            right: 18,
-            top: 18,
-            child: IconButton.filledTonal(
-              tooltip: '打开 Agent Studio',
-              onPressed: onOpenAgentPanel,
-              icon: const Icon(Icons.auto_awesome_rounded),
-            ),
-          ),
-      ],
+        ],
+      ),
+      child: NativeCardRenderer(
+        spec: widget.card.spec,
+        controller: _controller,
+      ),
     );
   }
 }
