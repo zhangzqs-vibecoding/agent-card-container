@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentcard.dev/contracts/card/native-card.schema.json",
+  "title": "AgentCard NativeCard v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "initialState", "root"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "initialState": {"type": "object"},
+    "root": {"$ref": "#/$defs/node"}
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 100},
+        "type": {
+          "enum": [
+            "Container",
+            "Row",
+            "Column",
+            "Stack",
+            "Grid",
+            "Scroll",
+            "Divider",
+            "Text",
+            "Icon",
+            "Image",
+            "Badge",
+            "Progress",
+            "Chart",
+            "Button",
+            "TextInput",
+            "Checkbox",
+            "Select",
+            "Slider",
+            "List",
+            "KeyValue",
+            "EmptyState",
+            "ErrorState"
+          ]
+        },
+        "props": {"type": "object"},
+        "events": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {"$ref": "#/$defs/action"}
+          }
+        },
+        "children": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {"$ref": "#/$defs/node"}
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": [
+            "set",
+            "increment",
+            "toggle",
+            "append",
+            "remove",
+            "startTimer",
+            "stopTimer",
+            "capability.invoke"
+          ]
+        },
+        "path": {"type": "string"},
+        "value": {},
+        "method": {"type": "string"},
+        "params": {"type": "object"}
+      }
+    }
+  }
+}

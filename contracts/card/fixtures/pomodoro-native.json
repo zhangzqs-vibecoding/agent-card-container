@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "initialState": {
+    "title": "专注时间",
+    "remaining": 1500,
+    "running": false
+  },
+  "root": {
+    "id": "root",
+    "type": "Container",
+    "props": {"padding": 20},
+    "children": [
+      {
+        "id": "content",
+        "type": "Column",
+        "props": {"spacing": 12},
+        "children": [
+          {
+            "id": "title",
+            "type": "Text",
+            "props": {
+              "text": {"path": "state.title"},
+              "style": "title"
+            }
+          },
+          {
+            "id": "remaining",
+            "type": "Text",
+            "props": {
+              "text": {
+                "expr": {
+                  "op": "formatDuration",
+                  "args": [{"path": "state.remaining"}]
+                }
+              },
+              "style": "display"
+            }
+          },
+          {
+            "id": "toggle",
+            "type": "Button",
+            "props": {"label": "开始 / 暂停"},
+            "events": {
+              "onPressed": [
+                {"type": "toggle", "path": "running"}
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
