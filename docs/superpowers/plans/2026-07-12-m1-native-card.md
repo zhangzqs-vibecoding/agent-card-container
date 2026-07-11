@@ -48,19 +48,19 @@ Commit: feat: define native card schema
 - Test: apps/desktop/test/native_card/expression_test.dart
 - Test: apps/desktop/test/native_card/native_card_controller_test.dart
 
-- [ ] **Step 1: Write failing expression tests**
+- [x] **Step 1: Write failing expression tests**
 
 Cover path lookup, arithmetic, comparison, boolean and string formatting. Unknown op, recursion beyond 32 and wrong operand types throw NativeCardEvaluationException.
 
-- [ ] **Step 2: Implement minimal expression evaluator**
+- [x] **Step 2: Implement minimal expression evaluator**
 
 Use a closed switch over op names; never use eval, mirrors or dynamic function lookup.
 
-- [ ] **Step 3: Write failing action tests**
+- [x] **Step 3: Write failing action tests**
 
 Cover set, increment, toggle, append, remove, startTimer and stopTimer against isolated instance state.
 
-- [ ] **Step 4: Implement controller and verify**
+- [x] **Step 4: Implement controller and verify**
 
 Use immutable state snapshots and StreamController broadcasts. Timers are cancelled on dispose.
 
