@@ -54,6 +54,59 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test('rejects unsafe or duplicate artifact paths', () {
+      final fixture =
+          jsonDecode(_readFixture('web-card.json')) as Map<String, Object?>;
+      final file = Map<String, Object?>.from(
+        (fixture['files']! as List).single as Map<String, Object?>,
+      );
+
+      for (final path in [
+        '../escape.html',
+        '/absolute.html',
+        r'C:\escape.html',
+        'payload//index.html',
+        'a/b/c/d/e/f/g/h/i.html',
+      ]) {
+        final candidate = Map<String, Object?>.from(fixture)
+          ..['files'] = [Map<String, Object?>.from(file)..['path'] = path];
+        expect(() => CardDefinition.fromJson(candidate), throwsFormatException);
+      }
+
+      final duplicate = Map<String, Object?>.from(fixture)
+        ..['files'] = [file, Map<String, Object?>.from(file)];
+      expect(() => CardDefinition.fromJson(duplicate), throwsFormatException);
+    });
+
+    test(
+      'rejects invalid hashes, oversized files and unknown capabilities',
+      () {
+        final fixture =
+            jsonDecode(_readFixture('web-card.json')) as Map<String, Object?>;
+        final original =
+            (fixture['files']! as List).single as Map<String, Object?>;
+
+        for (final mutation in [
+          Map<String, Object?>.from(original)..['sha256'] = 'not-a-hash',
+          Map<String, Object?>.from(original)..['size'] = 8388609,
+        ]) {
+          final candidate = Map<String, Object?>.from(fixture)
+            ..['files'] = [mutation];
+          expect(
+            () => CardDefinition.fromJson(candidate),
+            throwsFormatException,
+          );
+        }
+
+        final unknownCapability = Map<String, Object?>.from(fixture)
+          ..['capabilities'] = ['shell.execute'];
+        expect(
+          () => CardDefinition.fromJson(unknownCapability),
+          throwsFormatException,
+        );
+      },
+    );
   });
 }
 

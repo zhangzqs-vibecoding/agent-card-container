@@ -172,6 +172,44 @@ class CardDefinition {
         'maxSize must not be smaller than preferredSize',
       );
     }
+    if (files.length > 512) {
+      throw const FormatException('files must not contain more than 512 items');
+    }
+    if (capabilities.toSet().length != capabilities.length ||
+        capabilities.any(
+          (capability) => !_allowedCapabilities.contains(capability),
+        )) {
+      throw const FormatException(
+        'capabilities contain duplicate or unknown values',
+      );
+    }
+    if (networkPolicy.mode != 'none' && networkPolicy.mode != 'proxy') {
+      throw const FormatException('networkPolicy.mode must be none or proxy');
+    }
+    if (networkPolicy.mode == 'none' && networkPolicy.domains.isNotEmpty) {
+      throw const FormatException('networkPolicy none cannot declare domains');
+    }
+    final paths = <String>{};
+    var totalSize = 0;
+    for (final file in files) {
+      _validateArtifactPath(file.path);
+      if (!paths.add(file.path)) {
+        throw FormatException('duplicate artifact path: ${file.path}');
+      }
+      if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(file.sha256)) {
+        throw FormatException('invalid sha256 for ${file.path}');
+      }
+      if (file.size < 0 || file.size > 8 * 1024 * 1024) {
+        throw FormatException('invalid size for ${file.path}');
+      }
+      totalSize += file.size;
+    }
+    if (totalSize > 32 * 1024 * 1024) {
+      throw const FormatException('artifact contents exceed 32 MiB');
+    }
+    if (!paths.contains(entrypoint)) {
+      throw const FormatException('entrypoint must be listed in files');
+    }
     switch (runtime) {
       case CardRuntime.native:
         if (entrypoint != 'payload/native.json') {
@@ -189,6 +227,33 @@ class CardDefinition {
           );
         }
     }
+  }
+
+  static const _allowedCapabilities = {
+    'storage',
+    'notification.show',
+    'clipboard.write',
+    'clipboard.read',
+    'host.openExternal',
+    'network.fetch',
+    'system.metrics.read',
+    'window.manageSelf',
+  };
+}
+
+void _validateArtifactPath(String path) {
+  if (path.isEmpty ||
+      path.startsWith('/') ||
+      path.contains(r'\') ||
+      path.contains('//')) {
+    throw FormatException('unsafe artifact path: $path');
+  }
+  final segments = path.split('/');
+  if (segments.length > 8 ||
+      segments.any(
+        (segment) => segment.isEmpty || segment == '.' || segment == '..',
+      )) {
+    throw FormatException('unsafe artifact path: $path');
   }
 }
 
