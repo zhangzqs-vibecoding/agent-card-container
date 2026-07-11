@@ -68,6 +68,7 @@ class LocalRuntimeServer {
     required String versionId,
     required Map<String, RuntimeResource> resources,
     Set<String> declaredCapabilities = const {},
+    RuntimeStorage? storage,
     RuntimeRpcHandler? rpcHandler,
   }) {
     final id = _randomHex(16);
@@ -81,6 +82,7 @@ class LocalRuntimeServer {
       versionId: versionId,
       resources: resources,
       declaredCapabilities: declaredCapabilities,
+      storage: storage,
       rateLimit: _rateLimit,
       rpcHandler: rpcHandler,
     );
@@ -344,25 +346,24 @@ class LocalRuntimeServer {
         };
       case 'storage.get':
         final key = _storageKey(params);
-        return {'value': session.storage[key]};
+        return {'value': session.storage.get(key)};
       case 'storage.set':
         final key = _storageKey(params);
         if (!params.containsKey('value')) {
           throw const _InvalidParams('value is required');
         }
-        final candidate = Map<String, Object?>.from(session.storage)
+        final candidate = Map<String, Object?>.from(session.storage.snapshot())
           ..[key] = params['value'];
         if (utf8.encode(jsonEncode(candidate)).length > 5 * 1024 * 1024) {
           throw const _InvalidParams('storage quota exceeded');
         }
-        session.storage[key] = params['value'];
+        session.storage.set(key, params['value']);
         return {'stored': true};
       case 'storage.delete':
         final key = _storageKey(params);
-        return {'deleted': session.storage.remove(key) != null};
+        return {'deleted': session.storage.delete(key)};
       case 'storage.list':
-        final keys = session.storage.keys.toList()..sort();
-        return {'keys': keys};
+        return {'keys': session.storage.listKeys()};
       default:
         final handler = session.rpcHandler;
         if (handler == null) {

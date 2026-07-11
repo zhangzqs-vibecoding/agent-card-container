@@ -22,6 +22,39 @@ class RuntimeRpcContext {
   final String versionId;
 }
 
+abstract interface class RuntimeStorage {
+  Object? get(String key);
+
+  void set(String key, Object? value);
+
+  bool delete(String key);
+
+  List<String> listKeys();
+
+  Map<String, Object?> snapshot();
+}
+
+class MemoryRuntimeStorage implements RuntimeStorage {
+  final Map<String, Object?> _values = {};
+
+  @override
+  bool delete(String key) => _values.remove(key) != null;
+
+  @override
+  Object? get(String key) => _values[key];
+
+  @override
+  List<String> listKeys() => _values.keys.toList()..sort();
+
+  @override
+  void set(String key, Object? value) {
+    _values[key] = value;
+  }
+
+  @override
+  Map<String, Object?> snapshot() => Map.unmodifiable(_values);
+}
+
 class RuntimeResource {
   RuntimeResource({required this.bytes, required this.contentType});
 
@@ -47,9 +80,11 @@ class RuntimeSession {
     required Map<String, RuntimeResource> resources,
     Set<String> declaredCapabilities = const {},
     RuntimeRateLimit rateLimit = const RuntimeRateLimit(),
+    RuntimeStorage? storage,
     this.rpcHandler,
   }) : resources = Map.unmodifiable(resources),
        declaredCapabilities = Set.unmodifiable(declaredCapabilities),
+       storage = storage ?? MemoryRuntimeStorage(),
        _rateLimiter = _TokenBucket(rateLimit);
 
   final String id;
@@ -61,7 +96,7 @@ class RuntimeSession {
   final Map<String, RuntimeResource> resources;
   final Set<String> declaredCapabilities;
   final RuntimeRpcHandler? rpcHandler;
-  final Map<String, Object?> storage = {};
+  final RuntimeStorage storage;
   final _TokenBucket _rateLimiter;
   final Set<WebSocket> _eventSockets = {};
   var _eventSequence = 0;

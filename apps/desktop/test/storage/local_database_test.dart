@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:agent_card_desktop/src/capabilities/capability.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/contracts/card_definition.dart';
@@ -17,8 +20,33 @@ void main() {
       database.close();
     });
 
-    test('migrates a new database to schema version one', () {
-      expect(database.schemaVersion, 1);
+    test('migrates a new database to schema version two', () {
+      expect(database.schemaVersion, 2);
+    });
+
+    test('restores the immutable CardDefinition installation index', () {
+      final definition = CardDefinition.fromJson(
+        jsonDecode(
+              File(
+                '../../contracts/card/fixtures/web-card.json',
+              ).readAsStringSync(),
+            )
+            as Map<String, Object?>,
+      );
+      database.registerInstallation(
+        StoredInstallation(
+          installation: _installation('ver_local_canvas_1'),
+          definition: definition,
+          keyId: 'release-2026',
+        ),
+      );
+
+      final restored = database.installation('ver_local_canvas_1');
+
+      expect(restored?.definition.title, '本地画板');
+      expect(restored?.definition.capabilities, contains('storage'));
+      expect(restored?.installation.contentHash, 'hash-ver_local_canvas_1');
+      expect(restored?.keyId, 'release-2026');
     });
 
     test('persists installations, surfaces and card instances', () {
@@ -82,6 +110,8 @@ void main() {
       expect(database.readState('state-1'), {
         'timer': {'remaining': 1500, 'running': false},
       });
+      database.deleteState('state-1', 'timer');
+      expect(database.readState('state-1'), isEmpty);
       expect(database.grantsForInstance('instance-1'), {
         const PermissionGrant(
           instanceId: 'instance-1',

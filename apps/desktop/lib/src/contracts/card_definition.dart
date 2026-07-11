@@ -13,6 +13,8 @@ class CardSize {
 
   final double width;
   final double height;
+
+  Map<String, Object?> toJson() => {'width': width, 'height': height};
 }
 
 class NetworkPolicy {
@@ -28,6 +30,8 @@ class NetworkPolicy {
 
   final String mode;
   final List<String> domains;
+
+  Map<String, Object?> toJson() => {'mode': mode, 'domains': domains};
 }
 
 class CardFile {
@@ -49,6 +53,12 @@ class CardFile {
   final String path;
   final String sha256;
   final int size;
+
+  Map<String, Object?> toJson() => {
+    'path': path,
+    'sha256': sha256,
+    'size': size,
+  };
 }
 
 class CardDefinition {
@@ -140,6 +150,27 @@ class CardDefinition {
   final DateTime createdAt;
 
   bool hasCapability(String capability) => capabilities.contains(capability);
+
+  Map<String, Object?> toJson() => {
+    'formatVersion': formatVersion,
+    'minHostVersion': minHostVersion,
+    'cardId': cardId,
+    'versionId': versionId,
+    'displayVersion': displayVersion,
+    'runtime': runtime.name,
+    'stateSchemaVersion': stateSchemaVersion,
+    'title': title,
+    'description': description,
+    'entrypoint': entrypoint,
+    if (catalogVersion != null) 'catalogVersion': catalogVersion,
+    'minSize': minSize.toJson(),
+    'preferredSize': preferredSize.toJson(),
+    'maxSize': maxSize.toJson(),
+    'capabilities': capabilities,
+    'networkPolicy': networkPolicy.toJson(),
+    'files': files.map((file) => file.toJson()).toList(growable: false),
+    'createdAt': createdAt.toUtc().toIso8601String(),
+  };
 
   void _validate() {
     if (formatVersion != 1) {

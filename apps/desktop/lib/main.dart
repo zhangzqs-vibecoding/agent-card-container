@@ -1,11 +1,16 @@
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
-import 'package:agent_card_desktop/src/runtime/local_runtime_server.dart';
+import 'package:agent_card_desktop/src/app/desktop_bootstrap.dart';
 import 'package:flutter/widgets.dart';
 
-late final LocalRuntimeServer runtimeServer;
+late final DesktopRuntime desktopRuntime;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runtimeServer = await LocalRuntimeServer.start();
-  runApp(AgentCardApp(runtimePort: runtimeServer.port));
+  desktopRuntime = await DesktopBootstrap.start();
+  runApp(
+    AgentCardApp(
+      runtimePort: desktopRuntime.runtimeServer.port,
+      workspaceCards: desktopRuntime.workspaceCards,
+    ),
+  );
 }

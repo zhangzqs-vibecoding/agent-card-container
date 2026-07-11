@@ -21,6 +21,18 @@ class CardInstallation {
   final bool verified;
 }
 
+class StoredInstallation {
+  const StoredInstallation({
+    required this.installation,
+    required this.definition,
+    required this.keyId,
+  });
+
+  final CardInstallation installation;
+  final CardDefinition definition;
+  final String keyId;
+}
+
 class CardInstance {
   const CardInstance({
     required this.instanceId,

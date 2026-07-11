@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../capabilities/capability.dart';
 import '../cards/card_instance.dart';
+import '../contracts/card_definition.dart';
 import '../surfaces/surface.dart';
 import 'sqlite_connection.dart';
 
@@ -47,6 +48,63 @@ class LocalDatabase {
         installation.verified,
       ],
     );
+  }
+
+  void registerInstallation(StoredInstallation record) {
+    final installation = record.installation;
+    _connection.execute(
+      '''
+      INSERT INTO card_installations (
+        version_id, card_id, content_hash, runtime, installed_at, verified,
+        definition_json, key_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(version_id) DO UPDATE SET
+        card_id = excluded.card_id,
+        content_hash = excluded.content_hash,
+        runtime = excluded.runtime,
+        installed_at = excluded.installed_at,
+        verified = excluded.verified,
+        definition_json = excluded.definition_json,
+        key_id = excluded.key_id
+      ''',
+      [
+        installation.versionId,
+        installation.cardId,
+        installation.contentHash,
+        installation.runtime.name,
+        installation.installedAt.toUtc().toIso8601String(),
+        installation.verified,
+        jsonEncode(record.definition.toJson()),
+        record.keyId,
+      ],
+    );
+  }
+
+  StoredInstallation? installation(String versionId) {
+    final rows = _connection.query(
+      '''
+      SELECT *
+      FROM card_installations
+      WHERE version_id = ? AND definition_json IS NOT NULL
+      ''',
+      [versionId],
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    return _storedInstallationFromRow(rows.single);
+  }
+
+  List<StoredInstallation> listInstallations() {
+    return _connection
+        .query('''
+          SELECT *
+          FROM card_installations
+          WHERE definition_json IS NOT NULL
+          ORDER BY installed_at, version_id
+          ''')
+        .map(_storedInstallationFromRow)
+        .toList(growable: false);
   }
 
   void upsertSurface(CardSurface surface) {
@@ -175,6 +233,13 @@ class LocalDatabase {
     };
   }
 
+  void deleteState(String namespace, String key) {
+    _connection.execute(
+      'DELETE FROM card_state WHERE namespace = ? AND state_key = ?',
+      [namespace, key],
+    );
+  }
+
   void upsertGrant(PermissionGrant grant) {
     final domains = grant.domains.toList()..sort();
     _connection.execute(
@@ -223,66 +288,95 @@ class LocalDatabase {
 
   void _migrate() {
     _connection.execute('PRAGMA foreign_keys = ON');
-    if (schemaVersion >= 1) {
-      return;
+    _connection.execute('PRAGMA journal_mode = WAL');
+    _connection.execute('PRAGMA busy_timeout = 5000');
+    if (schemaVersion < 1) {
+      _connection.transaction(() {
+        _connection.execute('''
+          CREATE TABLE card_installations (
+            version_id TEXT PRIMARY KEY,
+            card_id TEXT NOT NULL,
+            content_hash TEXT NOT NULL,
+            runtime TEXT NOT NULL,
+            installed_at TEXT NOT NULL,
+            verified INTEGER NOT NULL
+          )
+        ''');
+        _connection.execute('''
+          CREATE TABLE surfaces (
+            surface_id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            monitor_id TEXT,
+            x REAL,
+            y REAL,
+            width REAL,
+            height REAL,
+            always_on_top INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+        _connection.execute('''
+          CREATE TABLE card_instances (
+            instance_id TEXT PRIMARY KEY,
+            card_id TEXT NOT NULL,
+            version_id TEXT NOT NULL REFERENCES card_installations(version_id),
+            surface_id TEXT NOT NULL REFERENCES surfaces(surface_id),
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            width REAL NOT NULL,
+            height REAL NOT NULL,
+            state_namespace TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL
+          )
+        ''');
+        _connection.execute('''
+          CREATE TABLE card_state (
+            namespace TEXT NOT NULL,
+            state_key TEXT NOT NULL,
+            value_json TEXT NOT NULL,
+            PRIMARY KEY(namespace, state_key)
+          )
+        ''');
+        _connection.execute('''
+          CREATE TABLE permission_grants (
+            instance_id TEXT NOT NULL REFERENCES card_instances(instance_id)
+              ON DELETE CASCADE,
+            version_id TEXT NOT NULL,
+            capability TEXT NOT NULL,
+            domains_json TEXT NOT NULL,
+            PRIMARY KEY(instance_id, version_id, capability)
+          )
+        ''');
+        _connection.execute('PRAGMA user_version = 1');
+      });
     }
-    _connection.transaction(() {
-      _connection.execute('''
-        CREATE TABLE card_installations (
-          version_id TEXT PRIMARY KEY,
-          card_id TEXT NOT NULL,
-          content_hash TEXT NOT NULL,
-          runtime TEXT NOT NULL,
-          installed_at TEXT NOT NULL,
-          verified INTEGER NOT NULL
-        )
-      ''');
-      _connection.execute('''
-        CREATE TABLE surfaces (
-          surface_id TEXT PRIMARY KEY,
-          type TEXT NOT NULL,
-          monitor_id TEXT,
-          x REAL,
-          y REAL,
-          width REAL,
-          height REAL,
-          always_on_top INTEGER NOT NULL DEFAULT 0
-        )
-      ''');
-      _connection.execute('''
-        CREATE TABLE card_instances (
-          instance_id TEXT PRIMARY KEY,
-          card_id TEXT NOT NULL,
-          version_id TEXT NOT NULL REFERENCES card_installations(version_id),
-          surface_id TEXT NOT NULL REFERENCES surfaces(surface_id),
-          x REAL NOT NULL,
-          y REAL NOT NULL,
-          width REAL NOT NULL,
-          height REAL NOT NULL,
-          state_namespace TEXT NOT NULL UNIQUE,
-          status TEXT NOT NULL
-        )
-      ''');
-      _connection.execute('''
-        CREATE TABLE card_state (
-          namespace TEXT NOT NULL,
-          state_key TEXT NOT NULL,
-          value_json TEXT NOT NULL,
-          PRIMARY KEY(namespace, state_key)
-        )
-      ''');
-      _connection.execute('''
-        CREATE TABLE permission_grants (
-          instance_id TEXT NOT NULL REFERENCES card_instances(instance_id)
-            ON DELETE CASCADE,
-          version_id TEXT NOT NULL,
-          capability TEXT NOT NULL,
-          domains_json TEXT NOT NULL,
-          PRIMARY KEY(instance_id, version_id, capability)
-        )
-      ''');
-      _connection.execute('PRAGMA user_version = 1');
-    });
+    if (schemaVersion < 2) {
+      _connection.transaction(() {
+        _connection.execute(
+          'ALTER TABLE card_installations ADD COLUMN definition_json TEXT',
+        );
+        _connection.execute(
+          'ALTER TABLE card_installations ADD COLUMN key_id TEXT',
+        );
+        _connection.execute('PRAGMA user_version = 2');
+      });
+    }
+  }
+
+  StoredInstallation _storedInstallationFromRow(Map<String, Object?> row) {
+    final definitionJson =
+        jsonDecode(row['definition_json']! as String) as Map<String, Object?>;
+    return StoredInstallation(
+      installation: CardInstallation(
+        cardId: row['card_id']! as String,
+        versionId: row['version_id']! as String,
+        contentHash: row['content_hash']! as String,
+        runtime: CardRuntime.values.byName(row['runtime']! as String),
+        installedAt: DateTime.parse(row['installed_at']! as String).toUtc(),
+        verified: (row['verified']! as int) != 0,
+      ),
+      definition: CardDefinition.fromJson(definitionJson),
+      keyId: row['key_id']! as String,
+    );
   }
 
   CardInstance _instanceFromRow(Map<String, Object?> row) {
