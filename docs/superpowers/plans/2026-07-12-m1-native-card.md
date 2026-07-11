@@ -94,15 +94,15 @@ Commit: feat: render trusted native cards
 - Create: apps/desktop/lib/src/capabilities/capability_broker.dart
 - Test: apps/desktop/test/capabilities/capability_broker_test.dart
 
-- [ ] **Step 1: Write failing policy tests**
+- [x] **Step 1: Write failing policy tests**
 
 Reject undeclared capability, missing grant, wrong instance/version, expanded network domain and clipboard.read without user gesture.
 
-- [ ] **Step 2: Implement invoke boundary**
+- [x] **Step 2: Implement invoke boundary**
 
 Expose invoke(CardContext, method, params). Register typed handlers for storage, window.manageSelf and safe host actions; other adapters return CAPABILITY_UNAVAILABLE.
 
-- [ ] **Step 3: Connect NativeCard capability.invoke**
+- [x] **Step 3: Connect NativeCard capability.invoke**
 
 Controller passes its immutable CardContext to the broker and maps stable error codes into card state.
 

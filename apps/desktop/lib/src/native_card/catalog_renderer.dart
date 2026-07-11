@@ -176,8 +176,10 @@ class CatalogRenderer {
   Widget _button(NativeNode node) {
     final label = controller.resolve(node.props['label'])?.toString() ?? '';
     return FilledButton(
-      onPressed: () {
-        controller.applyActions(node.events['onPressed'] ?? const []);
+      onPressed: () async {
+        await controller.applyActionsAsync(
+          node.events['onPressed'] ?? const [],
+        );
       },
       child: Text(label),
     );

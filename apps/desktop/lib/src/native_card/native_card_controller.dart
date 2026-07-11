@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../capabilities/capability.dart';
+import '../capabilities/capability_broker.dart';
 import 'expression.dart';
 import 'native_card_spec.dart';
 
@@ -18,11 +20,17 @@ class NativeCardController extends ChangeNotifier {
   NativeCardController(
     Map<String, Object?> initialState, {
     NativeExpressionEvaluator evaluator = const NativeExpressionEvaluator(),
+    CapabilityBroker? capabilityBroker,
+    CardContext? cardContext,
   }) : _state = _cloneMap(initialState),
-       _evaluator = evaluator;
+       _evaluator = evaluator,
+       _capabilityBroker = capabilityBroker,
+       _cardContext = cardContext;
 
   final Map<String, Object?> _state;
   final NativeExpressionEvaluator _evaluator;
+  final CapabilityBroker? _capabilityBroker;
+  final CardContext? _cardContext;
   final Map<String, Timer> _timers = {};
 
   Map<String, Object?> get state => Map.unmodifiable(_cloneMap(_state));
@@ -30,6 +38,16 @@ class NativeCardController extends ChangeNotifier {
   void applyActions(Iterable<NativeAction> actions) {
     for (final action in actions) {
       applyAction(action);
+    }
+  }
+
+  Future<void> applyActionsAsync(Iterable<NativeAction> actions) async {
+    for (final action in actions) {
+      if (action.type == NativeActionType.capabilityInvoke) {
+        await _applyCapability(action);
+      } else {
+        applyAction(action);
+      }
     }
   }
 
@@ -80,6 +98,36 @@ class NativeCardController extends ChangeNotifier {
   }
 
   Object? resolve(Object? binding) => _evaluator.evaluate(binding, _state);
+
+  Future<void> _applyCapability(NativeAction action) async {
+    final broker = _capabilityBroker;
+    final context = _cardContext;
+    final method = action.method;
+    if (broker == null || context == null || method == null) {
+      _setCapabilityError(
+        CapabilityErrorCode.capabilityUnavailable,
+        'capability broker is not attached',
+      );
+      return;
+    }
+
+    try {
+      final result = await broker.invoke(context, method, action.params);
+      _state.remove('_capabilityError');
+      if (action.path case final String path when path.isNotEmpty) {
+        _write(path, result);
+      } else {
+        notifyListeners();
+      }
+    } on CapabilityException catch (error) {
+      _setCapabilityError(error.code, error.message);
+    }
+  }
+
+  void _setCapabilityError(CapabilityErrorCode code, String message) {
+    _state['_capabilityError'] = {'code': code.name, 'message': message};
+    notifyListeners();
+  }
 
   Object? _evaluateValue(Object? value) {
     return _evaluator.evaluate(value, _state);

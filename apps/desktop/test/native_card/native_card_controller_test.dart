@@ -1,3 +1,5 @@
+import 'package:agent_card_desktop/src/capabilities/capability.dart';
+import 'package:agent_card_desktop/src/capabilities/capability_broker.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_controller.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,6 +105,70 @@ void main() {
         ),
         throwsA(isA<NativeCardActionException>()),
       );
+    });
+
+    test('writes capability results back into card state', () async {
+      final broker = CapabilityBroker();
+      broker.register('window.getState', (_, _) async {
+        return {'surface': 'workspace'};
+      });
+      broker.replaceGrants({
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'version-1',
+          capability: 'window.manageSelf',
+        ),
+      });
+      final controller = NativeCardController(
+        const {},
+        capabilityBroker: broker,
+        cardContext: CardContext(
+          instanceId: 'instance-1',
+          cardId: 'card-1',
+          versionId: 'version-1',
+          declaredCapabilities: const {'window.manageSelf'},
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.applyActionsAsync([
+        const NativeAction(
+          type: NativeActionType.capabilityInvoke,
+          path: 'windowState',
+          method: 'window.getState',
+        ),
+      ]);
+
+      expect(controller.state['windowState'], {'surface': 'workspace'});
+      expect(controller.state['_capabilityError'], isNull);
+    });
+
+    test('maps denied capabilities into stable card state', () async {
+      final broker = CapabilityBroker();
+      broker.register('notification.show', (_, _) async => null);
+      final controller = NativeCardController(
+        const {},
+        capabilityBroker: broker,
+        cardContext: CardContext(
+          instanceId: 'instance-1',
+          cardId: 'card-1',
+          versionId: 'version-1',
+          declaredCapabilities: const {'notification.show'},
+        ),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.applyActionsAsync([
+        const NativeAction(
+          type: NativeActionType.capabilityInvoke,
+          method: 'notification.show',
+        ),
+      ]);
+
+      expect(controller.state['_capabilityError'], {
+        'code': 'permissionRequired',
+        'message': 'capability requires a grant',
+      });
     });
   });
 }
