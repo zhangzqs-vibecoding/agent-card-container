@@ -13,11 +13,33 @@ class SurfaceCoordinator {
     required this.database,
     required this.windows,
     required this.newDetachedSurfaceId,
+    this.onInstanceMoved,
   });
 
   final LocalDatabase database;
   final WindowBackend windows;
   final String Function() newDetachedSurfaceId;
+  final void Function(CardInstance instance)? onInstanceMoved;
+
+  Future<void> restorePersistedSurfaces() async {
+    final instances = database.listInstances();
+    for (final surface in database.listSurfaces()) {
+      if (surface.type == SurfaceType.workspace) {
+        continue;
+      }
+      final instanceIds = instances
+          .where(
+            (instance) =>
+                instance.surfaceId == surface.id &&
+                instance.status != CardInstanceStatus.quarantined,
+          )
+          .map((instance) => instance.instanceId)
+          .toList(growable: false);
+      if (instanceIds.isNotEmpty) {
+        await windows.ensureSurface(surface, instanceIds);
+      }
+    }
+  }
 
   Future<void> detach(String instanceId, CardPlacement bounds) async {
     _requireInstance(instanceId);
@@ -37,6 +59,7 @@ class SurfaceCoordinator {
         height: bounds.height,
       ),
     );
+    _notifyMoved(instanceId);
   }
 
   Future<void> moveToOverlay(
@@ -66,6 +89,7 @@ class SurfaceCoordinator {
       instanceId: instanceId,
       placement: placement,
     );
+    _notifyMoved(instanceId);
   }
 
   Future<void> dock(String instanceId) async {
@@ -84,6 +108,14 @@ class SurfaceCoordinator {
       instanceId: instanceId,
       placement: const CardPlacement(x: 0, y: 0, width: 4, height: 3),
     );
+    _notifyMoved(instanceId);
+  }
+
+  void _notifyMoved(String instanceId) {
+    final listener = onInstanceMoved;
+    if (listener != null) {
+      listener(_requireInstance(instanceId));
+    }
   }
 
   CardInstance _requireInstance(String instanceId) {

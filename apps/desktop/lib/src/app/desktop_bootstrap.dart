@@ -4,6 +4,8 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import '../agent_studio/agent_studio_controller.dart';
+import '../adapters/desktop_multi_window_driver.dart';
+import '../adapters/multi_window_backend.dart';
 import '../artifacts/artifact_crypto.dart';
 import '../artifacts/artifact_installer.dart';
 import '../capabilities/capability.dart';
@@ -15,9 +17,11 @@ import '../cloud/cloud_api_client.dart';
 import '../runtime/local_runtime_server.dart';
 import '../runtime/runtime_capability_adapter.dart';
 import '../storage/local_database.dart';
+import '../surfaces/surface_coordinator.dart';
 import '../workspace/workspace_card.dart';
 import '../workspace/workspace_controller.dart';
 import '../workspace/installed_workspace_card_factory.dart';
+import '../workspace/workspace_surface_snapshot_provider.dart';
 import 'app_data_locator.dart';
 
 class RecoveryError {
@@ -34,6 +38,7 @@ class DesktopRuntime {
     required this.workspaceCards,
     required this.recoveryErrors,
     required this.workspaceController,
+    required this.surfaceCoordinator,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -44,6 +49,7 @@ class DesktopRuntime {
   final List<WorkspaceCard> workspaceCards;
   final List<RecoveryError> recoveryErrors;
   final WorkspaceController workspaceController;
+  final SurfaceCoordinator surfaceCoordinator;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -101,8 +107,7 @@ abstract final class DesktopBootstrap {
         },
       );
       for (final instance in database.listInstances()) {
-        if (instance.surfaceId != 'workspace-main' ||
-            instance.status.name == 'quarantined') {
+        if (instance.status.name == 'quarantined') {
           continue;
         }
         final installation = installations[instance.versionId];
@@ -142,6 +147,26 @@ abstract final class DesktopBootstrap {
         }
       }
       final workspaceController = WorkspaceController(cards);
+      final snapshotProvider = WorkspaceSurfaceSnapshotProvider(
+        cards: () => workspaceController.cards,
+        readState: database.readState,
+      );
+      final surfaceCoordinator = SurfaceCoordinator(
+        database: database,
+        windows: MultiWindowBackend(
+          DesktopMultiWindowDriver(),
+          snapshotProvider: snapshotProvider.call,
+        ),
+        newDetachedSurfaceId: () => _randomID('detached-'),
+        onInstanceMoved: (instance) {
+          workspaceController.moveInstance(
+            instance.instanceId,
+            surfaceId: instance.surfaceId,
+            placement: instance.placement,
+          );
+        },
+      );
+      await surfaceCoordinator.restorePersistedSurfaces();
       final cloud = _cloudConfiguration(
         processEnvironment,
         root,
@@ -155,6 +180,7 @@ abstract final class DesktopBootstrap {
         workspaceCards: List.unmodifiable(cards),
         recoveryErrors: List.unmodifiable(errors),
         workspaceController: workspaceController,
+        surfaceCoordinator: surfaceCoordinator,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,

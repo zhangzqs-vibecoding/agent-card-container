@@ -20,6 +20,13 @@ Future<void> main() async {
       agentStudioController: desktopRuntime.agentStudioController,
       cardCatalogController: desktopRuntime.cardCatalogController,
       onNativeCardStateChanged: desktopRuntime.database.replaceState,
+      onDetachCard: desktopRuntime.surfaceCoordinator.detach,
+      onMoveCardToOverlay: (instanceId, placement) =>
+          desktopRuntime.surfaceCoordinator.moveToOverlay(
+            instanceId,
+            monitorId: 'primary',
+            placement: placement,
+          ),
     ),
   );
 }

@@ -152,6 +152,32 @@ class LocalDatabase {
     );
   }
 
+  List<CardSurface> listSurfaces() {
+    return _connection
+        .query('SELECT * FROM surfaces ORDER BY surface_id')
+        .map((row) {
+          final x = row['x'] as num?;
+          final y = row['y'] as num?;
+          final width = row['width'] as num?;
+          final height = row['height'] as num?;
+          return CardSurface(
+            id: row['surface_id']! as String,
+            type: SurfaceType.values.byName(row['type']! as String),
+            monitorId: row['monitor_id'] as String?,
+            bounds: x == null || y == null || width == null || height == null
+                ? null
+                : CardPlacement(
+                    x: x.toDouble(),
+                    y: y.toDouble(),
+                    width: width.toDouble(),
+                    height: height.toDouble(),
+                  ),
+            alwaysOnTop: (row['always_on_top']! as int) != 0,
+          );
+        })
+        .toList(growable: false);
+  }
+
   void upsertInstance(CardInstance instance) {
     _connection.execute(
       '''

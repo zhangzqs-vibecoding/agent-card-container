@@ -70,6 +70,7 @@ void main() {
       expect(runtime.workspaceCards.single.instance.instanceId, 'instance-1');
       expect(runtime.workspaceCards.single.spec.initialState['title'], '专注时间');
       expect(runtime.recoveryErrors, isEmpty);
+      expect(runtime.surfaceCoordinator, isNotNull);
     },
   );
 

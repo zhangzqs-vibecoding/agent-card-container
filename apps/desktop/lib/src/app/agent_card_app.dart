@@ -14,6 +14,8 @@ class AgentCardApp extends StatelessWidget {
     this.workspaceController,
     this.cardCatalogController,
     this.onNativeCardStateChanged,
+    this.onDetachCard,
+    this.onMoveCardToOverlay,
   });
 
   final int? runtimePort;
@@ -22,6 +24,8 @@ class AgentCardApp extends StatelessWidget {
   final WorkspaceController? workspaceController;
   final CardCatalogController? cardCatalogController;
   final NativeCardStateChanged? onNativeCardStateChanged;
+  final CardSurfaceAction? onDetachCard;
+  final CardSurfaceAction? onMoveCardToOverlay;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +42,8 @@ class AgentCardApp extends StatelessWidget {
         workspaceController: workspaceController,
         cardCatalogController: cardCatalogController,
         onNativeCardStateChanged: onNativeCardStateChanged,
+        onDetachCard: onDetachCard,
+        onMoveCardToOverlay: onMoveCardToOverlay,
       ),
     );
   }

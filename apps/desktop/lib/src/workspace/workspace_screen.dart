@@ -8,12 +8,15 @@ import '../cloud/card_catalog_controller.dart';
 import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
+import '../surfaces/surface.dart';
 import 'workspace_card.dart';
 import 'workspace_controller.dart';
 import 'native_card_state_persistence.dart';
 
 typedef NativeCardStateChanged =
     void Function(String namespace, Map<String, Object?> state);
+typedef CardSurfaceAction =
+    Future<void> Function(String instanceId, CardPlacement placement);
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
@@ -24,6 +27,8 @@ class WorkspaceScreen extends StatefulWidget {
     this.workspaceController,
     this.cardCatalogController,
     this.onNativeCardStateChanged,
+    this.onDetachCard,
+    this.onMoveCardToOverlay,
   });
 
   final int? runtimePort;
@@ -32,6 +37,8 @@ class WorkspaceScreen extends StatefulWidget {
   final WorkspaceController? workspaceController;
   final CardCatalogController? cardCatalogController;
   final NativeCardStateChanged? onNativeCardStateChanged;
+  final CardSurfaceAction? onDetachCard;
+  final CardSurfaceAction? onMoveCardToOverlay;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -116,12 +123,18 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     return AnimatedBuilder(
       animation: widget.workspaceController ?? _NoopListenable.instance,
       builder: (context, _) => _WorkspaceCanvas(
-        cards: widget.workspaceController?.cards ?? widget.workspaceCards,
+        cards:
+            widget.workspaceController?.workspaceCards ??
+            widget.workspaceCards
+                .where((card) => card.instance.surfaceId == 'workspace-main')
+                .toList(growable: false),
         agentPanelOpen: _agentPanelOpen,
         onOpenAgentPanel: () {
           setState(() => _agentPanelOpen = true);
         },
         onNativeCardStateChanged: widget.onNativeCardStateChanged,
+        onDetachCard: widget.onDetachCard,
+        onMoveCardToOverlay: widget.onMoveCardToOverlay,
       ),
     );
   }
@@ -526,12 +539,16 @@ class _WorkspaceCanvas extends StatelessWidget {
     required this.agentPanelOpen,
     required this.onOpenAgentPanel,
     this.onNativeCardStateChanged,
+    this.onDetachCard,
+    this.onMoveCardToOverlay,
   });
 
   final List<WorkspaceCard> cards;
   final bool agentPanelOpen;
   final VoidCallback onOpenAgentPanel;
   final NativeCardStateChanged? onNativeCardStateChanged;
+  final CardSurfaceAction? onDetachCard;
+  final CardSurfaceAction? onMoveCardToOverlay;
 
   @override
   Widget build(BuildContext context) {
@@ -653,6 +670,14 @@ class _WorkspaceCanvas extends StatelessWidget {
                   key: ValueKey(card.instance.instanceId),
                   card: card,
                   onNativeCardStateChanged: onNativeCardStateChanged,
+                  surfacePlacement: CardPlacement(
+                    x: 100 + card.instance.placement.x * columnWidth,
+                    y: 80 + card.instance.placement.y * 80,
+                    width: card.instance.placement.width * columnWidth - 12,
+                    height: card.instance.placement.height * 80 - 12,
+                  ),
+                  onDetachCard: onDetachCard,
+                  onMoveCardToOverlay: onMoveCardToOverlay,
                 ),
               ),
             if (!agentPanelOpen)
@@ -676,12 +701,18 @@ class _WorkspaceCanvas extends StatelessWidget {
 class _WorkspaceCardView extends StatefulWidget {
   const _WorkspaceCardView({
     required this.card,
+    required this.surfacePlacement,
     this.onNativeCardStateChanged,
+    this.onDetachCard,
+    this.onMoveCardToOverlay,
     super.key,
   });
 
   final WorkspaceCard card;
+  final CardPlacement surfacePlacement;
   final NativeCardStateChanged? onNativeCardStateChanged;
+  final CardSurfaceAction? onDetachCard;
+  final CardSurfaceAction? onMoveCardToOverlay;
 
   @override
   State<_WorkspaceCardView> createState() => _WorkspaceCardViewState();
@@ -789,8 +820,47 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
           ),
         ],
       ),
-      child: _cardContent(),
+      child: Stack(
+        children: [
+          Positioned.fill(child: _cardContent()),
+          if (widget.onDetachCard != null || widget.onMoveCardToOverlay != null)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: PopupMenuButton<_SurfaceAction>(
+                key: Key('surface-menu-${widget.card.instance.instanceId}'),
+                tooltip: '卡片窗口选项',
+                onSelected: _runSurfaceAction,
+                itemBuilder: (context) => [
+                  if (widget.onDetachCard != null)
+                    const PopupMenuItem(
+                      value: _SurfaceAction.detach,
+                      child: Text('分离为独立窗口'),
+                    ),
+                  if (widget.onMoveCardToOverlay != null)
+                    const PopupMenuItem(
+                      value: _SurfaceAction.overlay,
+                      child: Text('移到桌面悬浮层'),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
+  }
+
+  Future<void> _runSurfaceAction(_SurfaceAction action) async {
+    final instanceId = widget.card.instance.instanceId;
+    switch (action) {
+      case _SurfaceAction.detach:
+        await widget.onDetachCard?.call(instanceId, widget.surfacePlacement);
+      case _SurfaceAction.overlay:
+        await widget.onMoveCardToOverlay?.call(
+          instanceId,
+          widget.surfacePlacement,
+        );
+    }
   }
 
   Widget _cardContent() {
@@ -809,6 +879,8 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
     return CodeCardWebView(port: port);
   }
 }
+
+enum _SurfaceAction { detach, overlay }
 
 class _AgentPanel extends StatefulWidget {
   const _AgentPanel({required this.onCollapse, this.controller});

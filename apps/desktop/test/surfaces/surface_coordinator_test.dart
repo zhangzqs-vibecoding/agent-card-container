@@ -13,6 +13,7 @@ void main() {
   late LocalDatabase database;
   late _FakeWindowBackend backend;
   late SurfaceCoordinator coordinator;
+  late List<CardInstance> moved;
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('surface-coordinator-');
@@ -44,10 +45,12 @@ void main() {
     );
     database.upsertInstance(_instance);
     backend = _FakeWindowBackend();
+    moved = [];
     coordinator = SurfaceCoordinator(
       database: database,
       windows: backend,
       newDetachedSurfaceId: () => 'detached-1',
+      onInstanceMoved: moved.add,
     );
   });
 
@@ -70,12 +73,14 @@ void main() {
       expect(instance.stateNamespace, 'state-1');
       expect(backend.opened.single.surface.id, 'detached-1');
       expect(backend.opened.single.instanceIds, ['instance-1']);
+      expect(moved.last.surfaceId, 'detached-1');
 
       await coordinator.dock('instance-1');
 
       instance = database.listInstances().single;
       expect(instance.surfaceId, 'workspace-main');
       expect(backend.closed, ['detached-1']);
+      expect(moved.last.surfaceId, 'workspace-main');
     },
   );
 
@@ -127,6 +132,23 @@ void main() {
       expect(database.listInstances().single.surfaceId, 'workspace-main');
     },
   );
+
+  test('restores persisted non-workspace surfaces after startup', () async {
+    database.moveInstanceToSurface(
+      surface: const CardSurface(
+        id: 'detached-restored',
+        type: SurfaceType.detached,
+        bounds: CardPlacement(x: 40, y: 50, width: 480, height: 320),
+      ),
+      instanceId: 'instance-1',
+      placement: const CardPlacement(x: 0, y: 0, width: 480, height: 320),
+    );
+
+    await coordinator.restorePersistedSurfaces();
+
+    expect(backend.opened.single.surface.id, 'detached-restored');
+    expect(backend.opened.single.instanceIds, ['instance-1']);
+  });
 }
 
 const _instance = CardInstance(

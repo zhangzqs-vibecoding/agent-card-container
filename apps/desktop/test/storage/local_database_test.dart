@@ -52,15 +52,32 @@ void main() {
     test('persists installations, surfaces and card instances', () {
       database.upsertInstallation(_installation('version-1'));
       database.upsertSurface(_workspace());
+      database.upsertSurface(
+        const CardSurface(
+          id: 'overlay-monitor-a',
+          type: SurfaceType.overlay,
+          monitorId: 'monitor-a',
+          bounds: CardPlacement(x: 10, y: 20, width: 800, height: 600),
+          alwaysOnTop: true,
+        ),
+      );
       database.upsertInstance(_instance());
 
       final instances = database.listInstances();
+      final surfaces = database.listSurfaces();
 
       expect(instances, hasLength(1));
       expect(instances.single.instanceId, 'instance-1');
       expect(instances.single.surfaceId, 'workspace-main');
       expect(instances.single.placement.width, 4);
       expect(instances.single.status, CardInstanceStatus.active);
+      expect(surfaces, hasLength(2));
+      final overlay = surfaces.singleWhere(
+        (surface) => surface.id == 'overlay-monitor-a',
+      );
+      expect(overlay.monitorId, 'monitor-a');
+      expect(overlay.bounds?.width, 800);
+      expect(overlay.alwaysOnTop, isTrue);
     });
 
     test('moves an instance and switches versions atomically', () {

@@ -140,6 +140,60 @@ void main() {
     expect(writes.single.state['running'], isTrue);
   });
 
+  testWidgets('offers explicit detached and overlay surface actions', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final actions = <String>[];
+    final spec = NativeCardSpec.fromJson(
+      jsonDecode(
+            File(
+              '../../contracts/card/fixtures/pomodoro-native.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, Object?>,
+    );
+    final card = WorkspaceCard(
+      instance: const CardInstance(
+        instanceId: 'instance-1',
+        cardId: 'card-1',
+        versionId: 'version-1',
+        surfaceId: 'workspace-main',
+        placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+        stateNamespace: 'state-1',
+        status: CardInstanceStatus.active,
+      ),
+      spec: spec,
+    );
+    final workspace = WorkspaceController([card]);
+    addTearDown(workspace.dispose);
+
+    await tester.pumpWidget(
+      AgentCardApp(
+        workspaceController: workspace,
+        onDetachCard: (instanceId, placement) async {
+          actions.add('detach:$instanceId');
+          workspace.moveInstance(
+            instanceId,
+            surfaceId: 'detached-1',
+            placement: placement,
+          );
+        },
+        onMoveCardToOverlay: (instanceId, _) async =>
+            actions.add('overlay:$instanceId'),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('surface-menu-instance-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分离为独立窗口'));
+    await tester.pumpAndSettle();
+
+    expect(actions, ['detach:instance-1']);
+    expect(find.text('专注时间'), findsNothing);
+  });
+
   testWidgets('adds an installed card to the live workspace', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
