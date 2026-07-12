@@ -1,7 +1,7 @@
 # M4 acceptance evidence
 
 Overall status: **DEVICE EVIDENCE REQUIRED**  
-Automated code commit: `9b3d9746ed630a51fd668657518e44b6681d06df`
+Automated code commit: `ddb9dcdfde954f89b81c9743947a93575bd75e59`
 
 Recorded: 2026-07-12 (Asia/Shanghai)
 
@@ -24,6 +24,9 @@ commit.
 | Insufficient performance evidence | `dart tooling/performance/summarize.dart tooling/performance/fixtures/insufficient.json` | PASS (rejected) | Exit 1 with four `:samples` failures and `passed: false` |
 | Repository whitespace | `git diff --check` | PASS | No findings |
 | Credential scan | `rg -l 'sk-[A-Za-z0-9]{20,}|BEGIN ... PRIVATE KEY|Authorization: Bearer ...' ...` | PASS | No files matched |
+| GitHub workflow policy | `dart tooling/security/validate-workflows_test.dart` and `actionlint` | PASS | Four workflows use immutable action SHAs, bounded permissions/timeouts, PR secret isolation and verified Windows uploads |
+| Windows portable-package logic | `pwsh packaging/windows/test-portable-package.ps1` in the official PowerShell container | PASS | Valid archive round trip passed; missing DLL/README, hidden `.env` and traversal entries were rejected |
+| GitHub hosted platform execution | GitHub Actions after public repository push | NOT RUN | Requires the remote repository and hosted Windows/macOS runners |
 
 ## M4 product-hardening requirements
 
