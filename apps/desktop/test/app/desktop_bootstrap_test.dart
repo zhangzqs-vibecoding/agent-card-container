@@ -71,6 +71,17 @@ void main() {
       expect(runtime.workspaceCards.single.spec.initialState['title'], '专注时间');
       expect(runtime.recoveryErrors, isEmpty);
       expect(runtime.surfaceCoordinator, isNotNull);
+      final diagnostics =
+          jsonDecode(
+                runtime.createDiagnosticBundle(
+                  now: () => DateTime.utc(2026, 7, 12),
+                ),
+              )
+              as Map<String, Object?>;
+      final diagnosticRuntime = diagnostics['runtime']! as Map;
+      expect(diagnosticRuntime['installedCardCount'], 1);
+      expect(diagnosticRuntime['activeSurfaceCount'], 1);
+      expect(diagnostics, isNot(contains('cardState')));
     },
   );
 

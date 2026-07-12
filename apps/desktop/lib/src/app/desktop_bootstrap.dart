@@ -20,6 +20,7 @@ import '../capabilities/window_capability_handlers.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
+import '../diagnostics/diagnostic_bundle.dart';
 import '../runtime/local_runtime_server.dart';
 import '../storage/local_database.dart';
 import '../surfaces/surface_coordinator.dart';
@@ -69,6 +70,30 @@ class DesktopRuntime {
   final CardCatalogController? cardCatalogController;
   var _closed = false;
   var _platformInitialized = false;
+
+  String createDiagnosticBundle({DateTime Function()? now}) {
+    return DiagnosticBundleBuilder().build(
+      runtime: DiagnosticRuntimeInfo(
+        appVersion: const String.fromEnvironment(
+          'APP_VERSION',
+          defaultValue: 'development',
+        ),
+        platform: Platform.operatingSystem,
+        operatingSystemVersion: Platform.operatingSystemVersion,
+        locale: Platform.localeName,
+        installedCardCount: database.listInstallations().length,
+        activeSurfaceCount: database.listSurfaces().length,
+      ),
+      errors: [
+        for (final error in recoveryErrors)
+          DiagnosticError(
+            category: 'artifact',
+            message: '${error.instanceId}: ${error.message}',
+          ),
+      ],
+      generatedAt: (now ?? DateTime.now)(),
+    );
+  }
 
   Future<void> initializePlatformSurfaces() async {
     if (_platformInitialized) {

@@ -17,7 +17,7 @@
 - Create: `apps/desktop/test/diagnostics/diagnostic_bundle_test.dart`
 - Modify: `apps/desktop/lib/src/app/desktop_bootstrap.dart`
 
-- [ ] **Step 1: Write failing tests for allowlisted diagnostics**
+- [x] **Step 1: Write failing tests for allowlisted diagnostics**
 
 ```dart
 test('exports runtime metadata without secrets paths or card state', () {
@@ -32,13 +32,13 @@ test('exports runtime metadata without secrets paths or card state', () {
 });
 ```
 
-- [ ] **Step 2: Run the diagnostic test and confirm it fails**
+- [x] **Step 2: Run the diagnostic test and confirm it fails**
 
 Run: `cd apps/desktop && flutter test test/diagnostics/diagnostic_bundle_test.dart`
 
 Expected: FAIL because `DiagnosticBundleBuilder` does not exist.
 
-- [ ] **Step 3: Implement an allowlist-only JSON bundle and redactor**
+- [x] **Step 3: Implement an allowlist-only JSON bundle and redactor**
 
 ```dart
 class DiagnosticBundleBuilder {
@@ -54,13 +54,13 @@ class DiagnosticBundleBuilder {
 
 The redactor must replace bearer tokens, authorization headers, API-key-shaped values, Windows user paths and POSIX home paths. It must never accept card state, permission grant values or request bodies as input fields.
 
-- [ ] **Step 4: Run formatting, analysis and tests**
+- [x] **Step 4: Run formatting, analysis and tests**
 
 Run: `cd apps/desktop && dart format lib test && flutter analyze && flutter test test/diagnostics/diagnostic_bundle_test.dart`
 
 Expected: PASS and no analyzer findings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop
