@@ -4,6 +4,8 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
+sh "$ROOT/tooling/security/run-contract-gate.sh"
+
 cd "$ROOT/apps/desktop"
 flutter test \
   test/artifacts \
