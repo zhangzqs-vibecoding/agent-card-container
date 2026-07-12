@@ -59,5 +59,22 @@ void main() {
         throwsFormatException,
       );
     });
+
+    test('stops a lying deflate stream before expanded allocation', () {
+      expect(
+        () => SafeZipArchive.read(
+          buildStoredZip([
+            ZipTestEntry(
+              'bomb.txt',
+              List.filled(1024 * 1024, 65),
+              deflate: true,
+              declaredExpandedSize: 1,
+            ),
+          ]),
+          limits: const ZipLimits(maxFileBytes: 1024),
+        ),
+        throwsFormatException,
+      );
+    });
   });
 }

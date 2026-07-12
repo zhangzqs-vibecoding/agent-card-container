@@ -119,12 +119,13 @@ git commit -m "feat: recover safely from desktop crashes"
 ### Task 3: Malicious artifact and runtime regression gate
 
 **Files:**
-- Create: `apps/desktop/test/security/malicious_artifact_test.dart`
-- Create: `apps/desktop/test/security/runtime_boundary_test.dart`
+- Modify: `apps/desktop/test/artifacts/zip_archive_test.dart`
+- Existing gate: `apps/desktop/test/runtime/local_runtime_server_test.dart`
+- Existing gate: `apps/desktop/test/capabilities/secure_network_fetcher_test.dart`
 - Create: `tooling/security/run-security-gate.sh`
-- Modify: `apps/desktop/lib/src/artifacts/artifact_installer.dart`
+- Modify: `apps/desktop/lib/src/artifacts/zip_archive.dart`
 
-- [ ] **Step 1: Add failing adversarial cases**
+- [x] **Step 1: Add failing adversarial cases**
 
 ```dart
 for (final fixture in ['zip-slip', 'zip-bomb', 'unsigned', 'tampered', 'symlink']) {
@@ -136,17 +137,17 @@ for (final fixture in ['zip-slip', 'zip-bomb', 'unsigned', 'tampered', 'symlink'
 
 Also cover remote navigation, popup, download, camera/microphone/location permission, cross-session RPC, forged Origin/Host, private DNS answers, redirects and bodies over their configured limits.
 
-- [ ] **Step 2: Run the security suite and record every initial failure**
+- [x] **Step 2: Run the security suite and record every initial failure**
 
-Run: `cd apps/desktop && flutter test test/security`
+Run: `cd apps/desktop && flutter test test/artifacts test/runtime test/capabilities`
 
 Expected: at least the newly introduced unsupported adversarial cases fail.
 
-- [ ] **Step 3: Implement only the missing bounded checks**
+- [x] **Step 3: Implement only the missing bounded checks**
 
 Artifact extraction must reject absolute paths, `..`, symlinks, duplicate normalized paths, excessive file count, excessive single-file size and excessive expanded total bytes before writing into the content-addressed cache.
 
-- [ ] **Step 4: Add one deterministic security-gate command**
+- [x] **Step 4: Add one deterministic security-gate command**
 
 ```sh
 #!/bin/sh
@@ -156,7 +157,7 @@ cd "$(dirname "$0")/../.."
 (cd services/cloud && go test ./... -race)
 ```
 
-- [ ] **Step 5: Run and commit**
+- [x] **Step 5: Run and commit**
 
 Run: `sh tooling/security/run-security-gate.sh`
 

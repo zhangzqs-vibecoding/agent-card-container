@@ -1,12 +1,21 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 class ZipTestEntry {
-  const ZipTestEntry(this.path, this.bytes, {this.unixMode = 0x81A4});
+  const ZipTestEntry(
+    this.path,
+    this.bytes, {
+    this.unixMode = 0x81A4,
+    this.deflate = false,
+    this.declaredExpandedSize,
+  });
 
   final String path;
   final List<int> bytes;
   final int unixMode;
+  final bool deflate;
+  final int? declaredExpandedSize;
 }
 
 Uint8List buildStoredZip(List<ZipTestEntry> entries) {
@@ -15,20 +24,25 @@ Uint8List buildStoredZip(List<ZipTestEntry> entries) {
   var offset = 0;
   for (final entry in entries) {
     final nameBytes = utf8.encode(entry.path);
+    final payload = entry.deflate
+        ? ZLibEncoder(raw: true).convert(entry.bytes)
+        : entry.bytes;
+    final expandedSize = entry.declaredExpandedSize ?? entry.bytes.length;
+    final method = entry.deflate ? 8 : 0;
     final local = BytesBuilder(copy: false)
       ..add(_u32(0x04034b50))
       ..add(_u16(20))
       ..add(_u16(0x0800))
-      ..add(_u16(0))
+      ..add(_u16(method))
       ..add(_u16(0))
       ..add(_u16(0))
       ..add(_u32(0))
-      ..add(_u32(entry.bytes.length))
-      ..add(_u32(entry.bytes.length))
+      ..add(_u32(payload.length))
+      ..add(_u32(expandedSize))
       ..add(_u16(nameBytes.length))
       ..add(_u16(0))
       ..add(nameBytes)
-      ..add(entry.bytes);
+      ..add(payload);
     final localBytes = local.takeBytes();
     output.add(localBytes);
 
@@ -37,12 +51,12 @@ Uint8List buildStoredZip(List<ZipTestEntry> entries) {
       ..add(_u16(0x031E))
       ..add(_u16(20))
       ..add(_u16(0x0800))
-      ..add(_u16(0))
+      ..add(_u16(method))
       ..add(_u16(0))
       ..add(_u16(0))
       ..add(_u32(0))
-      ..add(_u32(entry.bytes.length))
-      ..add(_u32(entry.bytes.length))
+      ..add(_u32(payload.length))
+      ..add(_u32(expandedSize))
       ..add(_u16(nameBytes.length))
       ..add(_u16(0))
       ..add(_u16(0))

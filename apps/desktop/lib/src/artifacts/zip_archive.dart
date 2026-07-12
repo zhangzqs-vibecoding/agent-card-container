@@ -73,7 +73,7 @@ class SafeZipArchive {
       if (files.containsKey(name)) {
         throw FormatException('duplicate ZIP path: $name');
       }
-      if ((flags & 0x1) != 0 || (method != 0 && method != 8)) {
+      if ((flags & ~0x0800) != 0 || (method != 0 && method != 8)) {
         throw const FormatException(
           'unsupported ZIP encryption or compression',
         );
@@ -92,6 +92,9 @@ class SafeZipArchive {
         compressedSize,
         expandedSize,
         method,
+        expectedName: name,
+        expectedFlags: flags,
+        maxOutputBytes: expandedSize,
       );
     }
     return SafeZipArchive._(Map.unmodifiable(files));
@@ -115,22 +118,54 @@ class SafeZipArchive {
     int localOffset,
     int compressedSize,
     int expandedSize,
-    int method,
-  ) {
+    int method, {
+    required String expectedName,
+    required int expectedFlags,
+    required int maxOutputBytes,
+  }) {
     _require(view, localOffset, 30);
     if (_u32(view, localOffset) != 0x04034b50) {
       throw const FormatException('invalid ZIP local entry');
     }
     final nameLength = _u16(view, localOffset + 26);
     final extraLength = _u16(view, localOffset + 28);
+    final localFlags = _u16(view, localOffset + 6);
+    final localMethod = _u16(view, localOffset + 8);
+    final localCompressedSize = _u32(view, localOffset + 18);
+    final localExpandedSize = _u32(view, localOffset + 22);
+    _require(view, localOffset + 30, nameLength + extraLength);
+    final localName = _decodeName(
+      bytes.sublist(localOffset + 30, localOffset + 30 + nameLength),
+      localFlags,
+    );
+    if (localName != expectedName ||
+        localFlags != expectedFlags ||
+        localMethod != method ||
+        localCompressedSize != compressedSize ||
+        localExpandedSize != expandedSize) {
+      throw const FormatException(
+        'ZIP local header does not match central entry',
+      );
+    }
     final start = localOffset + 30 + nameLength + extraLength;
     _require(view, start, compressedSize);
     final compressed = bytes.sublist(start, start + compressedSize);
-    final List<int> expanded;
+    final Uint8List expanded;
     try {
-      expanded = method == 0
-          ? compressed
-          : ZLibDecoder(raw: true).convert(compressed);
+      if (method == 0) {
+        if (compressed.length > maxOutputBytes) {
+          throw const _ZipLimitException();
+        }
+        expanded = Uint8List.fromList(compressed);
+      } else {
+        final sink = _BoundedByteSink(maxOutputBytes);
+        final input = ZLibDecoder(raw: true).startChunkedConversion(sink);
+        input.add(compressed);
+        input.close();
+        expanded = sink.bytes;
+      }
+    } on _ZipLimitException {
+      throw const FormatException('ZIP expanded payload exceeds declared size');
     } on FormatException {
       rethrow;
     } catch (_) {
@@ -139,8 +174,34 @@ class SafeZipArchive {
     if (expanded.length != expandedSize) {
       throw const FormatException('ZIP expanded size does not match metadata');
     }
-    return Uint8List.fromList(expanded);
+    return expanded;
   }
+}
+
+class _ZipLimitException implements Exception {
+  const _ZipLimitException();
+}
+
+class _BoundedByteSink extends ByteConversionSink {
+  _BoundedByteSink(this.limit);
+
+  final int limit;
+  final BytesBuilder _builder = BytesBuilder(copy: false);
+  var _length = 0;
+
+  Uint8List get bytes => _builder.toBytes();
+
+  @override
+  void add(List<int> chunk) {
+    _length += chunk.length;
+    if (_length > limit) {
+      throw const _ZipLimitException();
+    }
+    _builder.add(chunk);
+  }
+
+  @override
+  void close() {}
 }
 
 int _findEndOfCentralDirectory(ByteData view) {
