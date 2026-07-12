@@ -1,7 +1,8 @@
 # M4 acceptance evidence
 
 Overall status: **DEVICE EVIDENCE REQUIRED**  
-Automated code commit: `d89c8e15c3d2fd8421211da421fd8efdf68b100c`  
+Automated code commit: `9b3d9746ed630a51fd668657518e44b6681d06df`
+
 Recorded: 2026-07-12 (Asia/Shanghai)
 
 This record distinguishes reproducible host-independent evidence from physical
@@ -14,11 +15,11 @@ commit.
 | Requirement | Command | Result | Evidence |
 |---|---|---|---|
 | Flutter formatting/static correctness | `cd apps/desktop && flutter analyze` | PASS | No analyzer findings |
-| Flutter unit/widget suite | `cd apps/desktop && flutter test` | PASS | 188 tests passed |
+| Flutter unit/widget suite | `cd apps/desktop && flutter test` | PASS | 191 tests passed |
 | Go formatting | `cd services/cloud && test -z "$(gofmt -l .)"` | PASS | Empty formatter diff |
 | Go static analysis | `cd services/cloud && go vet ./...` | PASS | Exit 0 |
 | Go race suite | `cd services/cloud && CGO_ENABLED=1 go test ./... -race` | PASS | All packages passed |
-| Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | Flutter security suite 64 tests, Go race suite, CodeCard typecheck/tests/build/bundle validation passed |
+| Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | TypeScript shared fixtures, Flutter security suite 66 tests, Go race suite, CodeCard dependency/typecheck/tests/build/bundle validation and `pnpm audit` passed |
 | Performance evaluator | `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart` | PASS | Budgets, percentile calculation and minimum sample populations tested |
 | Insufficient performance evidence | `dart tooling/performance/summarize.dart tooling/performance/fixtures/insufficient.json` | PASS (rejected) | Exit 1 with four `:samples` failures and `passed: false` |
 | Repository whitespace | `git diff --check` | PASS | No findings |
@@ -28,15 +29,19 @@ commit.
 
 | Requirement | Status | Exact evidence or remaining gate |
 |---|---|---|
-| Redacted diagnostics export | PASS | `apps/desktop/test/diagnostics/diagnostic_bundle_test.dart`; allowlist-only schema and path/token redaction |
+| Redacted diagnostics export | PASS | Allowlist/redaction tests plus atomic file export and the Settings > Diagnostics user flow in `desktop_bootstrap_test.dart` and `agent_card_app_test.dart` |
 | Crash marker and unaffected-card recovery | PASS | `apps/desktop/test/recovery/startup_recovery_test.dart`, `apps/desktop/test/app/desktop_bootstrap_test.dart` |
 | Persistent three-failure CodeCard quarantine | PASS | `apps/desktop/test/code_card/code_card_host_test.dart`, SQLite schema v4 tests |
 | Bounded ZIP extraction and signed artifact enforcement | PASS | artifact tests plus security gate |
 | Capability permission UX and persisted grants | PASS | capability broker and permission prompt widget tests |
 | CodeCard runtime context and fixed event contract | PASS | context/theme/online/surface/permission/metrics/suspend/resume tests; contract version remains 1 |
 | Active-card budgets | PASS (automated) | Tests enforce 20 NativeCard/8 CodeCard limits, offscreen exclusion, window lifecycle suspend/resume, and child-to-host lifecycle events |
+| Main-window/tray lifecycle | PASS (automated) | Adapter tests cover close-to-hide, tray show/quit, and runtime ownership; Windows interaction remains in the device matrix |
+| Cross-language contract fixtures | PASS | Go, Dart and TypeScript decode the same CardDefinition, NativeCard and local-RPC fixtures in the security gate |
+| CodeCard dependency supply chain | PASS (automated) | Exact dependency/license allowlist, immutable lockfile, Vite/Vitest security upgrade and zero-vulnerability audit |
 | Repeatable performance capture tooling | PASS (tooling) | `tooling/performance/capture-windows.ps1` and `integration_test/performance_baseline_test.dart`; physical results remain NOT RUN |
 | Windows installer and release verifier structure | PASS (static only) | Stable AppId/version, signed executable check, approved DLL allowlist and official WebView2 registry detection are present |
+| macOS runner and loopback entitlements | PASS (static only) | Generated runner, last-window lifecycle policy and client/server network entitlements are present; target-device build/sign/notarization remains NOT RUN |
 | Signed Windows bundle/installer | NOT RUN | Run `packaging/windows/verify-release.ps1` and the release workflow on Windows with protected signing credentials |
 | WebView2 missing-runtime user flow | NOT RUN | Exercise installer on a clean Windows device |
 | macOS signing/notarization technical gate | NOT RUN | Run `sh tooling/device-gates/macos-m4.sh` on macOS |
@@ -86,7 +91,7 @@ pwsh tooling/performance/capture-windows.ps1 `
 
 ## Repository hygiene
 
-- `git status --short` was empty before this evidence record was created.
+- `git status --short` was empty before this evidence record was updated.
 - No generated release bundle, runtime database, `.env`, token, private key or
   card state is tracked.
 - `services/cloud/.env.example` is intentionally tracked and contains no
