@@ -3,6 +3,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $verifier = Join-Path $PSScriptRoot 'verify-portable-package.ps1'
+$packager = Join-Path $PSScriptRoot 'build-portable-package.ps1'
 $workspace = Join-Path ([IO.Path]::GetTempPath()) "agent-card-portable-$([guid]::NewGuid().ToString('N'))"
 
 function New-TestPayload([string]$Path) {
@@ -98,6 +99,27 @@ try {
   $traversal = New-TestArchive 'traversal' {}
   Add-ArchiveEntry $traversal '../escape.txt' 'escape'
   Assert-Fails $traversal
+
+  $bundle = Join-Path $workspace 'bundle'
+  $output = Join-Path $workspace 'output'
+  New-Item -ItemType Directory -Path $bundle, $output -Force | Out-Null
+  New-TestPayload $bundle
+  Remove-Item -LiteralPath (Join-Path $bundle 'README.txt')
+  Remove-Item -LiteralPath (Join-Path $bundle 'release-manifest.json')
+  & pwsh -NoProfile -File $packager `
+    -Bundle $bundle `
+    -OutputDirectory $output `
+    -Version '1.2.3' `
+    -Commit 'abcdef0123456789abcdef0123456789abcdef01'
+  if ($LASTEXITCODE -ne 0) {
+    throw 'Portable packager failed'
+  }
+  $package = Join-Path $output 'AgentCardContainer-windows-x64-1.2.3-abcdef0.zip'
+  if (-not (Test-Path -LiteralPath $package -PathType Leaf) -or
+      -not (Test-Path -LiteralPath "$package.sha256" -PathType Leaf)) {
+    throw 'Portable packager did not create the expected outputs'
+  }
+  Assert-Passes $package
   Write-Output 'portable package verifier tests passed'
 } finally {
   Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
