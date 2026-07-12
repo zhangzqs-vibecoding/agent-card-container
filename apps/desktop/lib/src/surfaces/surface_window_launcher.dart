@@ -15,9 +15,15 @@ abstract final class SurfaceWindowLauncher {
     final model = SurfaceWindowModel(arguments);
     await controller.setWindowMethodHandler((call) async {
       switch (call.method) {
-        case 'surface.updateInstances':
-          final values = (call.arguments as List).cast<String>();
-          model.updateInstances(values);
+        case 'surface.updateCards':
+          final cards = (call.arguments as List)
+              .map(
+                (value) => SurfaceCardSnapshot.fromJson(
+                  (value as Map).cast<String, Object?>(),
+                ),
+              )
+              .toList(growable: false);
+          model.updateCards(cards);
           return null;
         case 'surface.close':
           await windowManager.setPreventClose(false);

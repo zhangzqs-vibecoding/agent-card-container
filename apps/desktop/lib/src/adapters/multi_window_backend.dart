@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import '../surfaces/surface.dart';
 import '../surfaces/surface_coordinator.dart';
+import '../surfaces/surface_window.dart';
+
+typedef SurfaceSnapshotProvider = SurfaceCardSnapshot Function(String);
 
 class SurfaceWindowConfiguration {
   const SurfaceWindowConfiguration({
@@ -18,15 +21,16 @@ abstract interface class MultiWindowDriver {
 
   Future<void> show(String windowId);
 
-  Future<void> updateInstances(String windowId, List<String> instanceIds);
+  Future<void> updateCards(String windowId, List<SurfaceCardSnapshot> cards);
 
   Future<void> close(String windowId);
 }
 
 class MultiWindowBackend implements WindowBackend {
-  MultiWindowBackend(this.driver);
+  MultiWindowBackend(this.driver, {required this.snapshotProvider});
 
   final MultiWindowDriver driver;
+  final SurfaceSnapshotProvider snapshotProvider;
   final Map<String, String> _surfaceWindows = {};
 
   @override
@@ -34,9 +38,10 @@ class MultiWindowBackend implements WindowBackend {
     CardSurface surface,
     List<String> instanceIds,
   ) async {
+    final cards = instanceIds.map(snapshotProvider).toList(growable: false);
     final existing = _surfaceWindows[surface.id];
     if (existing != null) {
-      await driver.updateInstances(existing, instanceIds);
+      await driver.updateCards(existing, cards);
       return;
     }
     final arguments = jsonEncode({
@@ -47,6 +52,7 @@ class MultiWindowBackend implements WindowBackend {
       'alwaysOnTop': surface.alwaysOnTop,
       'bounds': _placementJson(surface.bounds),
       'instanceIds': instanceIds,
+      'cards': cards.map((card) => card.toJson()).toList(),
     });
     final windowId = await driver.create(
       SurfaceWindowConfiguration(arguments: arguments),

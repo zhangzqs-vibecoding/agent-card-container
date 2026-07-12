@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 import 'multi_window_backend.dart';
+import '../surfaces/surface_window.dart';
 
 class DesktopMultiWindowDriver implements MultiWindowDriver {
   final Map<String, WindowController> _windows = {};
@@ -27,13 +28,14 @@ class DesktopMultiWindowDriver implements MultiWindowDriver {
   Future<void> show(String windowId) => _controller(windowId).show();
 
   @override
-  Future<void> updateInstances(
+  Future<void> updateCards(
     String windowId,
-    List<String> instanceIds,
+    List<SurfaceCardSnapshot> cards,
   ) async {
-    await _controller(
-      windowId,
-    ).invokeMethod<void>('surface.updateInstances', instanceIds);
+    await _controller(windowId).invokeMethod<void>(
+      'surface.updateCards',
+      cards.map((card) => card.toJson()).toList(),
+    );
   }
 
   @override

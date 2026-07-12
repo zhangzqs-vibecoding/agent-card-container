@@ -1,6 +1,103 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../adapters/in_app_webview_port.dart';
+import '../code_card/code_card_host.dart';
+import '../native_card/native_card_controller.dart';
+import '../native_card/native_card_renderer.dart';
+import '../native_card/native_card_spec.dart';
+
+enum SurfaceCardRuntime { native, code }
+
+class SurfaceCardSnapshot {
+  const SurfaceCardSnapshot._({
+    required this.instanceId,
+    required this.runtime,
+    required this.state,
+    this.nativeSpec,
+    this.sessionId,
+    this.origin,
+    this.entrypoint,
+  });
+
+  factory SurfaceCardSnapshot.fromJson(Map<String, Object?> json) {
+    final runtime = switch (json['runtime']) {
+      'native' => SurfaceCardRuntime.native,
+      'code' => SurfaceCardRuntime.code,
+      _ => throw const FormatException('surface card runtime is invalid'),
+    };
+    final allowed = runtime == SurfaceCardRuntime.native
+        ? const {'instanceId', 'runtime', 'spec', 'state'}
+        : const {'instanceId', 'runtime', 'sessionId', 'origin', 'entrypoint'};
+    final unknown = json.keys.where((key) => !allowed.contains(key));
+    if (unknown.isNotEmpty) {
+      throw FormatException(
+        'surface card has unknown fields: ${unknown.join(', ')}',
+      );
+    }
+    final instanceId = _requiredString(json, 'instanceId');
+    if (runtime == SurfaceCardRuntime.native) {
+      return SurfaceCardSnapshot._(
+        instanceId: instanceId,
+        runtime: runtime,
+        nativeSpec: NativeCardSpec.fromJson(_object(json['spec'], 'spec')),
+        state: Map.unmodifiable(_object(json['state'], 'state')),
+      );
+    }
+    final sessionId = _requiredString(json, 'sessionId');
+    final origin = Uri.tryParse(_requiredString(json, 'origin'));
+    final entrypoint = _requiredString(json, 'entrypoint');
+    if (origin == null ||
+        origin.scheme != 'http' ||
+        origin.host != '127.0.0.1' ||
+        !origin.hasPort ||
+        origin.userInfo.isNotEmpty ||
+        origin.path.isNotEmpty ||
+        origin.hasQuery ||
+        origin.hasFragment) {
+      throw const FormatException('CodeCard surface origin is invalid');
+    }
+    if (!entrypoint.startsWith('/') || entrypoint.contains('..')) {
+      throw const FormatException('CodeCard surface entrypoint is invalid');
+    }
+    return SurfaceCardSnapshot._(
+      instanceId: instanceId,
+      runtime: runtime,
+      sessionId: sessionId,
+      origin: origin,
+      entrypoint: entrypoint,
+      state: const {},
+    );
+  }
+
+  final String instanceId;
+  final SurfaceCardRuntime runtime;
+  final NativeCardSpec? nativeSpec;
+  final Map<String, Object?> state;
+  final String? sessionId;
+  final Uri? origin;
+  final String? entrypoint;
+
+  Map<String, Object?> toJson() {
+    if (runtime == SurfaceCardRuntime.native) {
+      return {
+        'instanceId': instanceId,
+        'runtime': 'native',
+        'spec': nativeSpec!.toJson(),
+        'state': state,
+      };
+    }
+    return {
+      'instanceId': instanceId,
+      'runtime': 'code',
+      'sessionId': sessionId,
+      'origin': origin.toString(),
+      'entrypoint': entrypoint,
+    };
+  }
+}
 
 class SurfaceWindowArguments {
   const SurfaceWindowArguments({
@@ -9,6 +106,7 @@ class SurfaceWindowArguments {
     required this.ownerWindowId,
     required this.alwaysOnTop,
     required this.instanceIds,
+    this.cards = const [],
     this.bounds,
   });
 
@@ -17,6 +115,7 @@ class SurfaceWindowArguments {
   final String ownerWindowId;
   final bool alwaysOnTop;
   final List<String> instanceIds;
+  final List<SurfaceCardSnapshot> cards;
   final Rect? bounds;
 
   static SurfaceWindowArguments? tryParse(String source) {
@@ -30,6 +129,7 @@ class SurfaceWindowArguments {
       final ownerWindowId = value['ownerWindowId'];
       final alwaysOnTop = value['alwaysOnTop'];
       final rawInstances = value['instanceIds'];
+      final rawCards = value['cards'];
       if (surfaceId is! String ||
           surfaceId.isEmpty ||
           (surfaceType != 'overlay' && surfaceType != 'detached') ||
@@ -44,12 +144,26 @@ class SurfaceWindowArguments {
       if (instances.toSet().length != instances.length) {
         return null;
       }
+      final cards = rawCards == null
+          ? const <SurfaceCardSnapshot>[]
+          : (rawCards as List)
+                .map(
+                  (card) => SurfaceCardSnapshot.fromJson(
+                    _object(card, 'surface card'),
+                  ),
+                )
+                .toList(growable: false);
+      if (cards.map((card) => card.instanceId).toSet().length != cards.length ||
+          cards.any((card) => !instances.contains(card.instanceId))) {
+        return null;
+      }
       return SurfaceWindowArguments(
         surfaceId: surfaceId,
         surfaceType: surfaceType as String,
         ownerWindowId: ownerWindowId,
         alwaysOnTop: alwaysOnTop,
         instanceIds: List.unmodifiable(instances),
+        cards: List.unmodifiable(cards),
         bounds: _rect(value['bounds']),
       );
     } catch (_) {
@@ -60,12 +174,15 @@ class SurfaceWindowArguments {
 
 class SurfaceWindowModel extends ChangeNotifier {
   SurfaceWindowModel(this.arguments)
-    : _instanceIds = List.of(arguments.instanceIds);
+    : _instanceIds = List.of(arguments.instanceIds),
+      _cards = List.of(arguments.cards);
 
   final SurfaceWindowArguments arguments;
   List<String> _instanceIds;
+  List<SurfaceCardSnapshot> _cards;
 
   List<String> get instanceIds => List.unmodifiable(_instanceIds);
+  List<SurfaceCardSnapshot> get cards => List.unmodifiable(_cards);
 
   void updateInstances(List<String> instanceIds) {
     if (instanceIds.any((id) => id.isEmpty) ||
@@ -73,6 +190,19 @@ class SurfaceWindowModel extends ChangeNotifier {
       throw const FormatException('surface instance IDs are invalid');
     }
     _instanceIds = List.of(instanceIds);
+    _cards = _cards
+        .where((card) => _instanceIds.contains(card.instanceId))
+        .toList();
+    notifyListeners();
+  }
+
+  void updateCards(List<SurfaceCardSnapshot> cards) {
+    final ids = cards.map((card) => card.instanceId).toList();
+    if (ids.toSet().length != ids.length) {
+      throw const FormatException('surface card snapshots are duplicated');
+    }
+    _cards = List.of(cards);
+    _instanceIds = ids;
     notifyListeners();
   }
 }
@@ -99,13 +229,20 @@ class SurfaceWindowApp extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  for (final instanceId in model.instanceIds)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text('正在挂载 $instanceId'),
-                      ),
+                  for (final card in model.cards)
+                    SizedBox(
+                      width: 420,
+                      height: 280,
+                      child: Card(child: _SurfaceCardView(snapshot: card)),
                     ),
+                  if (model.cards.isEmpty)
+                    for (final instanceId in model.instanceIds)
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text('正在挂载 $instanceId'),
+                        ),
+                      ),
                 ],
               ),
             ),
@@ -113,6 +250,98 @@ class SurfaceWindowApp extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _SurfaceCardView extends StatefulWidget {
+  const _SurfaceCardView({required this.snapshot});
+
+  final SurfaceCardSnapshot snapshot;
+
+  @override
+  State<_SurfaceCardView> createState() => _SurfaceCardViewState();
+}
+
+class _SurfaceCardViewState extends State<_SurfaceCardView> {
+  NativeCardController? _controller;
+  InAppWebViewPort? _webView;
+  Object? _codeCardError;
+  var _codeCardMounted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final snapshot = widget.snapshot;
+    if (snapshot.nativeSpec case final spec?) {
+      _controller = NativeCardController({
+        ...spec.initialState,
+        ...snapshot.state,
+      });
+    } else {
+      final port = InAppWebViewPort();
+      _webView = port;
+      unawaited(_mountCodeCard(port, snapshot));
+    }
+  }
+
+  Future<void> _mountCodeCard(
+    InAppWebViewPort port,
+    SurfaceCardSnapshot snapshot,
+  ) async {
+    try {
+      final capabilities = await port.inspectCapabilities();
+      if (!capabilities.canEnforceCodeCardPolicy) {
+        throw const CodeCardUnavailableException(
+          'platform WebView cannot enforce CodeCard isolation policy',
+        );
+      }
+      final origin = snapshot.origin!;
+      await port.mount(
+        WebViewConfiguration(
+          policy: CodeCardWebPolicy(origin),
+          developerToolsEnabled: false,
+          userDataKey: snapshot.sessionId!,
+        ),
+        origin.replace(path: snapshot.entrypoint),
+      );
+      if (mounted && identical(port, _webView)) {
+        setState(() => _codeCardMounted = true);
+      }
+    } catch (error) {
+      if (mounted && identical(port, _webView)) {
+        setState(() => _codeCardError = error);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    final webView = _webView;
+    if (webView != null) {
+      unawaited(webView.dispose());
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final spec = widget.snapshot.nativeSpec;
+    final controller = _controller;
+    if (spec != null && controller != null) {
+      return Padding(
+        padding: const EdgeInsets.all(14),
+        child: NativeCardRenderer(spec: spec, controller: controller),
+      );
+    }
+    if (_codeCardError != null) {
+      return const Center(child: Text('当前平台无法安全挂载 CodeCard'));
+    }
+    final webView = _webView;
+    if (!_codeCardMounted || webView == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return CodeCardWebView(port: webView);
   }
 }
 
@@ -141,4 +370,19 @@ Rect? _rect(Object? value) {
     width.toDouble(),
     height.toDouble(),
   );
+}
+
+String _requiredString(Map<String, Object?> json, String key) {
+  final value = json[key];
+  if (value is! String || value.isEmpty) {
+    throw FormatException('$key must be a non-empty string');
+  }
+  return value;
+}
+
+Map<String, Object?> _object(Object? value, String context) {
+  if (value is! Map<String, Object?>) {
+    throw FormatException('$context must be an object');
+  }
+  return value;
 }
