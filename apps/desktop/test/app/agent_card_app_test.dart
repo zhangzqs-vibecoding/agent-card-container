@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:agent_card_desktop/src/adapters/in_app_webview_port.dart';
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/capabilities/capability.dart';
@@ -85,7 +86,7 @@ void main() {
       find.byType(MaterialApp),
       matchesGoldenFile('goldens/workspace_shell.png'),
     );
-  });
+  }, skip: !Platform.isLinux);
 
   testWidgets('renders a persisted NativeCard instance in the grid', (
     tester,
@@ -398,6 +399,7 @@ void main() {
 
     await tester.pumpWidget(
       AgentCardApp(
+        webViewPortFactory: () => InAppWebViewPort(platformSupported: false),
         workspaceCards: [
           WorkspaceCard.code(
             instance: const CardInstance(

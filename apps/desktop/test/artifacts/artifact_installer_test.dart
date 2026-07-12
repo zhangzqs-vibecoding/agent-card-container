@@ -49,7 +49,13 @@ void main() {
       );
       expect(
         result.directory.path,
-        endsWith('artifacts/sha256/${result.contentHash}'),
+        endsWith(
+          [
+            'artifacts',
+            'sha256',
+            result.contentHash,
+          ].join(Platform.pathSeparator),
+        ),
       );
     });
 

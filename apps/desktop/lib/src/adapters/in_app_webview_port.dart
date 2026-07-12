@@ -6,6 +6,8 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../code_card/code_card_host.dart';
 
+typedef InAppWebViewPortFactory = InAppWebViewPort Function();
+
 class InAppWebViewSnapshot {
   const InAppWebViewSnapshot({
     required this.configuration,

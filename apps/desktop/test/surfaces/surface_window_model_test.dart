@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:agent_card_desktop/src/adapters/in_app_webview_port.dart';
 import 'package:agent_card_desktop/src/surfaces/surface_window.dart';
 import 'package:agent_card_desktop/src/surfaces/surface_bridge.dart';
 import 'package:flutter/material.dart';
@@ -186,7 +187,12 @@ void main() {
     final model = SurfaceWindowModel(arguments);
     addTearDown(model.dispose);
 
-    await tester.pumpWidget(SurfaceWindowApp(model: model));
+    await tester.pumpWidget(
+      SurfaceWindowApp(
+        model: model,
+        webViewPortFactory: () => InAppWebViewPort(platformSupported: false),
+      ),
+    );
 
     expect(find.text('card-19'), findsOneWidget);
     expect(find.text('card-20'), findsNothing);

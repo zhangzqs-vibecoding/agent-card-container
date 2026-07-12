@@ -33,6 +33,7 @@ class WorkspaceScreen extends StatefulWidget {
     this.onMoveCardToOverlay,
     this.runtimeVisible = true,
     this.onExportDiagnostics,
+    this.webViewPortFactory,
   });
 
   final int? runtimePort;
@@ -45,6 +46,7 @@ class WorkspaceScreen extends StatefulWidget {
   final CardSurfaceAction? onMoveCardToOverlay;
   final bool runtimeVisible;
   final Future<String> Function()? onExportDiagnostics;
+  final InAppWebViewPortFactory? webViewPortFactory;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -132,6 +134,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     return AnimatedBuilder(
       animation: widget.workspaceController ?? _NoopListenable.instance,
       builder: (context, _) => _WorkspaceCanvas(
+        webViewPortFactory: widget.webViewPortFactory ?? InAppWebViewPort.new,
         runtimeVisible: widget.runtimeVisible,
         cards:
             widget.workspaceController?.workspaceCards ??
@@ -677,6 +680,7 @@ class _NavItem extends StatelessWidget {
 
 class _WorkspaceCanvas extends StatelessWidget {
   const _WorkspaceCanvas({
+    required this.webViewPortFactory,
     required this.cards,
     required this.runtimeVisible,
     required this.agentPanelOpen,
@@ -686,6 +690,7 @@ class _WorkspaceCanvas extends StatelessWidget {
     this.onMoveCardToOverlay,
   });
 
+  final InAppWebViewPortFactory webViewPortFactory;
   final List<WorkspaceCard> cards;
   final bool runtimeVisible;
   final bool agentPanelOpen;
@@ -833,6 +838,7 @@ class _WorkspaceCanvas extends StatelessWidget {
                   key: ValueKey(card.instance.instanceId),
                   card: card,
                   active: activeIndexes.contains(index),
+                  webViewPortFactory: webViewPortFactory,
                   onNativeCardStateChanged: onNativeCardStateChanged,
                   surfacePlacement: CardPlacement(
                     x: 100 + card.instance.placement.x * columnWidth,
@@ -867,6 +873,7 @@ class _WorkspaceCardView extends StatefulWidget {
     required this.card,
     required this.active,
     required this.surfacePlacement,
+    required this.webViewPortFactory,
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
@@ -876,6 +883,7 @@ class _WorkspaceCardView extends StatefulWidget {
   final WorkspaceCard card;
   final bool active;
   final CardPlacement surfacePlacement;
+  final InAppWebViewPortFactory webViewPortFactory;
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
@@ -945,7 +953,7 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
       return;
     }
     final descriptor = widget.card.codeCard!;
-    final port = InAppWebViewPort();
+    final port = widget.webViewPortFactory();
     final host = CodeCardHost(
       session: descriptor.session,
       entrypoint: descriptor.entrypoint,

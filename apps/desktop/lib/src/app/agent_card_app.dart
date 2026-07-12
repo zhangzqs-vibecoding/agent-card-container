@@ -8,6 +8,8 @@ import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_controller.dart';
 import 'package:flutter/material.dart';
 
+import '../adapters/in_app_webview_port.dart';
+
 class AgentCardApp extends StatelessWidget {
   const AgentCardApp({
     super.key,
@@ -21,6 +23,7 @@ class AgentCardApp extends StatelessWidget {
     this.onMoveCardToOverlay,
     this.permissionRequests,
     this.onExportDiagnostics,
+    this.webViewPortFactory,
   });
 
   final int? runtimePort;
@@ -33,6 +36,7 @@ class AgentCardApp extends StatelessWidget {
   final CardSurfaceAction? onMoveCardToOverlay;
   final PermissionRequestController? permissionRequests;
   final Future<String> Function()? onExportDiagnostics;
+  final InAppWebViewPortFactory? webViewPortFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +64,7 @@ class AgentCardApp extends StatelessWidget {
       onDetachCard: onDetachCard,
       onMoveCardToOverlay: onMoveCardToOverlay,
       onExportDiagnostics: onExportDiagnostics,
+      webViewPortFactory: webViewPortFactory,
     );
     final permissions = permissionRequests;
     return permissions == null

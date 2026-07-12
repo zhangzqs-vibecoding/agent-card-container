@@ -297,6 +297,7 @@ class SurfaceWindowApp extends StatelessWidget {
     this.onStateChanged,
     this.onCodeCardLaunch,
     this.onRuntimeVisibilityChanged,
+    this.webViewPortFactory,
     super.key,
   });
 
@@ -314,6 +315,7 @@ class SurfaceWindowApp extends StatelessWidget {
   onCodeCardLaunch;
   final Future<void> Function(String instanceId, bool visible)?
   onRuntimeVisibilityChanged;
+  final InAppWebViewPortFactory? webViewPortFactory;
 
   @override
   Widget build(BuildContext context) {
@@ -364,6 +366,8 @@ class SurfaceWindowApp extends StatelessWidget {
                               key: ValueKey(card.instanceId),
                               snapshot: card,
                               active: activeIndexes.contains(index),
+                              webViewPortFactory:
+                                  webViewPortFactory ?? InAppWebViewPort.new,
                               capabilityInvocation: onCapabilityInvocation,
                               onStateChanged: onStateChanged,
                               onCodeCardLaunch: onCodeCardLaunch,
@@ -396,6 +400,7 @@ class _SurfaceCardView extends StatefulWidget {
   const _SurfaceCardView({
     required this.snapshot,
     required this.active,
+    required this.webViewPortFactory,
     this.capabilityInvocation,
     this.onStateChanged,
     this.onCodeCardLaunch,
@@ -405,6 +410,7 @@ class _SurfaceCardView extends StatefulWidget {
 
   final SurfaceCardSnapshot snapshot;
   final bool active;
+  final InAppWebViewPortFactory webViewPortFactory;
   final Future<Object?> Function(
     String instanceId,
     String method,
@@ -475,7 +481,7 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
       );
       _controller?.addListener(_publishState);
     } else {
-      final port = InAppWebViewPort();
+      final port = widget.webViewPortFactory();
       _webView = port;
       unawaited(_mountCodeCard(port, snapshot));
     }
