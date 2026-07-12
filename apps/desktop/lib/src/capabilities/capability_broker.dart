@@ -11,12 +11,14 @@ typedef CapabilityGrantRequester =
       Map<String, Object?> params,
     );
 typedef CapabilityGrantPersister = void Function(PermissionGrant grant);
+typedef CapabilityGrantChanged = void Function(PermissionGrant grant);
 
 class CapabilityBroker {
-  CapabilityBroker({this.requestGrant, this.persistGrant});
+  CapabilityBroker({this.requestGrant, this.persistGrant, this.onGrantChanged});
 
   final CapabilityGrantRequester? requestGrant;
   final CapabilityGrantPersister? persistGrant;
+  final CapabilityGrantChanged? onGrantChanged;
   final Map<String, CapabilityHandler> _handlers = {};
   Set<PermissionGrant> _grants = {};
 
@@ -102,6 +104,7 @@ class CapabilityBroker {
           grant,
         };
         persistGrant?.call(grant);
+        onGrantChanged?.call(grant);
       }
     }
     if (method == 'network.fetch') {

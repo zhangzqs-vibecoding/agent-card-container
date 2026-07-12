@@ -262,6 +262,7 @@ void main() {
 
     test('requests and persists a narrowly scoped first-use grant', () async {
       final persisted = <PermissionGrant>[];
+      final changed = <PermissionGrant>[];
       final broker = CapabilityBroker(
         requestGrant: (context, capability, params) async => PermissionGrant(
           instanceId: context.instanceId,
@@ -270,6 +271,7 @@ void main() {
           domains: {Uri.parse(params['url']! as String).host},
         ),
         persistGrant: persisted.add,
+        onGrantChanged: changed.add,
       );
       broker.register('network.fetch', (_, _) async => {'status': 200});
       final context = _context(
@@ -283,6 +285,7 @@ void main() {
 
       expect(result, {'status': 200});
       expect(persisted.single.domains, {'api.example.com'});
+      expect(changed, persisted);
     });
 
     test('confirms every clipboard read even after a stored grant', () async {

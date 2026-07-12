@@ -173,6 +173,17 @@ abstract final class DesktopBootstrap {
               CapabilityBroker(
                   requestGrant: permissionRequests.requestGrant,
                   persistGrant: database.upsertGrant,
+                  onGrantChanged: (grant) {
+                    runtimeServer!.publishEventForInstance(
+                      grant.instanceId,
+                      'permission.changed',
+                      {
+                        'capability': grant.capability,
+                        'granted': true,
+                        'domains': grant.domains.toList()..sort(),
+                      },
+                    );
+                  },
                 )
                 ..register('network.fetch', SecureNetworkFetcher().handle)
                 ..register('clipboard.write', hostCapabilities.clipboardWrite)
