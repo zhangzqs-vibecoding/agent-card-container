@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -97,6 +98,24 @@ void main() {
     final response = await _get(session, card.codeCard!.entrypoint);
     expect(response.statusCode, HttpStatus.ok);
     expect(await utf8.decoder.bind(response).join(), contains('Offline'));
+    final socket = await WebSocket.connect(
+      'ws://127.0.0.1:${server.port}/v1/events',
+      headers: {
+        HttpHeaders.hostHeader: session.authority,
+        'Origin': session.origin,
+      },
+    );
+    addTearDown(socket.close);
+    final messages = StreamIterator<dynamic>(socket);
+    socket.add(jsonEncode({'type': 'authenticate', 'token': session.token}));
+    expect(await messages.moveNext(), isTrue);
+    await card.codeCard!.onSuspend!();
+    expect(await messages.moveNext(), isTrue);
+    expect(jsonDecode(messages.current as String)['event'], 'runtime.suspend');
+    await card.codeCard!.onResume!();
+    expect(await messages.moveNext(), isTrue);
+    expect(jsonDecode(messages.current as String)['event'], 'runtime.resume');
+    await messages.cancel();
     expect(await card.codeCard!.onLaunchFailure!(), 1);
     await card.codeCard!.onLaunchSuccess!();
     expect(database.launchFailureCount('instance-1'), 0);

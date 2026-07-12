@@ -11,6 +11,8 @@ class CodeCardDescriptor {
     this.onLaunchFailure,
     this.onLaunchSuccess,
     this.onQuarantine,
+    this.onSuspend,
+    this.onResume,
   });
 
   final RuntimeSession session;
@@ -18,6 +20,8 @@ class CodeCardDescriptor {
   final Future<int> Function()? onLaunchFailure;
   final Future<void> Function()? onLaunchSuccess;
   final Future<void> Function()? onQuarantine;
+  final Future<void> Function()? onSuspend;
+  final Future<void> Function()? onResume;
 }
 
 class WorkspaceCard {

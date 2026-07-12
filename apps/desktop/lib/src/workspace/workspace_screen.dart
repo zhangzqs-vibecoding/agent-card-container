@@ -746,10 +746,26 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   @override
   void didUpdateWidget(covariant _WorkspaceCardView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.card.instance.versionId != widget.card.instance.versionId ||
-        oldWidget.active != widget.active) {
+    if (oldWidget.card.instance.versionId != widget.card.instance.versionId) {
       _disposeRuntime();
       _createController();
+      return;
+    }
+    if (oldWidget.active == widget.active) {
+      return;
+    }
+    if (widget.card.nativeSpec != null) {
+      _disposeRuntime();
+      _createController();
+      return;
+    }
+    final host = _codeCardHost;
+    if (host == null) {
+      _createController();
+    } else if (widget.active && host.state == CodeCardHostState.suspended) {
+      unawaited(_resumeCodeCard(host));
+    } else if (!widget.active && host.state == CodeCardHostState.mounted) {
+      unawaited(_suspendCodeCard(host));
     }
   }
 
@@ -782,6 +798,8 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
       onLaunchFailure: descriptor.onLaunchFailure,
       onLaunchSuccess: descriptor.onLaunchSuccess,
       onQuarantine: descriptor.onQuarantine,
+      onSuspend: descriptor.onSuspend,
+      onResume: descriptor.onResume,
     );
     _webViewPort = port;
     _codeCardHost = host;
@@ -791,9 +809,32 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   Future<void> _mountCodeCard(CodeCardHost host) async {
     try {
       await host.mount();
+      if (!widget.active && identical(host, _codeCardHost)) {
+        await host.suspend();
+      }
       if (mounted && identical(host, _codeCardHost)) {
         setState(() => _codeCardMounted = true);
       }
+    } catch (error) {
+      if (mounted && identical(host, _codeCardHost)) {
+        setState(() => _codeCardError = error);
+      }
+    }
+  }
+
+  Future<void> _suspendCodeCard(CodeCardHost host) async {
+    try {
+      await host.suspend();
+    } catch (error) {
+      if (mounted && identical(host, _codeCardHost)) {
+        setState(() => _codeCardError = error);
+      }
+    }
+  }
+
+  Future<void> _resumeCodeCard(CodeCardHost host) async {
+    try {
+      await host.resume();
     } catch (error) {
       if (mounted && identical(host, _codeCardHost)) {
         setState(() => _codeCardError = error);

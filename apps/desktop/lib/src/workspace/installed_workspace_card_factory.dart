@@ -87,6 +87,12 @@ class InstalledWorkspaceCardFactory {
             database.clearLaunchFailures(instance.instanceId),
         onQuarantine: () async =>
             database.quarantineInstance(instance.instanceId),
+        onSuspend: () async {
+          runtimeServer.publishEvent(session.id, 'runtime.suspend', const {});
+        },
+        onResume: () async {
+          runtimeServer.publishEvent(session.id, 'runtime.resume', const {});
+        },
       ),
       persistedState: database.readState(instance.stateNamespace),
       capabilityBroker: capabilityRuntime?.broker,

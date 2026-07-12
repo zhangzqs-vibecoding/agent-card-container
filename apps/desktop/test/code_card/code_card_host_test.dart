@@ -61,10 +61,13 @@ void main() {
 
   test('suspends, resumes and disposes one isolated WebView', () async {
     final port = _FakeWebViewPort(const WebViewCapabilities.secure());
+    final lifecycleEvents = <String>[];
     final host = CodeCardHost(
       session: _session(),
       entrypoint: '/bundle/hash/index.html',
       webView: port,
+      onSuspend: () async => lifecycleEvents.add('runtime.suspend'),
+      onResume: () async => lifecycleEvents.add('runtime.resume'),
     );
 
     await host.mount();
@@ -75,6 +78,7 @@ void main() {
     await host.dispose();
     expect(host.state, CodeCardHostState.disposed);
     expect(port.calls, ['mount', 'suspend', 'resume', 'dispose']);
+    expect(lifecycleEvents, ['runtime.suspend', 'runtime.resume']);
   });
 
   test('quarantines an instance after three launch failures', () async {

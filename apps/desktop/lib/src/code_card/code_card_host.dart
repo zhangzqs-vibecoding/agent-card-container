@@ -95,6 +95,8 @@ class CodeCardHost {
     this.onLaunchFailure,
     this.onLaunchSuccess,
     this.onQuarantine,
+    this.onSuspend,
+    this.onResume,
   });
 
   final RuntimeSession session;
@@ -104,6 +106,8 @@ class CodeCardHost {
   final Future<int> Function()? onLaunchFailure;
   final Future<void> Function()? onLaunchSuccess;
   final Future<void> Function()? onQuarantine;
+  final Future<void> Function()? onSuspend;
+  final Future<void> Function()? onResume;
 
   CodeCardHostState _state = CodeCardHostState.created;
   var _launchFailures = 0;
@@ -145,12 +149,14 @@ class CodeCardHost {
     _requireState(CodeCardHostState.mounted);
     await webView.suspend();
     _state = CodeCardHostState.suspended;
+    await onSuspend?.call();
   }
 
   Future<void> resume() async {
     _requireState(CodeCardHostState.suspended);
     await webView.resume();
     _state = CodeCardHostState.mounted;
+    await onResume?.call();
   }
 
   Future<void> dispose() async {
