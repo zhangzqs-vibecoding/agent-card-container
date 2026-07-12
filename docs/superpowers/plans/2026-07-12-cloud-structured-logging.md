@@ -16,10 +16,10 @@
 - Create: `services/cloud/internal/observability/logger.go`
 - Create: `services/cloud/internal/observability/logger_test.go`
 
-- [ ] Write failing tests for JSON construction, request metadata propagation, stable error kinds, UTC timestamps, and forbidden-field absence.
-- [ ] Run targeted RED tests.
-- [ ] Implement injected `slog.Logger`, request metadata context helpers, and allowlisted error classification.
-- [ ] Run GREEN tests and commit `feat: add cloud observability primitives`.
+- [x] Write failing tests for JSON construction, request metadata propagation, stable error kinds, UTC timestamps, and forbidden-field absence.
+- [x] Run targeted RED tests.
+- [x] Implement injected `slog.Logger`, request metadata context helpers, and allowlisted error classification.
+- [x] Run GREEN tests and commit `feat: add cloud observability primitives`.
 
 ### Task 2: HTTP access middleware
 
@@ -30,10 +30,10 @@
 - Modify: `services/cloud/internal/httpapi/cards.go`
 - Modify: `services/cloud/internal/httpapi/server.go`
 
-- [ ] Write failing tests for 200/401/404, duration, request ID, user ID, remote IP, query/header/body redaction, writer failure, and `http.Flusher` preservation.
-- [ ] Run targeted RED tests.
-- [ ] Implement status writer and middleware; make handlers reuse correlated request ID and publish authenticated user ID into request metadata.
-- [ ] Run HTTP API GREEN tests and commit `feat: log cloud HTTP requests`.
+- [x] Write failing tests for 200/401/404, duration, request ID, user ID, remote IP, query/header/body redaction, writer failure, and `http.Flusher` preservation.
+- [x] Run targeted RED tests.
+- [x] Implement status writer and middleware; make handlers reuse correlated request ID and publish authenticated user ID into request metadata.
+- [x] Run HTTP API GREEN tests and commit `feat: log cloud HTTP requests`.
 
 ### Task 3: Worker and service lifecycle logs
 
@@ -44,10 +44,10 @@
 - Modify: `services/cloud/cmd/agentcard/main.go`
 - Create: `services/cloud/cmd/agentcard/main_test.go`
 
-- [ ] Write failing worker tests for job/model/sandbox/publish success and failure event sequences with safe fields only.
-- [ ] Run targeted RED tests.
-- [ ] Inject logger into worker and emit stage events around existing boundaries; emit structured startup/shutdown/worker-loop events in main.
-- [ ] Run GREEN tests and commit `feat: log cloud generation lifecycle`.
+- [x] Write failing worker tests for job/model/sandbox/publish success and failure event sequences with safe fields only.
+- [x] Run targeted RED tests.
+- [x] Inject logger into worker and emit stage events around existing boundaries; emit structured startup/shutdown/worker-loop events in main.
+- [x] Run GREEN tests and commit `feat: log cloud generation lifecycle`.
 
 ### Task 4: Full verification and deployment
 
@@ -55,9 +55,9 @@
 - Modify: `README.md`
 - Modify: `docs/verification/m4-acceptance.md`
 
-- [ ] Document journald queries and stable event names.
-- [ ] Run `gofmt`, `go vet ./...`, `go test ./... -race`, security gate, secret scan, and `git diff --check`.
-- [ ] Build a static Linux binary and verify its hash.
-- [ ] Upload atomically, restart systemd, and verify service health.
-- [ ] Send health, valid-auth, invalid-auth, and generation requests; assert expected JSON events/statuses in journald and absence of credentials/content.
+- [x] Document journald queries and stable event names.
+- [x] Run `gofmt`, `go vet ./...`, `go test ./... -race`, security gate, secret scan, and `git diff --check`.
+- [x] Build a static Linux binary and verify its hash.
+- [x] Upload atomically, restart systemd, and verify service health.
+- [x] Send health, valid-auth, invalid-auth, and generation requests; assert expected JSON events/statuses in journald and absence of credentials/content.
 - [ ] Record redacted evidence, commit, push, observe CI, and independently recheck server status.

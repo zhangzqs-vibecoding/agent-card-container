@@ -52,6 +52,19 @@ go run ./cmd/agentcard
 和 `AGENTCARD_S3_ENDPOINT`；程序会执行 PostgreSQL migration，并使用
 S3 兼容对象存储发布签名制品。
 
+后端使用 Go `log/slog` 将一行一个 JSON 事件写入 stdout。systemd 部署可用：
+
+~~~bash
+journalctl -u agent-card-cloud.service -f -o cat
+journalctl -u agent-card-cloud.service -o cat | grep '"event":"http_request"'
+~~~
+
+稳定事件包含 `http_request`、`service_started`、`generation_job_started`、
+`model_request_started`、`sandbox_build_started`、`artifact_publish_started` 及其
+completed/failed 结果。日志只记录关联 ID、状态、耗时、runtime 和稳定错误类别，
+不记录 Authorization、Token、Cookie、query、请求/响应正文、prompt、模型输出、
+构建输出或签名材料。
+
 付费 DeepSeek 烟测默认关闭，只从环境读取凭据：
 
 ~~~bash
