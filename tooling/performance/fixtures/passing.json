@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "commit": "fixture",
+  "host": {
+    "os": "Windows 11 fixture",
+    "logicalCores": 8,
+    "memoryGiB": 16
+  },
+  "scenarios": {
+    "coldStartupMs": [2200, 2600, 2900, 3400, 4700],
+    "nativeMountMs": [120, 160, 190, 230, 280],
+    "codeMountMs": [600, 800, 900, 1100, 1400],
+    "steadyCpuPercent": [1.5, 2.0, 2.5],
+    "residentMemoryMiB": [700, 760, 820],
+    "frameTimeMs": [10, 12, 14, 15, 16]
+  }
+}
