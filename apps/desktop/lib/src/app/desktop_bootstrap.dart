@@ -43,6 +43,7 @@ class RecoveryError {
 class DesktopRuntime {
   DesktopRuntime({
     required this.database,
+    required this.appDataDirectory,
     required this.runtimeServer,
     required this.workspaceCards,
     required this.recoveryErrors,
@@ -60,6 +61,7 @@ class DesktopRuntime {
   });
 
   final LocalDatabase database;
+  final Directory appDataDirectory;
   final LocalRuntimeServer runtimeServer;
   final List<WorkspaceCard> workspaceCards;
   final List<RecoveryError> recoveryErrors;
@@ -99,6 +101,16 @@ class DesktopRuntime {
       ],
       generatedAt: (now ?? DateTime.now)(),
     );
+  }
+
+  File exportDiagnosticBundle({DateTime Function()? now}) {
+    final directory = Directory(_join(appDataDirectory.path, 'diagnostics'))
+      ..createSync(recursive: true);
+    final name = '${_randomID('diagnostic_')}.json';
+    final target = File(_join(directory.path, name));
+    final temporary = File(_join(directory.path, '.$name.tmp'));
+    temporary.writeAsStringSync(createDiagnosticBundle(now: now), flush: true);
+    return temporary.renameSync(target.path);
   }
 
   Future<void> initializePlatformSurfaces() async {
@@ -386,6 +398,7 @@ abstract final class DesktopBootstrap {
       await environmentMonitor.start();
       return DesktopRuntime(
         database: database,
+        appDataDirectory: root,
         runtimeServer: runtimeServer,
         workspaceCards: List.unmodifiable(cards),
         recoveryErrors: List.unmodifiable(errors),

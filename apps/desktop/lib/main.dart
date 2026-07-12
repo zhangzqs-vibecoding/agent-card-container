@@ -56,6 +56,8 @@ Future<void> main() async {
             placement: placement,
           ),
       permissionRequests: desktopRuntime.permissionRequests,
+      onExportDiagnostics: () async =>
+          desktopRuntime.exportDiagnosticBundle().path,
     ),
   );
 }

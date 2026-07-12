@@ -46,6 +46,34 @@ void main() {
     expect(find.text('AGENT STUDIO'), findsOneWidget);
   });
 
+  testWidgets('exports a redacted diagnostic bundle from settings', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    var exports = 0;
+    await tester.pumpWidget(
+      AgentCardApp(
+        onExportDiagnostics: () async {
+          exports++;
+          return '/safe/diagnostics/diagnostic.json';
+        },
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pump();
+    expect(find.text('诊断与支持'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('export-diagnostics')));
+    await tester.pumpAndSettle();
+
+    expect(exports, 1);
+    expect(
+      find.textContaining('/safe/diagnostics/diagnostic.json'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('matches the desktop workspace visual baseline', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -20,6 +20,7 @@ class AgentCardApp extends StatelessWidget {
     this.onDetachCard,
     this.onMoveCardToOverlay,
     this.permissionRequests,
+    this.onExportDiagnostics,
   });
 
   final int? runtimePort;
@@ -31,6 +32,7 @@ class AgentCardApp extends StatelessWidget {
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
   final PermissionRequestController? permissionRequests;
+  final Future<String> Function()? onExportDiagnostics;
 
   @override
   Widget build(BuildContext context) {
@@ -57,6 +59,7 @@ class AgentCardApp extends StatelessWidget {
       onNativeCardStateChanged: onNativeCardStateChanged,
       onDetachCard: onDetachCard,
       onMoveCardToOverlay: onMoveCardToOverlay,
+      onExportDiagnostics: onExportDiagnostics,
     );
     final permissions = permissionRequests;
     return permissions == null

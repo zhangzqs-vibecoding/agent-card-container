@@ -82,6 +82,12 @@ void main() {
       expect(diagnosticRuntime['installedCardCount'], 1);
       expect(diagnosticRuntime['activeSurfaceCount'], 1);
       expect(diagnostics, isNot(contains('cardState')));
+      final diagnosticFile = runtime.exportDiagnosticBundle(
+        now: () => DateTime.utc(2026, 7, 12, 14, 30),
+      );
+      expect(diagnosticFile.existsSync(), isTrue);
+      expect(diagnosticFile.path, contains('diagnostics'));
+      expect(diagnosticFile.readAsStringSync(), contains('schemaVersion'));
     },
   );
 

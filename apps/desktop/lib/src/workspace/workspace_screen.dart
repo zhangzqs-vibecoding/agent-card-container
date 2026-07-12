@@ -32,6 +32,7 @@ class WorkspaceScreen extends StatefulWidget {
     this.onDetachCard,
     this.onMoveCardToOverlay,
     this.runtimeVisible = true,
+    this.onExportDiagnostics,
   });
 
   final int? runtimePort;
@@ -43,6 +44,7 @@ class WorkspaceScreen extends StatefulWidget {
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
   final bool runtimeVisible;
+  final Future<String> Function()? onExportDiagnostics;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -123,6 +125,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     }
     if (_selectedDestination == 2) {
       return _VersionHistory(controller: widget.cardCatalogController);
+    }
+    if (_selectedDestination == 3) {
+      return _SettingsPage(onExportDiagnostics: widget.onExportDiagnostics);
     }
     return AnimatedBuilder(
       animation: widget.workspaceController ?? _NoopListenable.instance,
@@ -542,11 +547,85 @@ class _NavigationStrip extends StatelessWidget {
           _NavItem(
             icon: Icons.settings_outlined,
             label: '设置',
-            selected: false,
-            onTap: () {},
+            selected: selectedIndex == 3,
+            onTap: () => onSelected(3),
           ),
           const SizedBox(height: 14),
         ],
+      ),
+    );
+  }
+}
+
+class _SettingsPage extends StatefulWidget {
+  const _SettingsPage({required this.onExportDiagnostics});
+
+  final Future<String> Function()? onExportDiagnostics;
+
+  @override
+  State<_SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<_SettingsPage> {
+  bool _exporting = false;
+  String? _result;
+
+  Future<void> _export() async {
+    final export = widget.onExportDiagnostics;
+    if (export == null || _exporting) return;
+    setState(() {
+      _exporting = true;
+      _result = null;
+    });
+    try {
+      final path = await export();
+      if (mounted) setState(() => _result = '已导出至 $path');
+    } catch (_) {
+      if (mounted) setState(() => _result = '导出失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(32),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('诊断与支持', style: Theme.of(context).textTheme.headlineMedium),
+              const SizedBox(height: 12),
+              Text(
+                '导出本地运行时状态。诊断包不包含密钥、令牌或卡片内容。',
+                style: TextStyle(color: colors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                key: const Key('export-diagnostics'),
+                onPressed: widget.onExportDiagnostics == null || _exporting
+                    ? null
+                    : _export,
+                icon: _exporting
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.file_download_outlined),
+                label: Text(_exporting ? '正在导出' : '导出诊断包'),
+              ),
+              if (_result case final result?) ...[
+                const SizedBox(height: 16),
+                SelectableText(result),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
