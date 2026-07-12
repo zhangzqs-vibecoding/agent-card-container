@@ -16,6 +16,8 @@ void main() {
   late SurfaceCoordinator coordinator;
   late List<CardInstance> moved;
   late int displayModeRequests;
+  late List<({String instanceId, String method, Map<String, Object?> params})>
+  capabilityInvocations;
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('surface-coordinator-');
@@ -49,6 +51,7 @@ void main() {
     backend = _FakeWindowBackend();
     moved = [];
     displayModeRequests = 0;
+    capabilityInvocations = [];
     coordinator = SurfaceCoordinator(
       database: database,
       windows: backend,
@@ -57,9 +60,38 @@ void main() {
       onOverlayDisplayRequested: () async {
         displayModeRequests++;
       },
+      onCapabilityInvocation: (instanceId, method, params) async {
+        capabilityInvocations.add((
+          instanceId: instanceId,
+          method: method,
+          params: params,
+        ));
+        return {'opened': true};
+      },
       now: () => DateTime.utc(2026, 7, 12, 10),
     );
   });
+
+  test(
+    'forwards child capability invocation to the authoritative host',
+    () async {
+      final result = await coordinator.handleBridgeMessage(
+        SurfaceBridgeMessage.fromJson({
+          'type': 'invokeCapability',
+          'windowId': 'window-1',
+          'instanceId': 'instance-1',
+          'payload': {
+            'method': 'host.openExternal',
+            'params': {'url': 'https://example.com/help'},
+          },
+        }),
+      );
+
+      expect(result, {'opened': true});
+      expect(capabilityInvocations.single.method, 'host.openExternal');
+      expect(capabilityInvocations.single.instanceId, 'instance-1');
+    },
+  );
 
   tearDown(() {
     database.close();

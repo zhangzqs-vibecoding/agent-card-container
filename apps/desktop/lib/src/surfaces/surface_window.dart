@@ -291,11 +291,18 @@ class SurfaceWindowApp extends StatelessWidget {
   const SurfaceWindowApp({
     required this.model,
     this.onEnterOverlayDisplayMode,
+    this.onCapabilityInvocation,
     super.key,
   });
 
   final SurfaceWindowModel model;
   final Future<void> Function()? onEnterOverlayDisplayMode;
+  final Future<Object?> Function(
+    String instanceId,
+    String method,
+    Map<String, Object?> params,
+  )?
+  onCapabilityInvocation;
 
   @override
   Widget build(BuildContext context) {
@@ -328,7 +335,12 @@ class SurfaceWindowApp extends StatelessWidget {
                     SizedBox(
                       width: 420,
                       height: 280,
-                      child: Card(child: _SurfaceCardView(snapshot: card)),
+                      child: Card(
+                        child: _SurfaceCardView(
+                          snapshot: card,
+                          capabilityInvocation: onCapabilityInvocation,
+                        ),
+                      ),
                     ),
                   if (model.cards.isEmpty)
                     for (final instanceId in model.instanceIds)
@@ -349,9 +361,15 @@ class SurfaceWindowApp extends StatelessWidget {
 }
 
 class _SurfaceCardView extends StatefulWidget {
-  const _SurfaceCardView({required this.snapshot});
+  const _SurfaceCardView({required this.snapshot, this.capabilityInvocation});
 
   final SurfaceCardSnapshot snapshot;
+  final Future<Object?> Function(
+    String instanceId,
+    String method,
+    Map<String, Object?> params,
+  )?
+  capabilityInvocation;
 
   @override
   State<_SurfaceCardView> createState() => _SurfaceCardViewState();
@@ -368,10 +386,16 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
     super.initState();
     final snapshot = widget.snapshot;
     if (snapshot.nativeSpec case final spec?) {
-      _controller = NativeCardController({
-        ...spec.initialState,
-        ...snapshot.state,
-      });
+      _controller = NativeCardController(
+        {...spec.initialState, ...snapshot.state},
+        capabilityInvocation: widget.capabilityInvocation == null
+            ? null
+            : (method, params) => widget.capabilityInvocation!(
+                snapshot.instanceId,
+                method,
+                params,
+              ),
+      );
     } else {
       final port = InAppWebViewPort();
       _webView = port;

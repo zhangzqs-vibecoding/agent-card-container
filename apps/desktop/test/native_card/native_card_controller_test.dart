@@ -170,5 +170,43 @@ void main() {
         'message': 'capability requires a grant',
       });
     });
+
+    test(
+      'marks button-triggered capability actions as a user gesture',
+      () async {
+        CardContext? invokedContext;
+        final broker = CapabilityBroker(
+          requestGrant: (context, capability, params) async => PermissionGrant(
+            instanceId: context.instanceId,
+            versionId: context.versionId,
+            capability: capability,
+          ),
+        );
+        broker.register('clipboard.read', (context, params) async {
+          invokedContext = context;
+          return {'text': 'value'};
+        });
+        final controller = NativeCardController(
+          const {},
+          capabilityBroker: broker,
+          cardContext: CardContext(
+            instanceId: 'instance-1',
+            cardId: 'card-1',
+            versionId: 'version-1',
+            declaredCapabilities: const {'clipboard.read'},
+          ),
+        );
+        addTearDown(controller.dispose);
+
+        await controller.applyActionsAsync([
+          const NativeAction(
+            type: NativeActionType.capabilityInvoke,
+            method: 'clipboard.read',
+          ),
+        ]);
+
+        expect(invokedContext?.userGesture, isTrue);
+      },
+    );
   });
 }

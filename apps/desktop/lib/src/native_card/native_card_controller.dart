@@ -7,6 +7,9 @@ import '../capabilities/capability_broker.dart';
 import 'expression.dart';
 import 'native_card_spec.dart';
 
+typedef NativeCapabilityInvocation =
+    Future<Object?> Function(String method, Map<String, Object?> params);
+
 class NativeCardActionException implements Exception {
   const NativeCardActionException(this.message);
 
@@ -22,15 +25,18 @@ class NativeCardController extends ChangeNotifier {
     NativeExpressionEvaluator evaluator = const NativeExpressionEvaluator(),
     CapabilityBroker? capabilityBroker,
     CardContext? cardContext,
+    NativeCapabilityInvocation? capabilityInvocation,
   }) : _state = _cloneMap(initialState),
        _evaluator = evaluator,
        _capabilityBroker = capabilityBroker,
-       _cardContext = cardContext;
+       _cardContext = cardContext,
+       _capabilityInvocation = capabilityInvocation;
 
   final Map<String, Object?> _state;
   final NativeExpressionEvaluator _evaluator;
   final CapabilityBroker? _capabilityBroker;
   final CardContext? _cardContext;
+  final NativeCapabilityInvocation? _capabilityInvocation;
   final Map<String, Timer> _timers = {};
 
   Map<String, Object?> get state => Map.unmodifiable(_cloneMap(_state));
@@ -103,7 +109,9 @@ class NativeCardController extends ChangeNotifier {
     final broker = _capabilityBroker;
     final context = _cardContext;
     final method = action.method;
-    if (broker == null || context == null || method == null) {
+    final invocation = _capabilityInvocation;
+    if ((invocation == null && (broker == null || context == null)) ||
+        method == null) {
       _setCapabilityError(
         CapabilityErrorCode.capabilityUnavailable,
         'capability broker is not attached',
@@ -112,7 +120,13 @@ class NativeCardController extends ChangeNotifier {
     }
 
     try {
-      final result = await broker.invoke(context, method, action.params);
+      final result = invocation != null
+          ? await invocation(method, action.params)
+          : await broker!.invoke(
+              context!.withUserGesture(true),
+              method,
+              action.params,
+            );
       _state.remove('_capabilityError');
       if (action.path case final String path when path.isNotEmpty) {
         _write(path, result);
@@ -121,6 +135,11 @@ class NativeCardController extends ChangeNotifier {
       }
     } on CapabilityException catch (error) {
       _setCapabilityError(error.code, error.message);
+    } catch (_) {
+      _setCapabilityError(
+        CapabilityErrorCode.capabilityUnavailable,
+        'capability bridge is unavailable',
+      );
     }
   }
 

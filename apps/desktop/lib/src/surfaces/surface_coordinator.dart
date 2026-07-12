@@ -3,6 +3,13 @@ import '../storage/local_database.dart';
 import 'surface.dart';
 import 'surface_bridge.dart';
 
+typedef SurfaceCapabilityInvocation =
+    Future<Object?> Function(
+      String instanceId,
+      String method,
+      Map<String, Object?> params,
+    );
+
 abstract interface class WindowBackend {
   Future<void> ensureSurface(CardSurface surface, List<String> instanceIds);
 
@@ -18,6 +25,7 @@ class SurfaceCoordinator {
     required this.newDetachedSurfaceId,
     this.onInstanceMoved,
     this.onOverlayDisplayRequested,
+    this.onCapabilityInvocation,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now;
 
@@ -26,10 +34,31 @@ class SurfaceCoordinator {
   final String Function() newDetachedSurfaceId;
   final void Function(CardInstance instance)? onInstanceMoved;
   final Future<void> Function()? onOverlayDisplayRequested;
+  final SurfaceCapabilityInvocation? onCapabilityInvocation;
   final DateTime Function() now;
 
   Future<Object?> handleBridgeMessage(SurfaceBridgeMessage message) async {
     final instance = _requireInstance(message.instanceId);
+    if (message.type == SurfaceBridgeMessageType.invokeCapability) {
+      final invocation = onCapabilityInvocation;
+      if (invocation == null) {
+        throw StateError('surface capability invocation is unavailable');
+      }
+      if (message.payload.keys.toSet().difference(const {
+            'method',
+            'params',
+          }).isNotEmpty ||
+          message.payload['method'] is! String ||
+          (message.payload['method']! as String).isEmpty ||
+          message.payload['params'] is! Map<String, Object?>) {
+        throw const FormatException('invalid invokeCapability payload');
+      }
+      return invocation(
+        instance.instanceId,
+        message.payload['method']! as String,
+        message.payload['params']! as Map<String, Object?>,
+      );
+    }
     if (message.type == SurfaceBridgeMessageType.placementChanged) {
       final placement = _placement(message.payload);
       database.updateSurfaceWindowState(

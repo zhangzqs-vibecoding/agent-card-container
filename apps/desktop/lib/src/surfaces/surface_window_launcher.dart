@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../capabilities/capability.dart';
 import 'surface_window.dart';
 import 'surface_bridge.dart';
 
@@ -73,6 +74,35 @@ abstract final class SurfaceWindowLauncher {
     runApp(
       SurfaceWindowApp(
         model: model,
+        onCapabilityInvocation: (instanceId, method, params) async {
+          final owner = WindowController.fromWindowId(arguments.ownerWindowId);
+          final response = await owner.invokeMethod<Object?>(
+            'surface.bridge',
+            SurfaceBridgeMessage(
+              type: SurfaceBridgeMessageType.invokeCapability,
+              windowId: controller.windowId,
+              instanceId: instanceId,
+              payload: {'method': method, 'params': params},
+            ).toJson(),
+          );
+          if (response is Map && response['ok'] == true) {
+            return response['result'];
+          }
+          if (response is Map &&
+              response['errorCode'] is String &&
+              response['message'] is String) {
+            final code = CapabilityErrorCode.values
+                .where((candidate) => candidate.name == response['errorCode'])
+                .firstOrNull;
+            if (code != null) {
+              throw CapabilityException(code, response['message']! as String);
+            }
+          }
+          throw const CapabilityException(
+            CapabilityErrorCode.capabilityUnavailable,
+            'invalid capability bridge response',
+          );
+        },
         onEnterOverlayDisplayMode: arguments.surfaceType == 'overlay'
             ? () async {
                 final owner = WindowController.fromWindowId(

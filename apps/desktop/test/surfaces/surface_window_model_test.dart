@@ -150,6 +150,63 @@ void main() {
     expect(find.textContaining('正在挂载'), findsNothing);
   });
 
+  testWidgets('routes child NativeCard capabilities through the owner', (
+    tester,
+  ) async {
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'detached-1',
+        'surfaceType': 'detached',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': false,
+        'instanceIds': ['instance-1'],
+        'cards': [
+          {
+            'instanceId': 'instance-1',
+            'runtime': 'native',
+            'spec': {
+              'schemaVersion': 1,
+              'initialState': {'result': 'pending'},
+              'root': {
+                'id': 'button',
+                'type': 'Button',
+                'props': {'label': '调用能力'},
+                'events': {
+                  'onPressed': [
+                    {
+                      'type': 'capability.invoke',
+                      'method': 'system.metrics.get',
+                      'path': 'result',
+                    },
+                  ],
+                },
+              },
+            },
+            'state': const <String, Object?>{},
+          },
+        ],
+      }),
+    )!;
+    final model = SurfaceWindowModel(arguments);
+    addTearDown(model.dispose);
+    final invocations = <String>[];
+
+    await tester.pumpWidget(
+      SurfaceWindowApp(
+        model: model,
+        onCapabilityInvocation: (instanceId, method, params) async {
+          invocations.add('$instanceId:$method');
+          return {'cpuCount': 8};
+        },
+      ),
+    );
+    await tester.tap(find.text('调用能力'));
+    await tester.pump();
+
+    expect(invocations, ['instance-1:system.metrics.get']);
+  });
+
   testWidgets('fails closed when child-engine CodeCard isolation is absent', (
     tester,
   ) async {

@@ -226,6 +226,36 @@ abstract final class DesktopBootstrap {
           );
         },
         onOverlayDisplayRequested: overlayModeController.enterDisplayMode,
+        onCapabilityInvocation: (instanceId, method, params) async {
+          final card = workspaceController.cards.singleWhere(
+            (candidate) => candidate.instance.instanceId == instanceId,
+          );
+          final broker = card.capabilityBroker;
+          final context = card.cardContext;
+          if (broker == null || context == null) {
+            return const {
+              'ok': false,
+              'errorCode': 'capabilityUnavailable',
+              'message': 'capability broker is not attached',
+            };
+          }
+          try {
+            return {
+              'ok': true,
+              'result': await broker.invoke(
+                context.withUserGesture(true),
+                method,
+                params,
+              ),
+            };
+          } on CapabilityException catch (error) {
+            return {
+              'ok': false,
+              'errorCode': error.code.name,
+              'message': error.message,
+            };
+          }
+        },
       );
       final displayMonitor = ScreenRetrieverDisplayMonitor(surfaceCoordinator);
       final cloud = _cloudConfiguration(
