@@ -55,9 +55,10 @@ func NewHTTPProvider(config HTTPConfig) (*HTTPProvider, error) {
 
 func NewHTTPProviderFromEnvironment(environment map[string]string) (*HTTPProvider, error) {
 	return NewHTTPProvider(HTTPConfig{
-		BaseURL: environment["AGENTCARD_MODEL_BASE_URL"],
-		APIKey:  environment["AGENTCARD_MODEL_API_KEY"],
-		Model:   environment["AGENTCARD_MODEL"],
+		BaseURL:       environment["AGENTCARD_MODEL_BASE_URL"],
+		APIKey:        environment["AGENTCARD_MODEL_API_KEY"],
+		Model:         environment["AGENTCARD_MODEL"],
+		AllowInsecure: environment["AGENTCARD_MODEL_ALLOW_INSECURE"] == "true",
 	})
 }
 

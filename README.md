@@ -19,3 +19,23 @@ docs               设计与实施计划
 
 顶层设计见 docs/superpowers/specs/2026-07-12-agent-card-container-design.md。
 
+## 本地云端运行
+
+Go 服务可以在本地以 API 和 worker 一体模式做端到端验证。环境变量名见
+services/cloud/.env.example；真实密钥只通过进程环境提供，不得提交填充后的文件。
+
+~~~bash
+cd services/cloud
+go run ./cmd/agentcard
+~~~
+
+默认 all 模式使用内存 repository。生产拆分 api/worker 部署仍需要 M3 计划中的
+PostgreSQL 与 S3 adapter。
+
+付费 DeepSeek 烟测默认关闭，只从环境读取凭据：
+
+~~~bash
+cd services/cloud
+AGENTCARD_DEEPSEEK_LIVE=1 go test ./internal/modelprovider \
+  -run TestDeepSeekLiveGeneratesValidNativeCard -v
+~~~

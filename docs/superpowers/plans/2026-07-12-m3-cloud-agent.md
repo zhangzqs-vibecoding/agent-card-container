@@ -14,9 +14,9 @@
 
 ### Task 2：Repository、任务租约与 API/SSE
 
-- [ ] 定义事务 repository；提供确定性的内存实现和 PostgreSQL schema/查询。
-- [ ] 实现 SKIP LOCKED 领取、租约超时重排、幂等发布和取消。
-- [ ] 实现设计中的全部 REST 端点、统一错误、OIDC Bearer 鉴权边界。
+- [ ] 已提供确定性的事务内存实现、PostgreSQL schema 和 SKIP LOCKED 查询；database/sql repository 与 pgx driver 待网络恢复后接入。
+- [x] 实现 SKIP LOCKED 领取语义、租约超时重排、幂等发布和取消，并通过并发 race 测试。
+- [x] 实现设计中的全部 REST 端点、统一错误、OIDC RS256/JWKS Bearer 鉴权边界。
 - [ ] SSE 支持 Last-Event-ID 重连，断线不取消任务。
 
 ### Task 3：Native-first Agent 与验证器
