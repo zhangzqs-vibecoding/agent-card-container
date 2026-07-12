@@ -19,3 +19,4 @@ CGO_ENABLED=1 go test ./... -race
 
 cd "$ROOT/tooling/codecard-template"
 pnpm run verify
+pnpm audit --audit-level high
