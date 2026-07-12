@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/modelprovider"
+	"github.com/zzq/agent-card-container/services/cloud/internal/observability"
 )
 
 type Request struct {
@@ -31,6 +34,7 @@ type CodingAgent struct {
 	validator  NativeValidator
 	selector   Selector
 	webBuilder WebBuilder
+	logger     *slog.Logger
 }
 
 type WebBuilder interface {
@@ -45,12 +49,22 @@ func WithWebBuilder(builder WebBuilder) Option {
 	}
 }
 
+func WithLogger(logger *slog.Logger) Option {
+	return func(codingAgent *CodingAgent) {
+		codingAgent.logger = logger
+	}
+}
+
 func NewCodingAgent(
 	provider modelprovider.Provider,
 	validator NativeValidator,
 	options ...Option,
 ) *CodingAgent {
-	codingAgent := &CodingAgent{provider: provider, validator: validator}
+	codingAgent := &CodingAgent{
+		provider:  provider,
+		validator: validator,
+		logger:    slog.New(slog.NewJSONHandler(io.Discard, nil)),
+	}
 	for _, option := range options {
 		option(codingAgent)
 	}
@@ -67,6 +81,12 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 	}
 	var validationError string
 	for attempt := 1; attempt <= 3; attempt++ {
+		startedAt := time.Now()
+		codingAgent.logger.InfoContext(ctx, "model_request_started",
+			"sessionId", request.SessionID,
+			"runtime", decision.Runtime,
+			"attempt", attempt,
+		)
 		response, providerErr := codingAgent.provider.Generate(ctx, modelprovider.Request{
 			SessionID:       request.SessionID,
 			Prompt:          request.Prompt,
@@ -76,8 +96,21 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 			ValidationError: validationError,
 		})
 		if providerErr != nil {
+			codingAgent.logger.WarnContext(ctx, "model_request_failed",
+				"sessionId", request.SessionID,
+				"runtime", decision.Runtime,
+				"attempt", attempt,
+				"durationMs", time.Since(startedAt).Milliseconds(),
+				"errorKind", observability.ErrorKind(providerErr),
+			)
 			return Result{}, fmt.Errorf("model provider: %w", providerErr)
 		}
+		codingAgent.logger.InfoContext(ctx, "model_request_completed",
+			"sessionId", request.SessionID,
+			"runtime", decision.Runtime,
+			"attempt", attempt,
+			"durationMs", time.Since(startedAt).Milliseconds(),
+		)
 		if validateErr := codingAgent.validator.Validate(response.Content); validateErr == nil {
 			return Result{
 				Runtime:  decision.Runtime,
@@ -102,6 +135,12 @@ func (codingAgent *CodingAgent) generateWeb(
 	}
 	var validationError string
 	for attempt := 1; attempt <= 3; attempt++ {
+		modelStartedAt := time.Now()
+		codingAgent.logger.InfoContext(ctx, "model_request_started",
+			"sessionId", request.SessionID,
+			"runtime", decision.Runtime,
+			"attempt", attempt,
+		)
 		response, err := codingAgent.provider.Generate(ctx, modelprovider.Request{
 			SessionID:       request.SessionID,
 			Prompt:          request.Prompt,
@@ -111,18 +150,47 @@ func (codingAgent *CodingAgent) generateWeb(
 			ValidationError: validationError,
 		})
 		if err != nil {
+			codingAgent.logger.WarnContext(ctx, "model_request_failed",
+				"sessionId", request.SessionID,
+				"runtime", decision.Runtime,
+				"attempt", attempt,
+				"durationMs", time.Since(modelStartedAt).Milliseconds(),
+				"errorKind", observability.ErrorKind(err),
+			)
 			return Result{}, fmt.Errorf("model provider: %w", err)
 		}
+		codingAgent.logger.InfoContext(ctx, "model_request_completed",
+			"sessionId", request.SessionID,
+			"runtime", decision.Runtime,
+			"attempt", attempt,
+			"durationMs", time.Since(modelStartedAt).Milliseconds(),
+		)
 		files, err := decodeWebSource(response.Content)
 		if err != nil {
 			validationError = err.Error()
 			continue
 		}
+		buildStartedAt := time.Now()
+		codingAgent.logger.InfoContext(ctx, "sandbox_build_started",
+			"sessionId", request.SessionID,
+			"attempt", attempt,
+		)
 		output, err := codingAgent.webBuilder.Build(ctx, files)
 		if err != nil {
+			codingAgent.logger.WarnContext(ctx, "sandbox_build_failed",
+				"sessionId", request.SessionID,
+				"attempt", attempt,
+				"durationMs", time.Since(buildStartedAt).Milliseconds(),
+				"errorKind", observability.ErrorKind(err),
+			)
 			validationError = err.Error()
 			continue
 		}
+		codingAgent.logger.InfoContext(ctx, "sandbox_build_completed",
+			"sessionId", request.SessionID,
+			"attempt", attempt,
+			"durationMs", time.Since(buildStartedAt).Milliseconds(),
+		)
 		if len(output) == 0 {
 			validationError = "sandbox produced no files"
 			continue

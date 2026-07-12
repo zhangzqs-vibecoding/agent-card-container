@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -33,6 +35,16 @@ type Runtime struct {
 }
 
 func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
+	return NewFromEnvironmentWithLogger(
+		environment,
+		slog.New(slog.NewJSONHandler(io.Discard, nil)),
+	)
+}
+
+func NewFromEnvironmentWithLogger(environment map[string]string, logger *slog.Logger) (*Runtime, error) {
+	if logger == nil {
+		logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+	}
 	authenticator, err := buildAuthenticator(environment)
 	if err != nil {
 		return nil, err
@@ -90,7 +102,7 @@ func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
 	codingAgent := agent.NewCodingAgent(
 		provider,
 		agent.NewNativeValidator(),
-		agentOptions...,
+		append(agentOptions, agent.WithLogger(logger))...,
 	)
 	workerRuntime := worker.New(worker.Config{
 		WorkerID:     randomID("worker_"),
@@ -101,6 +113,7 @@ func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
 		NewCardID:    func() string { return randomID("card_") },
 		NewVersionID: func() string { return randomID("ver_") },
 		Now:          time.Now,
+		Logger:       logger,
 	})
 	handler := httpapi.NewCloudHandler(httpapi.CloudHandlerConfig{
 		ServiceName:   "agent-card-cloud",
@@ -108,6 +121,8 @@ func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
 		Publisher:     publisher,
 		Authenticator: authenticator,
 		NewRequestID:  func() string { return randomID("req_") },
+		Logger:        logger,
+		Now:           time.Now,
 	})
 	composed = true
 	return &Runtime{

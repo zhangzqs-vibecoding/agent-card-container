@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/zzq/agent-card-container/services/cloud/internal/contracts"
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/jobs"
+	"github.com/zzq/agent-card-container/services/cloud/internal/observability"
 	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 )
 
@@ -23,6 +27,7 @@ type Config struct {
 	NewCardID    func() string
 	NewVersionID func() string
 	Now          func() time.Time
+	Logger       *slog.Logger
 }
 
 type Worker struct {
@@ -36,6 +41,9 @@ type Outcome struct {
 }
 
 func New(config Config) *Worker {
+	if config.Logger == nil {
+		config.Logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
+	}
 	return &Worker{config: config}
 }
 
@@ -45,6 +53,12 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, err
 	}
+	jobStartedAt := time.Now()
+	worker.config.Logger.InfoContext(ctx, "generation_job_started",
+		"jobId", job.ID,
+		"sessionId", job.SessionID,
+		"attempt", job.Attempts,
+	)
 	session, err := worker.config.Generations.StartGenerating(ctx, job.SessionID)
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
@@ -106,6 +120,14 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 		NetworkPolicy:      contracts.NetworkPolicy{Mode: "none", Domains: []string{}},
 		CreatedAt:          now,
 	}
+	publishStartedAt := time.Now()
+	worker.config.Logger.InfoContext(ctx, "artifact_publish_started",
+		"jobId", job.ID,
+		"sessionId", session.ID,
+		"cardId", cardID,
+		"versionId", versionID,
+		"runtime", result.Runtime,
+	)
 	version, err := worker.config.Publisher.Publish(ctx, publish.Input{
 		UserID:     session.UserID,
 		Definition: definition,
@@ -118,14 +140,44 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 		CreatedAt: now,
 	})
 	if err != nil {
+		worker.config.Logger.WarnContext(ctx, "artifact_publish_failed",
+			"jobId", job.ID,
+			"sessionId", session.ID,
+			"cardId", cardID,
+			"versionId", versionID,
+			"runtime", result.Runtime,
+			"durationMs", time.Since(publishStartedAt).Milliseconds(),
+			"errorKind", observability.ErrorKind(err),
+		)
 		return Outcome{}, worker.fail(ctx, job, "ARTIFACT_PUBLISH_FAILED", err)
 	}
+	worker.config.Logger.InfoContext(ctx, "artifact_publish_completed",
+		"jobId", job.ID,
+		"sessionId", session.ID,
+		"cardId", cardID,
+		"versionId", version.VersionID,
+		"runtime", result.Runtime,
+		"durationMs", time.Since(publishStartedAt).Milliseconds(),
+	)
 	if _, err := worker.config.Generations.MarkReady(ctx, session.ID, version.VersionID); err != nil {
 		return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
 	}
 	if err := worker.config.Jobs.Complete(ctx, job.ID, worker.config.WorkerID, worker.config.Now()); err != nil {
+		worker.config.Logger.WarnContext(ctx, "generation_job_failed",
+			"jobId", job.ID,
+			"sessionId", session.ID,
+			"durationMs", time.Since(jobStartedAt).Milliseconds(),
+			"errorKind", "job_store_failed",
+		)
 		return Outcome{}, err
 	}
+	worker.config.Logger.InfoContext(ctx, "generation_job_completed",
+		"jobId", job.ID,
+		"sessionId", session.ID,
+		"versionId", version.VersionID,
+		"runtime", result.Runtime,
+		"durationMs", time.Since(jobStartedAt).Milliseconds(),
+	)
 	return Outcome{
 		JobID:     job.ID,
 		SessionID: session.ID,
@@ -136,6 +188,11 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 func (worker *Worker) fail(ctx context.Context, job *jobs.Job, code string, cause error) error {
 	_, _ = worker.config.Generations.MarkFailed(ctx, job.SessionID, code)
 	_ = worker.config.Jobs.Fail(ctx, job.ID, worker.config.WorkerID, worker.config.Now())
+	worker.config.Logger.WarnContext(ctx, "generation_job_failed",
+		"jobId", job.ID,
+		"sessionId", job.SessionID,
+		"errorKind", strings.ToLower(code),
+	)
 	return fmt.Errorf("%s: %w", code, cause)
 }
 

@@ -1,9 +1,11 @@
 package worker_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/jobs"
 	"github.com/zzq/agent-card-container/services/cloud/internal/modelprovider"
+	"github.com/zzq/agent-card-container/services/cloud/internal/observability"
 	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 	"github.com/zzq/agent-card-container/services/cloud/internal/worker"
 )
@@ -40,7 +43,9 @@ func TestWorkerPublishesValidatedNativeCardAndMarksReady(t *testing.T) {
 	provider := staticProvider{
 		content: `{"schemaVersion":1,"initialState":{"text":"完成"},"root":{"id":"root","type":"Text","props":{"text":{"path":"state.text"}}}}`,
 	}
-	codingAgent := agent.NewCodingAgent(provider, agent.NewNativeValidator())
+	var logs bytes.Buffer
+	logger := observability.NewJSONLogger(&logs)
+	codingAgent := agent.NewCodingAgent(provider, agent.NewNativeValidator(), agent.WithLogger(logger))
 	seed := sha256.Sum256([]byte("worker-signing-key"))
 	publisher := publish.NewPublisher(
 		artifact.NewBuilder("release-key", ed25519.NewKeyFromSeed(seed[:])),
@@ -56,6 +61,7 @@ func TestWorkerPublishesValidatedNativeCardAndMarksReady(t *testing.T) {
 		NewCardID:    func() string { return "card_01" },
 		NewVersionID: func() string { return "ver_01" },
 		Now:          func() time.Time { return now },
+		Logger:       logger,
 	})
 
 	outcome, err := runner.RunOnce(context.Background())
@@ -82,6 +88,14 @@ func TestWorkerPublishesValidatedNativeCardAndMarksReady(t *testing.T) {
 	if _, err := publisher.Download(context.Background(), "user_01", "card_01", "ver_01", time.Minute); err != nil {
 		t.Fatalf("published artifact unavailable: %v", err)
 	}
+	for _, event := range []string{"generation_job_started", "artifact_publish_started", "artifact_publish_completed", "generation_job_completed"} {
+		if !strings.Contains(logs.String(), `"event":"`+event+`"`) {
+			t.Fatalf("missing %s in logs: %s", event, logs.String())
+		}
+	}
+	if strings.Contains(logs.String(), "做一个离线文本卡片") || strings.Contains(logs.String(), "initialState") {
+		t.Fatalf("sensitive generation content leaked: %s", logs.String())
+	}
 }
 
 func TestWorkerFailsSessionAfterAgentValidationFailure(t *testing.T) {
@@ -101,15 +115,18 @@ func TestWorkerFailsSessionAfterAgentValidationFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	seed := sha256.Sum256([]byte("key"))
+	var logs bytes.Buffer
+	logger := observability.NewJSONLogger(&logs)
 	runner := worker.New(worker.Config{
 		WorkerID:     "worker",
 		Jobs:         jobStore,
 		Generations:  service,
-		Agent:        agent.NewCodingAgent(staticProvider{content: "{}"}, agent.NewNativeValidator()),
+		Agent:        agent.NewCodingAgent(staticProvider{content: "{}"}, agent.NewNativeValidator(), agent.WithLogger(logger)),
 		Publisher:    publish.NewPublisher(artifact.NewBuilder("key", ed25519.NewKeyFromSeed(seed[:])), publish.NewMemoryObjectStore(), publish.NewMemoryVersionRepository()),
 		NewCardID:    func() string { return "card_fail" },
 		NewVersionID: func() string { return "ver_fail" },
 		Now:          func() time.Time { return now },
+		Logger:       logger,
 	})
 
 	if _, err := runner.RunOnce(context.Background()); err == nil {
@@ -121,6 +138,13 @@ func TestWorkerFailsSessionAfterAgentValidationFailure(t *testing.T) {
 	}
 	if failed.Status != generation.StatusFailed {
 		t.Fatalf("status = %q, want failed", failed.Status)
+	}
+	if !strings.Contains(logs.String(), `"event":"generation_job_failed"`) ||
+		!strings.Contains(logs.String(), `"errorKind":"validation_failed"`) {
+		t.Fatalf("missing safe failure event: %s", logs.String())
+	}
+	if strings.Contains(logs.String(), "VALIDATION_FAILED:") {
+		t.Fatalf("raw error leaked: %s", logs.String())
 	}
 }
 
