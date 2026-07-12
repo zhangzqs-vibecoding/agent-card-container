@@ -19,6 +19,23 @@ docs               设计与实施计划
 
 顶层设计见 docs/superpowers/specs/2026-07-12-agent-card-container-design.md。
 
+## 快速验证
+
+项目已按 M0–M4 拆分实现。自动化与实机证据分开记录：
+
+- `docs/verification/m3-production-integration.md`：PostgreSQL、S3 和 Docker
+  sandbox 的真实 adapter 集成证据。
+- `docs/verification/m4-acceptance.md`：当前总验收状态及未执行的
+  Windows/macOS 设备门禁。
+- `docs/verification/linux-m4-evidence.json`：Linux 普通窗口构建的
+  机器可读证据。
+
+~~~bash
+cd apps/desktop && flutter analyze && flutter test
+cd ../../services/cloud && go vet ./... && CGO_ENABLED=1 go test ./... -race
+cd ../.. && sh tooling/security/run-security-gate.sh
+~~~
+
 ## 本地云端运行
 
 Go 服务可以在本地以 API 和 worker 一体模式做端到端验证。环境变量名见
@@ -29,8 +46,11 @@ cd services/cloud
 go run ./cmd/agentcard
 ~~~
 
-默认 all 模式使用内存 repository。生产拆分 api/worker 部署仍需要 M3 计划中的
-PostgreSQL 与 S3 adapter。
+服务启动必须提供模型、认证和 Ed25519 签名配置。默认 `all`
+模式在未配置持久化时使用内存 repository，仅用于单进程本地开发。
+生产 `api`/`worker` 拆分部署必须同时配置 `AGENTCARD_DATABASE_URL`
+和 `AGENTCARD_S3_ENDPOINT`；程序会执行 PostgreSQL migration，并使用
+S3 兼容对象存储发布签名制品。
 
 付费 DeepSeek 烟测默认关闭，只从环境读取凭据：
 
@@ -39,3 +59,12 @@ cd services/cloud
 AGENTCARD_DEEPSEEK_LIVE=1 go test ./internal/modelprovider \
   -run TestDeepSeekLiveGeneratesValidNativeCard -v
 ~~~
+
+该命令还需通过进程环境安全注入 `AGENTCARD_MODEL_API_KEY`、
+`AGENTCARD_MODEL` 和 `AGENTCARD_MODEL_BASE_URL`。不要把真实凭据写入
+`.env`、shell history 或 Git。
+
+## 桌面端运行
+
+详细的平台依赖、云端连接环境变量和离线行为见
+`apps/desktop/README.md`。客户端不保存模型 API key；它只连接 Go 云端。
