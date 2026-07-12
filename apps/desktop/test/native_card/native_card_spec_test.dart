@@ -59,6 +59,19 @@ void main() {
         throwsA(isA<FormatException>()),
       );
     });
+
+    test('round trips a trusted card for cross-engine surface snapshots', () {
+      final original = NativeCardSpec.fromJson(
+        jsonDecode(_fixture()) as Map<String, Object?>,
+      );
+
+      final restored = NativeCardSpec.fromJson(original.toJson());
+
+      expect(restored.schemaVersion, original.schemaVersion);
+      expect(restored.nodeCount, original.nodeCount);
+      expect(restored.initialState, original.initialState);
+      expect(restored.root.toJson(), original.root.toJson());
+    });
   });
 }
 

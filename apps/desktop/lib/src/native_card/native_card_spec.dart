@@ -81,6 +81,16 @@ class NativeAction {
   final Object? value;
   final String? method;
   final Map<String, Object?> params;
+
+  Map<String, Object?> toJson() {
+    return {
+      'type': _actionWireName(type),
+      if (path != null) 'path': path,
+      if (_actionCarriesValue(type)) 'value': value,
+      if (method != null) 'method': method,
+      if (params.isNotEmpty) 'params': params,
+    };
+  }
 }
 
 class NativeNode {
@@ -97,6 +107,21 @@ class NativeNode {
   final Map<String, Object?> props;
   final Map<String, List<NativeAction>> events;
   final List<NativeNode> children;
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'type': _componentWireName(type),
+      if (props.isNotEmpty) 'props': props,
+      if (events.isNotEmpty)
+        'events': events.map(
+          (name, actions) =>
+              MapEntry(name, actions.map((action) => action.toJson()).toList()),
+        ),
+      if (children.isNotEmpty)
+        'children': children.map((child) => child.toJson()).toList(),
+    };
+  }
 }
 
 class NativeCardSpec {
@@ -138,6 +163,14 @@ class NativeCardSpec {
   final Map<String, Object?> initialState;
   final NativeNode root;
   final int nodeCount;
+
+  Map<String, Object?> toJson() {
+    return {
+      'schemaVersion': schemaVersion,
+      'initialState': initialState,
+      'root': root.toJson(),
+    };
+  }
 }
 
 sealed class BindingValue {
@@ -286,6 +319,59 @@ NativeActionType _actionType(String value) {
 
 String _actionName(NativeActionType type) {
   return type.name;
+}
+
+String _componentWireName(NativeComponentType type) {
+  return switch (type) {
+    NativeComponentType.container => 'Container',
+    NativeComponentType.row => 'Row',
+    NativeComponentType.column => 'Column',
+    NativeComponentType.stack => 'Stack',
+    NativeComponentType.grid => 'Grid',
+    NativeComponentType.scroll => 'Scroll',
+    NativeComponentType.divider => 'Divider',
+    NativeComponentType.text => 'Text',
+    NativeComponentType.icon => 'Icon',
+    NativeComponentType.image => 'Image',
+    NativeComponentType.badge => 'Badge',
+    NativeComponentType.progress => 'Progress',
+    NativeComponentType.chart => 'Chart',
+    NativeComponentType.button => 'Button',
+    NativeComponentType.textInput => 'TextInput',
+    NativeComponentType.checkbox => 'Checkbox',
+    NativeComponentType.select => 'Select',
+    NativeComponentType.slider => 'Slider',
+    NativeComponentType.list => 'List',
+    NativeComponentType.keyValue => 'KeyValue',
+    NativeComponentType.emptyState => 'EmptyState',
+    NativeComponentType.errorState => 'ErrorState',
+  };
+}
+
+String _actionWireName(NativeActionType type) {
+  return switch (type) {
+    NativeActionType.set => 'set',
+    NativeActionType.increment => 'increment',
+    NativeActionType.toggle => 'toggle',
+    NativeActionType.append => 'append',
+    NativeActionType.remove => 'remove',
+    NativeActionType.startTimer => 'startTimer',
+    NativeActionType.stopTimer => 'stopTimer',
+    NativeActionType.capabilityInvoke => 'capability.invoke',
+  };
+}
+
+bool _actionCarriesValue(NativeActionType type) {
+  return switch (type) {
+    NativeActionType.set ||
+    NativeActionType.increment ||
+    NativeActionType.append => true,
+    NativeActionType.toggle ||
+    NativeActionType.remove ||
+    NativeActionType.startTimer ||
+    NativeActionType.stopTimer ||
+    NativeActionType.capabilityInvoke => false,
+  };
 }
 
 void _rejectUnknown(
