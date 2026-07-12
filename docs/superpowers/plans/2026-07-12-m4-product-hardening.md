@@ -265,11 +265,11 @@ git commit -m "build: gate signed Windows releases"
 - Create: `docs/verification/macos-m4-evidence-template.md`
 - Modify: `docs/verification/m0-linux-evidence.md`
 
-- [ ] **Step 1: Encode device matrices as fail-closed scripts**
+- [x] **Step 1: Encode device matrices as fail-closed scripts**
 
 Windows must exercise WebView2 random localhost hostnames, storage isolation, Chinese IME, 150% mixed DPI, transparent overlay, click-through recovery, multi-monitor unplug, sleep/lock, offline restart, 1/3/10 windows and 1/5/20 cards. macOS must exercise WKWebView loopback access, signing/notarization entitlements and normal/detached windows. Linux must verify only ordinary windows and explicitly skip unsupported Wayland overlay guarantees.
 
-- [ ] **Step 2: Make every evidence record machine-readable**
+- [x] **Step 2: Make every evidence record machine-readable**
 
 Each script writes JSON containing commit SHA, OS/build, CPU, memory, GPU, display scale, runtime versions, scenario result, duration and artifact hashes. Missing or skipped mandatory Windows/macOS scenarios must produce a non-zero exit.
 

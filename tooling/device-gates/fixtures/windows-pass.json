@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows",
+  "commit": "fixture",
+  "host": {
+    "os": "Windows 11 fixture",
+    "cpu": "8 logical cores",
+    "memoryGiB": 16,
+    "gpu": "integrated fixture",
+    "displayScalePercent": 150,
+    "webView2Version": "fixture"
+  },
+  "scenarios": {
+    "webView2Embedded": "PASS",
+    "randomLocalhostOrigin": "PASS",
+    "originStorageIsolation": "PASS",
+    "offlineRestart": "PASS",
+    "chineseIme": "PASS",
+    "mixedDpi150": "PASS",
+    "overlayTransparency": "PASS",
+    "clickThroughRecovery": "PASS",
+    "detachedWindow": "PASS",
+    "multiMonitorUnplug": "PASS",
+    "sleepAndLock": "PASS",
+    "oneThreeTenWindows": "PASS",
+    "oneFiveTwentyCards": "PASS",
+    "tamperedArtifactRejected": "PASS",
+    "privateNetworkRejected": "PASS"
+  }
+}
