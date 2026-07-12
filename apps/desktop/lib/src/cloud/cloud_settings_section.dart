@@ -160,6 +160,28 @@ class _CloudSettingsSectionState extends State<CloudSettingsSection> {
                 ),
               ),
             ],
+            if (controller.status ==
+                CloudSettingsStatus.savedPendingRestart) ...[
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                children: [
+                  FilledButton.icon(
+                    key: const Key('cloud-restart-now'),
+                    onPressed: controller.restartApplication == null
+                        ? null
+                        : controller.restart,
+                    icon: const Icon(Icons.restart_alt),
+                    label: const Text('立即重启'),
+                  ),
+                  TextButton(
+                    key: const Key('cloud-restart-later'),
+                    onPressed: controller.dismissRestart,
+                    child: const Text('稍后重启'),
+                  ),
+                ],
+              ),
+            ],
           ],
         );
       },

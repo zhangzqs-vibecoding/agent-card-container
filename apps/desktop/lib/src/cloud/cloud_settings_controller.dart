@@ -17,9 +17,10 @@ enum CloudSettingsStatus {
 }
 
 class CloudSettingsController extends ChangeNotifier {
-  CloudSettingsController(this.service);
+  CloudSettingsController(this.service, {this.restartApplication});
 
   final CloudSettingsService service;
+  final Future<void> Function()? restartApplication;
 
   CloudSettingsStatus status = CloudSettingsStatus.loading;
   String? message;
@@ -111,6 +112,27 @@ class CloudSettingsController extends ChangeNotifier {
       status = CloudSettingsStatus.savedPendingRestart;
       message = '云端配置已清除，重启应用后生效';
     });
+  }
+
+  Future<void> restart() async {
+    if (status != CloudSettingsStatus.savedPendingRestart ||
+        restartApplication == null) {
+      return;
+    }
+    try {
+      await restartApplication!();
+    } catch (_) {
+      status = CloudSettingsStatus.error;
+      message = '无法启动新进程，当前应用将继续运行';
+      notifyListeners();
+    }
+  }
+
+  void dismissRestart() {
+    if (status != CloudSettingsStatus.savedPendingRestart) return;
+    status = CloudSettingsStatus.ready;
+    message = '配置将在下次启动时生效';
+    notifyListeners();
   }
 
   CloudUserConfig _draft() {

@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
 import 'package:agent_card_desktop/src/app/desktop_bootstrap.dart';
 import 'package:agent_card_desktop/src/adapters/desktop_main_window_lifecycle.dart';
+import 'package:agent_card_desktop/src/adapters/application_restarter.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_settings_controller.dart';
 import 'package:flutter/widgets.dart';
 
@@ -22,6 +24,13 @@ Future<void> main() async {
   desktopRuntime = await DesktopBootstrap.start();
   cloudSettingsController = CloudSettingsController(
     desktopRuntime.cloudSettingsService,
+    restartApplication: () => ApplicationRestarter().restart(
+      shutdown: () async {
+        await desktopMainWindowLifecycle?.dispose();
+        await desktopRuntime.close();
+        exit(0);
+      },
+    ),
   );
   await cloudSettingsController.initialize();
   await desktopRuntime.initializePlatformSurfaces();
