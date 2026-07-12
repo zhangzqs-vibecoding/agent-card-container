@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:agent_card_desktop/src/app/desktop_bootstrap.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/contracts/card_definition.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_connection_settings.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_settings_repository.dart';
+import 'package:agent_card_desktop/src/cloud/secret_store.dart';
 import 'package:agent_card_desktop/src/storage/local_database.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -248,4 +251,42 @@ void main() {
       expect(runtime.cardCatalogController, isNotNull);
     },
   );
+
+  test('enables Agent Studio from saved config and secure token', () async {
+    final root = Directory.systemTemp.createTempSync('agent-card-bootstrap-');
+    addTearDown(() => root.deleteSync(recursive: true));
+    await CloudSettingsRepository(
+      File('${root.path}/cloud-config.json'),
+    ).save(const CloudUserConfig(baseUrl: 'https://saved.agentcard.example'));
+
+    final runtime = await DesktopBootstrap.start(
+      appDataDirectory: root,
+      environment: const {},
+      secretStore: _BootstrapSecretStore('saved-access-token'),
+    );
+    addTearDown(runtime.close);
+
+    expect(runtime.agentStudioController, isNotNull);
+    expect(runtime.cloudClient?.baseUri.host, 'saved.agentcard.example');
+    expect(runtime.cardCatalogController, isNotNull);
+  });
+}
+
+class _BootstrapSecretStore implements SecretStore {
+  _BootstrapSecretStore(this.value);
+
+  String? value;
+
+  @override
+  Future<String?> readAccessToken() async => value;
+
+  @override
+  Future<void> writeAccessToken(String value) async {
+    this.value = value;
+  }
+
+  @override
+  Future<void> deleteAccessToken() async {
+    value = null;
+  }
 }

@@ -9,6 +9,7 @@ import '../adapters/desktop_host_capability_ports.dart';
 import '../adapters/hotkey_overlay_restore_shortcut.dart';
 import '../adapters/multi_window_backend.dart';
 import '../adapters/screen_retriever_display_monitor.dart';
+import '../adapters/secure_token_store.dart';
 import '../artifacts/artifact_crypto.dart';
 import '../artifacts/artifact_installer.dart';
 import '../capabilities/capability.dart';
@@ -20,6 +21,10 @@ import '../capabilities/window_capability_handlers.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
+import '../cloud/cloud_connection_settings.dart';
+import '../cloud/cloud_settings_repository.dart';
+import '../cloud/cloud_settings_service.dart';
+import '../cloud/secret_store.dart';
 import '../diagnostics/diagnostic_bundle.dart';
 import '../runtime/local_runtime_server.dart';
 import '../runtime/runtime_environment_monitor.dart';
@@ -55,6 +60,7 @@ class DesktopRuntime {
     required this.permissionRequests,
     required this.startupRecovery,
     required this.environmentMonitor,
+    required this.cloudSettingsService,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -73,6 +79,7 @@ class DesktopRuntime {
   final PermissionRequestController permissionRequests;
   final StartupRecovery startupRecovery;
   final RuntimeEnvironmentMonitor environmentMonitor;
+  final CloudSettingsService cloudSettingsService;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -147,6 +154,7 @@ abstract final class DesktopBootstrap {
   static Future<DesktopRuntime> start({
     Directory? appDataDirectory,
     Map<String, String>? environment,
+    SecretStore? secretStore,
   }) async {
     final processEnvironment = environment ?? Platform.environment;
     final root = appDataDirectory ?? AppDataLocator.resolve();
@@ -388,8 +396,16 @@ abstract final class DesktopBootstrap {
       );
       windowCapabilities = WindowCapabilityHandlers(surfaceCoordinator);
       final displayMonitor = ScreenRetrieverDisplayMonitor(surfaceCoordinator);
+      final cloudSettingsService = CloudSettingsService(
+        environment: processEnvironment,
+        repository: CloudSettingsRepository(
+          File(_join(root.path, 'cloud-config.json')),
+        ),
+        secretStore: secretStore ?? SecureTokenStore(),
+      );
+      final cloudSettings = await cloudSettingsService.load();
       final cloud = _cloudConfiguration(
-        processEnvironment,
+        cloudSettings.settings,
         root,
         database,
         workspaceController,
@@ -410,6 +426,7 @@ abstract final class DesktopBootstrap {
         permissionRequests: permissionRequests,
         startupRecovery: startupRecovery,
         environmentMonitor: environmentMonitor,
+        cloudSettingsService: cloudSettingsService,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,
@@ -430,24 +447,19 @@ abstract final class DesktopBootstrap {
   CardCatalogController catalog,
 })?
 _cloudConfiguration(
-  Map<String, String> environment,
+  CloudConnectionSettings? settings,
   Directory root,
   LocalDatabase database,
   WorkspaceController workspace,
   InstalledWorkspaceCardFactory workspaceCardFactory,
 ) {
-  final url = environment['AGENTCARD_CLOUD_URL'];
-  final token = environment['AGENTCARD_ACCESS_TOKEN'];
-  if (url == null || url.isEmpty || token == null || token.isEmpty) {
-    return null;
-  }
+  if (settings == null) return null;
   final client = CloudApiClient(
-    baseUri: Uri.parse(url),
-    tokenProvider: () async => token,
-    allowInsecureForDevelopment:
-        environment['AGENTCARD_ALLOW_INSECURE_CLOUD'] == 'true',
+    baseUri: settings.config.validate(),
+    tokenProvider: () async => settings.accessToken,
+    allowInsecureForDevelopment: settings.config.allowInsecureLoopback,
   );
-  final trustedKeys = _trustedKeys(environment['AGENTCARD_TRUSTED_KEYS_JSON']);
+  final trustedKeys = _trustedKeys(settings.config.trustedKeys);
   CardInstallCoordinator? coordinator;
   if (trustedKeys.isNotEmpty) {
     coordinator = CardInstallCoordinator(
@@ -507,19 +519,10 @@ class _CloudCatalogClient implements CloudCatalogPort {
   Future<List<CloudCardSummary>> listCards() => client.listCards();
 }
 
-Map<String, Uint8List> _trustedKeys(String? source) {
-  if (source == null || source.isEmpty) {
-    return const {};
-  }
-  final decoded = jsonDecode(source);
-  if (decoded is! Map<String, Object?>) {
-    throw const FormatException('trusted keys must be a JSON object');
-  }
+Map<String, Uint8List> _trustedKeys(Map<String, String> source) {
   return {
-    for (final entry in decoded.entries)
-      entry.key: Uint8List.fromList(
-        base64Url.decode(_padded(entry.value as String)),
-      ),
+    for (final entry in source.entries)
+      entry.key: Uint8List.fromList(base64Url.decode(_padded(entry.value))),
   };
 }
 
