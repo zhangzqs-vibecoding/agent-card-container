@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "commit": "fixture-commit",
+  "platform": "linux",
+  "host": {
+    "os": "Ubuntu 24.04 x64",
+    "cpuLogicalCores": 8,
+    "memoryGiB": 16,
+    "gpu": "container fixture",
+    "displayScalePercent": 100
+  },
+  "runtime": {
+    "flutter": {
+      "frameworkVersion": "3.32.8",
+      "dartSdkVersion": "3.8.1"
+    }
+  },
+  "durationSeconds": 42,
+  "artifacts": {
+    "linuxBundleSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "scenarios": {
+    "ordinaryWindowBuild": "PASS",
+    "unitAndWidgetTests": "PASS",
+    "waylandOverlay": "OUT_OF_SCOPE"
+  }
+}

@@ -28,6 +28,7 @@ const _required = {
     'appSignature',
     'sandboxEntitlements',
   },
+  'linux': {'ordinaryWindowBuild', 'unitAndWidgetTests'},
 };
 
 void main(List<String> arguments) {
@@ -52,6 +53,9 @@ void main(List<String> arguments) {
       throw const FormatException('device evidence envelope is invalid');
     }
     final scenarios = decoded['scenarios']! as Map<String, Object?>;
+    if (platform == 'linux') {
+      _validateLinuxEnvelope(decoded);
+    }
     final failed = required
         .where((scenario) => scenarios[scenario] != 'PASS')
         .toList();
@@ -66,6 +70,35 @@ void main(List<String> arguments) {
     exitCode = 1;
   }
 }
+
+void _validateLinuxEnvelope(Map<String, Object?> evidence) {
+  final host = evidence['host']! as Map<String, Object?>;
+  final runtime = evidence['runtime'];
+  final artifacts = evidence['artifacts'];
+  final duration = evidence['durationSeconds'];
+  if (host['os'] is! String ||
+      host['cpuLogicalCores'] is! int ||
+      (host['cpuLogicalCores']! as int) < 1 ||
+      host['memoryGiB'] is! num ||
+      (host['memoryGiB']! as num) <= 0 ||
+      host['gpu'] is! String ||
+      host['displayScalePercent'] is! num ||
+      runtime is! Map<String, Object?> ||
+      runtime['flutter'] is! Map<String, Object?> ||
+      duration is! int ||
+      duration < 1 ||
+      artifacts is! Map<String, Object?> ||
+      !_isSha256(artifacts['linuxBundleSha256'])) {
+    throw const FormatException('Linux evidence metadata is invalid');
+  }
+  final scenarios = evidence['scenarios']! as Map<String, Object?>;
+  if (scenarios['waylandOverlay'] != 'OUT_OF_SCOPE') {
+    throw const FormatException('Wayland overlay must remain OUT_OF_SCOPE');
+  }
+}
+
+bool _isSha256(Object? value) =>
+    value is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(value);
 
 Map<String, String> _options(List<String> arguments) {
   if (arguments.length.isOdd) {
