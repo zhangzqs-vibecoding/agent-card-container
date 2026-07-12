@@ -76,18 +76,21 @@ class PerformanceBaseline {
       'coldStartupMs',
       (report) => report.withinBudget(p50: 3000, p95: 5000),
       failedMetric: 'p95',
+      minimumSamples: 20,
     );
     _evaluate(
       failures,
       'nativeMountMs',
       (report) => report.withinBudget(p50: 300),
       failedMetric: 'p50',
+      minimumSamples: 30,
     );
     _evaluate(
       failures,
       'codeMountMs',
       (report) => report.withinBudget(p50: 1500),
       failedMetric: 'p50',
+      minimumSamples: 20,
     );
     _evaluate(
       failures,
@@ -106,6 +109,7 @@ class PerformanceBaseline {
       'frameTimeMs',
       (report) => report.p95 <= 16.7,
       failedMetric: 'p95',
+      minimumSamples: 1000,
     );
     return List.unmodifiable(failures);
   }
@@ -126,10 +130,13 @@ class PerformanceBaseline {
     String name,
     bool Function(PerformanceReport report) passes, {
     required String failedMetric,
+    int minimumSamples = 1,
   }) {
     final report = scenarios[name];
     if (report == null) {
       failures.add('$name:missing');
+    } else if (report.sampleCount < minimumSamples) {
+      failures.add('$name:samples');
     } else if (!passes(report)) {
       failures.add('$name:$failedMetric');
     }
