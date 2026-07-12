@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_multi_window
+  flutter_secure_storage_linux
   hotkey_manager_linux
   local_notifier
   screen_retriever_linux
