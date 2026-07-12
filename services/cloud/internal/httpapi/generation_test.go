@@ -1,7 +1,9 @@
 package httpapi_test
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +14,52 @@ import (
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/httpapi"
 )
+
+func TestGenerationAPISSEStreamsEventsCreatedAfterConnection(t *testing.T) {
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_live" },
+		time.Now,
+	)
+	handler := httpapi.NewGenerationHandler(httpapi.GenerationHandlerConfig{
+		ServiceName: "agent-card-cloud",
+		Service:     service,
+		Authenticator: httpapi.StaticBearerAuthenticator{
+			"token-owner": "user-owner",
+		},
+		NewRequestID: func() string { return "req_live" },
+	})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+	session, err := service.Create(context.Background(), "user-owner", generation.CreateRequest{
+		Prompt: "离线时钟",
+		Target: generation.TargetNative,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequest(http.MethodGet, server.URL+"/v1/generations/"+session.ID+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer token-owner")
+	request.Header.Set("Last-Event-ID", "1")
+	response, err := server.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if _, err := service.Confirm(context.Background(), "user-owner", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	line, err := bufio.NewReader(response.Body).ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	if line != "id: 2\n" {
+		t.Fatalf("first streamed line = %q, want event 2", line)
+	}
+}
 
 func TestGenerationAPIRequiresBearerAndUsesStableErrors(t *testing.T) {
 	t.Parallel()
@@ -71,11 +119,25 @@ func TestGenerationAPICreateMessageConfirmGetAndSSEReplay(t *testing.T) {
 		t.Fatalf("other user status = %d, want 404", otherResponse.Code)
 	}
 
-	eventsRequest := httptest.NewRequest(http.MethodGet, "/v1/generations/"+sessionID+"/events", nil)
+	streamContext, cancelStream := context.WithCancel(context.Background())
+	eventsRequest := httptest.NewRequest(http.MethodGet, "/v1/generations/"+sessionID+"/events", nil).WithContext(streamContext)
 	eventsRequest.Header.Set("Authorization", "Bearer token-owner")
 	eventsRequest.Header.Set("Last-Event-ID", "1")
-	eventsResponse := httptest.NewRecorder()
-	handler.ServeHTTP(eventsResponse, eventsRequest)
+	eventsResponse := newStreamingRecorder()
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(eventsResponse, eventsRequest)
+		close(done)
+	}()
+	for range 3 {
+		select {
+		case <-eventsResponse.flushed:
+		case <-time.After(time.Second):
+			t.Fatal("SSE replay was not flushed")
+		}
+	}
+	cancelStream()
+	<-done
 	if eventsResponse.Code != http.StatusOK {
 		t.Fatalf("events status = %d", eventsResponse.Code)
 	}
@@ -89,6 +151,23 @@ func TestGenerationAPICreateMessageConfirmGetAndSSEReplay(t *testing.T) {
 	if strings.Contains(body, "id: 1\n") {
 		t.Fatalf("SSE replay included old event: %q", body)
 	}
+}
+
+type streamingRecorder struct {
+	*httptest.ResponseRecorder
+	flushed chan struct{}
+}
+
+func newStreamingRecorder() *streamingRecorder {
+	return &streamingRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		flushed:          make(chan struct{}, 16),
+	}
+}
+
+func (recorder *streamingRecorder) Flush() {
+	recorder.ResponseRecorder.Flush()
+	recorder.flushed <- struct{}{}
 }
 
 func TestGenerationAPIRejectsUnknownJSONFields(t *testing.T) {

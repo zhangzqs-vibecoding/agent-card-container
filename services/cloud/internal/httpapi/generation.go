@@ -163,21 +163,28 @@ func (api *generationAPI) events(writer http.ResponseWriter, request *http.Reque
 		}
 		after = parsed
 	}
-	events, err := api.service.EventsAfter(request.Context(), userID, request.PathValue("id"), after)
+	events, cancel, err := api.service.SubscribeEvents(request.Context(), userID, request.PathValue("id"), after)
 	if err != nil {
 		api.writeServiceError(writer, requestID, err)
 		return
 	}
+	defer cancel()
 	writer.Header().Set("Content-Type", "text/event-stream")
 	writer.Header().Set("Cache-Control", "no-cache")
 	writer.Header().Set("X-Accel-Buffering", "no")
 	writer.WriteHeader(http.StatusOK)
-	for _, event := range events {
+	flusher, ok := writer.(http.Flusher)
+	if !ok {
+		return
+	}
+	flusher.Flush()
+	for event := range events {
 		data, marshalErr := json.Marshal(event)
 		if marshalErr != nil {
 			return
 		}
 		_, _ = fmt.Fprintf(writer, "id: %d\nevent: %s\ndata: %s\n\n", event.EventID, event.Type, data)
+		flusher.Flush()
 	}
 }
 

@@ -158,3 +158,36 @@ func TestServiceConfirmEnqueuesAndCancelStopsJob(t *testing.T) {
 		t.Fatalf("job status = %q", cancelled.Status)
 	}
 }
+
+func TestServiceSubscribeEventsReplaysThenStreamsNewEvents(t *testing.T) {
+	t.Parallel()
+
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_stream" },
+		time.Now,
+	)
+	session, err := service.Create(context.Background(), "user", generation.CreateRequest{
+		Prompt: "离线时钟",
+		Target: generation.TargetNative,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	events, cancel, err := service.SubscribeEvents(context.Background(), "user", session.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cancel()
+	if first := <-events; first.EventID != 1 {
+		t.Fatalf("first event ID = %d, want 1", first.EventID)
+	}
+	if _, err := service.Confirm(context.Background(), "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	second := <-events
+	if second.EventID != 2 || second.Stage != "queued" {
+		t.Fatalf("second event = %#v", second)
+	}
+}

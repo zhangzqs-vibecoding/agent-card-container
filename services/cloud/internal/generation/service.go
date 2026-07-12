@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,13 @@ type Service struct {
 	newID      func() string
 	now        func() time.Time
 	jobQueue   JobQueue
+	streamMu   sync.Mutex
+	streams    map[string]map[*eventStream]struct{}
+}
+
+type eventStream struct {
+	events chan Event
+	cursor int64
 }
 
 type JobQueue interface {
@@ -39,7 +47,12 @@ func NewService(
 	now func() time.Time,
 	options ...ServiceOption,
 ) *Service {
-	service := &Service{repository: repository, newID: newID, now: now}
+	service := &Service{
+		repository: repository,
+		newID:      newID,
+		now:        now,
+		streams:    make(map[string]map[*eventStream]struct{}),
+	}
 	for _, option := range options {
 		option(service)
 	}
@@ -84,7 +97,9 @@ func (service *Service) Get(ctx context.Context, userID, sessionID string) (*Ses
 }
 
 func (service *Service) AddMessage(ctx context.Context, userID, sessionID, content string) (*Session, error) {
-	return service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
+	service.streamMu.Lock()
+	defer service.streamMu.Unlock()
+	session, err := service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
 		if session.Status != StatusAwaitingConfirmation {
 			return ErrConflict
 		}
@@ -94,9 +109,12 @@ func (service *Service) AddMessage(ctx context.Context, userID, sessionID, conte
 		session.Summary = summarize(content, session.Locale)
 		return nil
 	})
+	service.publishLocked(session, err)
+	return session, err
 }
 
 func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (*Session, error) {
+	service.streamMu.Lock()
 	session, err := service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
 		if session.Status != StatusAwaitingConfirmation {
 			return ErrConflict
@@ -110,8 +128,11 @@ func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (
 		return err
 	})
 	if err != nil {
+		service.streamMu.Unlock()
 		return nil, err
 	}
+	service.publishLocked(session, nil)
+	service.streamMu.Unlock()
 	if service.jobQueue != nil {
 		if err := service.jobQueue.EnqueueGeneration(ctx, sessionID, service.now()); err != nil {
 			_, _ = service.MarkFailed(ctx, sessionID, "JOB_ENQUEUE_FAILED")
@@ -122,6 +143,7 @@ func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (
 }
 
 func (service *Service) Cancel(ctx context.Context, userID, sessionID string) (*Session, error) {
+	service.streamMu.Lock()
 	session, err := service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
 		if session.Status == StatusCancelled {
 			return nil
@@ -133,8 +155,11 @@ func (service *Service) Cancel(ctx context.Context, userID, sessionID string) (*
 		return err
 	})
 	if err != nil {
+		service.streamMu.Unlock()
 		return nil, err
 	}
+	service.publishLocked(session, nil)
+	service.streamMu.Unlock()
 	if service.jobQueue != nil {
 		if err := service.jobQueue.CancelGeneration(ctx, sessionID, service.now()); err != nil {
 			return nil, err
@@ -157,8 +182,52 @@ func (service *Service) EventsAfter(ctx context.Context, userID, sessionID strin
 	return events, nil
 }
 
+func (service *Service) SubscribeEvents(
+	ctx context.Context,
+	userID string,
+	sessionID string,
+	eventID int64,
+) (<-chan Event, func(), error) {
+	service.streamMu.Lock()
+	defer service.streamMu.Unlock()
+	session, err := service.repository.Get(ctx, userID, sessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	stream := &eventStream{events: make(chan Event, len(session.Events)+64), cursor: eventID}
+	for _, event := range session.Events {
+		if event.EventID > stream.cursor {
+			stream.events <- event
+			stream.cursor = event.EventID
+		}
+	}
+	if service.streams[sessionID] == nil {
+		service.streams[sessionID] = make(map[*eventStream]struct{})
+	}
+	service.streams[sessionID][stream] = struct{}{}
+	var once sync.Once
+	cancel := func() {
+		once.Do(func() {
+			service.streamMu.Lock()
+			defer service.streamMu.Unlock()
+			delete(service.streams[sessionID], stream)
+			if len(service.streams[sessionID]) == 0 {
+				delete(service.streams, sessionID)
+			}
+			close(stream.events)
+		})
+	}
+	if ctx.Done() != nil {
+		go func() {
+			<-ctx.Done()
+			cancel()
+		}()
+	}
+	return stream.events, cancel, nil
+}
+
 func (service *Service) StartGenerating(ctx context.Context, sessionID string) (*Session, error) {
-	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+	return service.updateSystem(ctx, sessionID, func(session *Session) error {
 		_, err := session.Transition(StatusGenerating, Transition{
 			Stage:    "generating",
 			Message:  "编码 Agent 正在生成卡片",
@@ -170,7 +239,7 @@ func (service *Service) StartGenerating(ctx context.Context, sessionID string) (
 }
 
 func (service *Service) StartValidating(ctx context.Context, sessionID string) (*Session, error) {
-	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+	return service.updateSystem(ctx, sessionID, func(session *Session) error {
 		_, err := session.Transition(StatusValidating, Transition{
 			Stage:    "validating",
 			Message:  "正在执行安全和合同验证",
@@ -182,7 +251,7 @@ func (service *Service) StartValidating(ctx context.Context, sessionID string) (
 }
 
 func (service *Service) MarkReady(ctx context.Context, sessionID, versionID string) (*Session, error) {
-	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+	return service.updateSystem(ctx, sessionID, func(session *Session) error {
 		_, err := session.Transition(StatusReady, Transition{
 			Stage:     "ready",
 			Message:   "卡片已生成并签名",
@@ -195,7 +264,7 @@ func (service *Service) MarkReady(ctx context.Context, sessionID, versionID stri
 }
 
 func (service *Service) MarkFailed(ctx context.Context, sessionID, code string) (*Session, error) {
-	return service.repository.UpdateSystem(ctx, sessionID, func(session *Session) error {
+	return service.updateSystem(ctx, sessionID, func(session *Session) error {
 		if session.IsTerminal() {
 			return nil
 		}
@@ -208,6 +277,32 @@ func (service *Service) MarkFailed(ctx context.Context, sessionID, code string) 
 		})
 		return err
 	})
+}
+
+func (service *Service) updateSystem(
+	ctx context.Context,
+	sessionID string,
+	change func(*Session) error,
+) (*Session, error) {
+	service.streamMu.Lock()
+	defer service.streamMu.Unlock()
+	session, err := service.repository.UpdateSystem(ctx, sessionID, change)
+	service.publishLocked(session, err)
+	return session, err
+}
+
+func (service *Service) publishLocked(session *Session, err error) {
+	if err != nil || session == nil {
+		return
+	}
+	for stream := range service.streams[session.ID] {
+		for _, event := range session.Events {
+			if event.EventID > stream.cursor {
+				stream.events <- event
+				stream.cursor = event.EventID
+			}
+		}
+	}
 }
 
 func summarize(prompt, locale string) RequirementSummary {
