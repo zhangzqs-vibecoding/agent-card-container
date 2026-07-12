@@ -9,8 +9,9 @@ overlay 或全局快捷键。
 - Flutter 3.32.8 stable / Dart 3.8.1。
 - Windows：Visual Studio C++ desktop workload 和 Evergreen WebView2 Runtime。
 - macOS：Xcode，签名、sandbox entitlement 和 notarization 需在目标设备验证。
-- Linux：Clang、CMake、Ninja、GTK3 development headers、libsodium，以及
-  tray/hotkey 插件需要的 Ayatana AppIndicator、Keybinder 和 libnotify。
+- Linux：Clang、CMake、Ninja、GTK3 development headers、libsodium、
+  libsecret，以及 tray/hotkey 插件需要的 Ayatana AppIndicator、Keybinder 和
+  libnotify；桌面会话还需提供 Secret Service keyring。
 
 ## 运行与测试
 
