@@ -744,10 +744,11 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   void _createController() {
     final nativeSpec = widget.card.nativeSpec;
     if (nativeSpec != null) {
-      final controller = NativeCardController({
-        ...nativeSpec.initialState,
-        ...widget.card.persistedState,
-      });
+      final controller = NativeCardController(
+        {...nativeSpec.initialState, ...widget.card.persistedState},
+        capabilityBroker: widget.card.capabilityBroker,
+        cardContext: widget.card.cardContext,
+      );
       _nativeController = controller;
       if (widget.onNativeCardStateChanged case final write?) {
         _nativeStatePersistence = NativeCardStatePersistence(

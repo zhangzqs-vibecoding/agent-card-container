@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../agent_studio/agent_studio_controller.dart';
 import '../adapters/desktop_multi_window_driver.dart';
+import '../adapters/desktop_host_capability_ports.dart';
 import '../adapters/hotkey_overlay_restore_shortcut.dart';
 import '../adapters/multi_window_backend.dart';
 import '../adapters/screen_retriever_display_monitor.dart';
@@ -13,11 +14,12 @@ import '../artifacts/artifact_installer.dart';
 import '../capabilities/capability.dart';
 import '../capabilities/capability_broker.dart';
 import '../capabilities/secure_network_fetcher.dart';
+import '../capabilities/host_capability_handlers.dart';
+import '../capabilities/permission_request_controller.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
 import '../runtime/local_runtime_server.dart';
-import '../runtime/runtime_capability_adapter.dart';
 import '../storage/local_database.dart';
 import '../surfaces/surface_coordinator.dart';
 import '../surfaces/overlay_mode_controller.dart';
@@ -45,6 +47,7 @@ class DesktopRuntime {
     required this.windowBackend,
     required this.overlayModeController,
     required this.displayMonitor,
+    required this.permissionRequests,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -59,6 +62,7 @@ class DesktopRuntime {
   final MultiWindowBackend windowBackend;
   final OverlayModeController overlayModeController;
   final ScreenRetrieverDisplayMonitor displayMonitor;
+  final PermissionRequestController permissionRequests;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -83,6 +87,7 @@ class DesktopRuntime {
     _closed = true;
     agentStudioController?.dispose();
     cardCatalogController?.dispose();
+    permissionRequests.dispose();
     workspaceController.dispose();
     cloudClient?.close();
     displayMonitor.dispose();
@@ -104,6 +109,13 @@ abstract final class DesktopBootstrap {
     LocalRuntimeServer? runtimeServer;
     try {
       runtimeServer = await LocalRuntimeServer.start();
+      final hostCapabilities = HostCapabilityHandlers(
+        clipboard: FlutterClipboardCapabilityPort(),
+        externalUrls: UrlLauncherExternalUrlPort(),
+        notifications: LocalNotifierCapabilityPort(),
+        metrics: ProcessSystemMetricsPort(),
+      );
+      final permissionRequests = PermissionRequestController();
       final installations = {
         for (final record in database.listInstallations())
           record.installation.versionId: record,
@@ -113,20 +125,37 @@ abstract final class DesktopBootstrap {
       final workspaceCardFactory = InstalledWorkspaceCardFactory(
         runtimeServer: runtimeServer,
         database: database,
-        rpcHandlerFactory: (instance, definition) {
-          final broker = CapabilityBroker()
-            ..register('network.fetch', SecureNetworkFetcher().handle)
-            ..replaceGrants(database.grantsForInstance(instance.instanceId));
-          return RuntimeCapabilityAdapter(
+        capabilityRuntimeFactory: (instance, definition) {
+          final broker =
+              CapabilityBroker(
+                  requestGrant: permissionRequests.requestGrant,
+                  persistGrant: database.upsertGrant,
+                )
+                ..register('network.fetch', SecureNetworkFetcher().handle)
+                ..register('clipboard.write', hostCapabilities.clipboardWrite)
+                ..register('clipboard.read', hostCapabilities.clipboardRead)
+                ..register('host.openExternal', hostCapabilities.openExternal)
+                ..register(
+                  'notification.show',
+                  hostCapabilities.notificationShow,
+                )
+                ..register(
+                  'system.metrics.get',
+                  hostCapabilities.systemMetricsGet,
+                )
+                ..replaceGrants(
+                  database.grantsForInstance(instance.instanceId),
+                );
+          return (
             broker: broker,
-            cardContext: CardContext(
+            context: CardContext(
               instanceId: instance.instanceId,
               cardId: instance.cardId,
               versionId: instance.versionId,
               declaredCapabilities: definition.capabilities.toSet(),
               networkDomains: definition.networkPolicy.domains.toSet(),
             ),
-          ).handle;
+          );
         },
       );
       for (final instance in database.listInstances()) {
@@ -216,6 +245,7 @@ abstract final class DesktopBootstrap {
         windowBackend: windowBackend,
         overlayModeController: overlayModeController,
         displayMonitor: displayMonitor,
+        permissionRequests: permissionRequests,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,

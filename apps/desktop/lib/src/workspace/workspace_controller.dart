@@ -54,11 +54,15 @@ class WorkspaceController extends ChangeNotifier {
             instance: moved,
             spec: card.spec,
             persistedState: card.persistedState,
+            capabilityBroker: card.capabilityBroker,
+            cardContext: card.cardContext,
           )
         : WorkspaceCard.code(
             instance: moved,
             codeCard: card.codeCard!,
             persistedState: card.persistedState,
+            capabilityBroker: card.capabilityBroker,
+            cardContext: card.cardContext,
           );
     notifyListeners();
   }

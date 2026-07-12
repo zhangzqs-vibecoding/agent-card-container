@@ -2,16 +2,19 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../artifacts/artifact_installer.dart';
+import '../capabilities/capability.dart';
+import '../capabilities/capability_broker.dart';
 import '../cards/card_instance.dart';
 import '../contracts/card_definition.dart';
 import '../native_card/native_card_spec.dart';
 import '../runtime/local_runtime_server.dart';
+import '../runtime/runtime_capability_adapter.dart';
 import '../storage/database_runtime_storage.dart';
 import '../storage/local_database.dart';
 import 'workspace_card.dart';
 
-typedef RuntimeRpcHandlerFactory =
-    RuntimeRpcHandler? Function(
+typedef CapabilityRuntimeFactory =
+    ({CapabilityBroker broker, CardContext context}) Function(
       CardInstance instance,
       CardDefinition definition,
     );
@@ -20,12 +23,12 @@ class InstalledWorkspaceCardFactory {
   const InstalledWorkspaceCardFactory({
     required this.runtimeServer,
     required this.database,
-    this.rpcHandlerFactory,
+    this.capabilityRuntimeFactory,
   });
 
   final LocalRuntimeServer runtimeServer;
   final LocalDatabase database;
-  final RuntimeRpcHandlerFactory? rpcHandlerFactory;
+  final CapabilityRuntimeFactory? capabilityRuntimeFactory;
 
   WorkspaceCard create(InstalledArtifact artifact, CardInstance instance) {
     if (artifact.definition.cardId != instance.cardId ||
@@ -34,6 +37,10 @@ class InstalledWorkspaceCardFactory {
         'installed artifact does not match the card instance',
       );
     }
+    final capabilityRuntime = capabilityRuntimeFactory?.call(
+      instance,
+      artifact.definition,
+    );
     if (artifact.definition.runtime == CardRuntime.native) {
       final payload = _file(artifact, artifact.definition.entrypoint);
       final decoded =
@@ -42,6 +49,8 @@ class InstalledWorkspaceCardFactory {
         instance: instance,
         spec: NativeCardSpec.fromJson(decoded),
         persistedState: database.readState(instance.stateNamespace),
+        capabilityBroker: capabilityRuntime?.broker,
+        cardContext: capabilityRuntime?.context,
       );
     }
     final prefix = '/bundle/${artifact.contentHash}';
@@ -60,7 +69,12 @@ class InstalledWorkspaceCardFactory {
       resources: resources,
       declaredCapabilities: artifact.definition.capabilities.toSet(),
       storage: DatabaseRuntimeStorage(database, instance.stateNamespace),
-      rpcHandler: rpcHandlerFactory?.call(instance, artifact.definition),
+      rpcHandler: capabilityRuntime == null
+          ? null
+          : RuntimeCapabilityAdapter(
+              broker: capabilityRuntime.broker,
+              cardContext: capabilityRuntime.context,
+            ).handle,
     );
     return WorkspaceCard.code(
       instance: instance,
@@ -69,6 +83,8 @@ class InstalledWorkspaceCardFactory {
         entrypoint: '$prefix/${artifact.definition.entrypoint}',
       ),
       persistedState: database.readState(instance.stateNamespace),
+      capabilityBroker: capabilityRuntime?.broker,
+      cardContext: capabilityRuntime?.context,
     );
   }
 }

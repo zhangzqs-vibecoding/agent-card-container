@@ -1,4 +1,6 @@
 import 'package:agent_card_desktop/src/agent_studio/agent_studio_controller.dart';
+import 'package:agent_card_desktop/src/capabilities/permission_prompt_host.dart';
+import 'package:agent_card_desktop/src/capabilities/permission_request_controller.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_screen.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
@@ -16,6 +18,7 @@ class AgentCardApp extends StatelessWidget {
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
+    this.permissionRequests,
   });
 
   final int? runtimePort;
@@ -26,6 +29,7 @@ class AgentCardApp extends StatelessWidget {
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
+  final PermissionRequestController? permissionRequests;
 
   @override
   Widget build(BuildContext context) {
@@ -35,17 +39,25 @@ class AgentCardApp extends StatelessWidget {
       themeMode: ThemeMode.dark,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
-      home: WorkspaceScreen(
-        runtimePort: runtimePort,
-        workspaceCards: workspaceCards,
-        agentStudioController: agentStudioController,
-        workspaceController: workspaceController,
-        cardCatalogController: cardCatalogController,
-        onNativeCardStateChanged: onNativeCardStateChanged,
-        onDetachCard: onDetachCard,
-        onMoveCardToOverlay: onMoveCardToOverlay,
-      ),
+      home: _home(),
     );
+  }
+
+  Widget _home() {
+    final workspace = WorkspaceScreen(
+      runtimePort: runtimePort,
+      workspaceCards: workspaceCards,
+      agentStudioController: agentStudioController,
+      workspaceController: workspaceController,
+      cardCatalogController: cardCatalogController,
+      onNativeCardStateChanged: onNativeCardStateChanged,
+      onDetachCard: onDetachCard,
+      onMoveCardToOverlay: onMoveCardToOverlay,
+    );
+    final permissions = permissionRequests;
+    return permissions == null
+        ? workspace
+        : PermissionPromptHost(controller: permissions, child: workspace);
   }
 
   ThemeData _theme(Brightness brightness) {

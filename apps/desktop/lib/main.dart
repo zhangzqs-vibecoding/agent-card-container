@@ -28,6 +28,7 @@ Future<void> main() async {
             monitorId: 'primary',
             placement: placement,
           ),
+      permissionRequests: desktopRuntime.permissionRequests,
     ),
   );
 }

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:agent_card_desktop/src/artifacts/artifact_installer.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
+import 'package:agent_card_desktop/src/capabilities/capability.dart';
+import 'package:agent_card_desktop/src/capabilities/capability_broker.dart';
 import 'package:agent_card_desktop/src/contracts/card_definition.dart';
 import 'package:agent_card_desktop/src/runtime/local_runtime_server.dart';
 import 'package:agent_card_desktop/src/storage/local_database.dart';
@@ -49,12 +51,25 @@ void main() {
     final factory = InstalledWorkspaceCardFactory(
       runtimeServer: server,
       database: database,
+      capabilityRuntimeFactory: (instance, definition) {
+        return (
+          broker: CapabilityBroker(),
+          context: CardContext(
+            instanceId: instance.instanceId,
+            cardId: instance.cardId,
+            versionId: instance.versionId,
+            declaredCapabilities: definition.capabilities.toSet(),
+          ),
+        );
+      },
     );
 
     final card = factory.create(artifact, instance);
 
     expect(card.codeCard, isNotNull);
     expect(card.nativeSpec, isNull);
+    expect(card.capabilityBroker, isNotNull);
+    expect(card.cardContext?.instanceId, 'instance-1');
     expect(
       card.codeCard?.entrypoint,
       '/bundle/content-hash/payload/web/index.html',

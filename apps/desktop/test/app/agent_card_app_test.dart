@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
+import 'package:agent_card_desktop/src/capabilities/capability.dart';
+import 'package:agent_card_desktop/src/capabilities/capability_broker.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_api_client.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
@@ -192,6 +194,85 @@ void main() {
 
     expect(actions, ['detach:instance-1']);
     expect(find.text('专注时间'), findsNothing);
+  });
+
+  testWidgets('NativeCard invokes host abilities through its attached broker', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final broker = CapabilityBroker()
+      ..register('system.metrics.get', (_, _) async => 'ready')
+      ..replaceGrants({
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'version-1',
+          capability: 'system.metrics.read',
+        ),
+      });
+    final context = CardContext(
+      instanceId: 'instance-1',
+      cardId: 'card-1',
+      versionId: 'version-1',
+      declaredCapabilities: const {'system.metrics.read'},
+    );
+    final spec = NativeCardSpec.fromJson({
+      'schemaVersion': 1,
+      'initialState': {'result': 'pending'},
+      'root': {
+        'id': 'root',
+        'type': 'Column',
+        'children': [
+          {
+            'id': 'result',
+            'type': 'Text',
+            'props': {
+              'text': {'path': 'state.result'},
+            },
+          },
+          {
+            'id': 'load',
+            'type': 'Button',
+            'props': {'label': '读取指标'},
+            'events': {
+              'onPressed': [
+                {
+                  'type': 'capability.invoke',
+                  'method': 'system.metrics.get',
+                  'path': 'result',
+                },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(
+      AgentCardApp(
+        workspaceCards: [
+          WorkspaceCard(
+            instance: const CardInstance(
+              instanceId: 'instance-1',
+              cardId: 'card-1',
+              versionId: 'version-1',
+              surfaceId: 'workspace-main',
+              placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+              stateNamespace: 'state-1',
+              status: CardInstanceStatus.active,
+            ),
+            spec: spec,
+            capabilityBroker: broker,
+            cardContext: context,
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('读取指标'));
+    await tester.pump();
+
+    expect(find.text('ready'), findsOneWidget);
   });
 
   testWidgets('adds an installed card to the live workspace', (tester) async {

@@ -1,4 +1,6 @@
 import '../cards/card_instance.dart';
+import '../capabilities/capability.dart';
+import '../capabilities/capability_broker.dart';
 import '../native_card/native_card_spec.dart';
 import '../runtime/runtime_session.dart';
 
@@ -14,6 +16,8 @@ class WorkspaceCard {
     required this.instance,
     required NativeCardSpec spec,
     this.persistedState = const {},
+    this.capabilityBroker,
+    this.cardContext,
   }) : nativeSpec = spec,
        codeCard = null;
 
@@ -21,12 +25,16 @@ class WorkspaceCard {
     required this.instance,
     required this.codeCard,
     this.persistedState = const {},
+    this.capabilityBroker,
+    this.cardContext,
   }) : nativeSpec = null;
 
   final CardInstance instance;
   final NativeCardSpec? nativeSpec;
   final CodeCardDescriptor? codeCard;
   final Map<String, Object?> persistedState;
+  final CapabilityBroker? capabilityBroker;
+  final CardContext? cardContext;
 
   NativeCardSpec get spec {
     final value = nativeSpec;

@@ -6,7 +6,9 @@ list(APPEND FLUTTER_PLUGIN_LIST
   desktop_multi_window
   flutter_inappwebview_windows
   hotkey_manager_windows
+  local_notifier
   screen_retriever_windows
+  url_launcher_windows
   window_manager
 )
 

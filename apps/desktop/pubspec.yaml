@@ -37,7 +37,9 @@ dependencies:
   desktop_multi_window: ^0.3.0
   flutter_inappwebview: ^6.1.5
   hotkey_manager: ^0.2.3
+  local_notifier: ^0.1.6
   screen_retriever: ^0.2.2
+  url_launcher: ^6.3.2
   window_manager: ^0.5.2
 
 dev_dependencies:
