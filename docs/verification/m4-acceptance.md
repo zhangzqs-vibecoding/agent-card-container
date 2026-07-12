@@ -35,6 +35,10 @@ commit.
 | GitHub workflow policy | `dart tooling/security/validate-workflows_test.dart` and `actionlint` | PASS | Four workflows use immutable action SHAs, bounded permissions/timeouts, PR secret isolation and verified Windows uploads |
 | Windows portable-package logic | `pwsh packaging/windows/test-portable-package.ps1` in the official PowerShell container | PASS | Valid archive round trip passed; missing DLL/README, hidden `.env` and traversal entries were rejected |
 | GitHub hosted platform execution | GitHub Actions after public repository push | NOT RUN | Requires the remote repository and hosted Windows/macOS runners |
+| Desktop cloud-settings repository and secure-source logic | `cd apps/desktop && flutter test test/cloud/cloud_settings_repository_test.dart test/cloud/cloud_settings_service_test.dart` | PASS | Non-secret atomic JSON, strict URL/key validation, environment precedence, secure-token failures and rollback covered |
+| Desktop cloud-settings UI and restart | `cd apps/desktop && flutter test test/cloud/cloud_settings_controller_test.dart test/app/agent_card_app_test.dart test/adapters/application_restarter_test.dart` | PASS | Settings form, authenticated test/save, no token echo, restart-required state and launch-before-shutdown covered |
+| Dedicated cloud test host | systemd status plus Python HTTP assertions on Ubuntu 24.04 x86_64 | PASS | Static binary hash matched upload; health, authenticated catalog, invalid-token rejection and restart persistence passed on `192.168.242.105` |
+| Flutter-to-remote cloud integration | SSH loopback tunnel plus opt-in `cloud_settings_live_test.dart` | PASS | Production `CloudApiClient.testConnection()` reached remote health and authenticated catalog; temporary local credential file was removed afterward |
 
 ## M4 product-hardening requirements
 
