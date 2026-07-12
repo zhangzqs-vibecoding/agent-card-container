@@ -246,7 +246,14 @@ class LocalRuntimeServer {
         method,
         params,
       ).timeout(_invocationTimeout);
-      await _writeRpcResult(request, id, result);
+      await _writeRpcResult(
+        request,
+        id,
+        result,
+        maxBytes: method == 'network.fetch'
+            ? 6 * 1024 * 1024
+            : _maxResponseBytes,
+      );
     } on _InvalidParams catch (error) {
       await _writeRpcError(request, id, -32602, error.message);
     } on _UnknownMethod {
@@ -403,10 +410,11 @@ class LocalRuntimeServer {
   Future<void> _writeRpcResult(
     HttpRequest request,
     Object? id,
-    Object? result,
-  ) async {
+    Object? result, {
+    required int maxBytes,
+  }) async {
     final body = {'jsonrpc': '2.0', 'id': id, 'result': result};
-    if (utf8.encode(jsonEncode(body)).length > _maxResponseBytes) {
+    if (utf8.encode(jsonEncode(body)).length > maxBytes) {
       await _writeRpcError(
         request,
         id,

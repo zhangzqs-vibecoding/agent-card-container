@@ -83,6 +83,40 @@ void main() {
       );
     });
 
+    test(
+      'rejects network IP literals even when listed in the manifest',
+      () async {
+        final broker = CapabilityBroker();
+        broker.register('network.fetch', (_, _) async => {'status': 200});
+        broker.replaceGrants({
+          const PermissionGrant(
+            instanceId: 'instance-1',
+            versionId: 'version-1',
+            capability: 'network.fetch',
+            domains: {'93.184.216.34'},
+          ),
+        });
+
+        await expectLater(
+          () => broker.invoke(
+            _context(
+              declared: const {'network.fetch'},
+              networkDomains: const {'93.184.216.34'},
+            ),
+            'network.fetch',
+            {'url': 'https://93.184.216.34/data'},
+          ),
+          throwsA(
+            isA<CapabilityException>().having(
+              (error) => error.code,
+              'code',
+              CapabilityErrorCode.permissionDenied,
+            ),
+          ),
+        );
+      },
+    );
+
     test('requires a user gesture for clipboard reads', () async {
       final broker = CapabilityBroker();
       broker.register('clipboard.read', (_, _) async => {'text': 'secret'});

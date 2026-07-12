@@ -116,5 +116,12 @@ void main() {
     expect(installed.workspaceCard?.spec.initialState['title'], '专注时间');
     expect(database.listInstances().single.instanceId, 'instance-1');
     expect(database.installation('ver_pomodoro_1')?.keyId, artifact.keyId);
+    expect(
+      database
+          .grantsForInstance('instance-1')
+          .map((grant) => grant.capability)
+          .toSet(),
+      containsAll({'storage', 'window.manageSelf'}),
+    );
   });
 }

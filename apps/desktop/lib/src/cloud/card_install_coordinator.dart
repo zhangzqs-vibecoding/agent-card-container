@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import '../artifacts/artifact_installer.dart';
 import '../cards/card_instance.dart';
+import '../capabilities/capability.dart';
 import '../contracts/card_definition.dart';
 import '../native_card/native_card_spec.dart';
 import '../storage/local_database.dart';
@@ -153,6 +154,15 @@ class CardInstallCoordinator {
         type: SurfaceType.workspace,
       ),
       instance: instance,
+      grants: {
+        for (final capability in const {'storage', 'window.manageSelf'})
+          if (installed.definition.hasCapability(capability))
+            PermissionGrant(
+              instanceId: instance.instanceId,
+              versionId: instance.versionId,
+              capability: capability,
+            ),
+      },
     );
 
     WorkspaceCard? workspaceCard;

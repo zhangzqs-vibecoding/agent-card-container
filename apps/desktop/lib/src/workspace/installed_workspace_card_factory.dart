@@ -10,14 +10,22 @@ import '../storage/database_runtime_storage.dart';
 import '../storage/local_database.dart';
 import 'workspace_card.dart';
 
+typedef RuntimeRpcHandlerFactory =
+    RuntimeRpcHandler? Function(
+      CardInstance instance,
+      CardDefinition definition,
+    );
+
 class InstalledWorkspaceCardFactory {
   const InstalledWorkspaceCardFactory({
     required this.runtimeServer,
     required this.database,
+    this.rpcHandlerFactory,
   });
 
   final LocalRuntimeServer runtimeServer;
   final LocalDatabase database;
+  final RuntimeRpcHandlerFactory? rpcHandlerFactory;
 
   WorkspaceCard create(InstalledArtifact artifact, CardInstance instance) {
     if (artifact.definition.cardId != instance.cardId ||
@@ -52,6 +60,7 @@ class InstalledWorkspaceCardFactory {
       resources: resources,
       declaredCapabilities: artifact.definition.capabilities.toSet(),
       storage: DatabaseRuntimeStorage(database, instance.stateNamespace),
+      rpcHandler: rpcHandlerFactory?.call(instance, artifact.definition),
     );
     return WorkspaceCard.code(
       instance: instance,

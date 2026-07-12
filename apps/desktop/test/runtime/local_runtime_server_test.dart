@@ -480,6 +480,30 @@ void main() {
         });
       },
     );
+
+    test('allows the documented network.fetch response budget', () async {
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+        declaredCapabilities: const {'network.fetch'},
+        rpcHandler: (_, _, _) async => {
+          'status': 200,
+          'body': List.filled(2 * 1024 * 1024, 'x').join(),
+        },
+      );
+
+      final response = await _rpc(
+        server,
+        session,
+        id: 1,
+        method: 'network.fetch',
+        params: {'url': 'https://api.example.test/data'},
+      );
+
+      expect((response['result'] as Map<String, Object?>)['status'], 200);
+    });
   });
 }
 

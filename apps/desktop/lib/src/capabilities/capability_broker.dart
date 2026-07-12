@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'capability.dart';
 
 typedef CapabilityHandler =
@@ -84,6 +86,7 @@ class CapabilityBroker {
     final host = uri.host.toLowerCase();
     if (!context.networkDomains.contains(host) ||
         !grant.domains.contains(host) ||
+        InternetAddress.tryParse(host) != null ||
         _isLocalHost(host)) {
       throw const CapabilityException(
         CapabilityErrorCode.permissionDenied,

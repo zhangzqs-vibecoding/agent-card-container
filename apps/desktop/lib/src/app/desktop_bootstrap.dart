@@ -6,10 +6,14 @@ import 'dart:typed_data';
 import '../agent_studio/agent_studio_controller.dart';
 import '../artifacts/artifact_crypto.dart';
 import '../artifacts/artifact_installer.dart';
+import '../capabilities/capability.dart';
+import '../capabilities/capability_broker.dart';
+import '../capabilities/secure_network_fetcher.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
 import '../runtime/local_runtime_server.dart';
+import '../runtime/runtime_capability_adapter.dart';
 import '../storage/local_database.dart';
 import '../workspace/workspace_card.dart';
 import '../workspace/workspace_controller.dart';
@@ -80,6 +84,21 @@ abstract final class DesktopBootstrap {
       final workspaceCardFactory = InstalledWorkspaceCardFactory(
         runtimeServer: runtimeServer,
         database: database,
+        rpcHandlerFactory: (instance, definition) {
+          final broker = CapabilityBroker()
+            ..register('network.fetch', SecureNetworkFetcher().handle)
+            ..replaceGrants(database.grantsForInstance(instance.instanceId));
+          return RuntimeCapabilityAdapter(
+            broker: broker,
+            cardContext: CardContext(
+              instanceId: instance.instanceId,
+              cardId: instance.cardId,
+              versionId: instance.versionId,
+              declaredCapabilities: definition.capabilities.toSet(),
+              networkDomains: definition.networkPolicy.domains.toSet(),
+            ),
+          ).handle;
+        },
       );
       for (final instance in database.listInstances()) {
         if (instance.surfaceId != 'workspace-main' ||

@@ -84,11 +84,15 @@ class LocalDatabase {
     required StoredInstallation installation,
     required CardSurface surface,
     required CardInstance instance,
+    Iterable<PermissionGrant> grants = const [],
   }) {
     _connection.transaction(() {
       registerInstallation(installation);
       upsertSurface(surface);
       upsertInstance(instance);
+      for (final grant in grants) {
+        upsertGrant(grant);
+      }
     });
   }
 
