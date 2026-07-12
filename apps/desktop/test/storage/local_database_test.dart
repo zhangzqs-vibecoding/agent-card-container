@@ -20,8 +20,8 @@ void main() {
       database.close();
     });
 
-    test('migrates a new database to schema version three', () {
-      expect(database.schemaVersion, 3);
+    test('migrates a new database to schema version four', () {
+      expect(database.schemaVersion, 4);
     });
 
     test('restores the immutable CardDefinition installation index', () {
@@ -168,6 +168,23 @@ void main() {
       database.replaceState('state-1', {'kept': 2, 'added': 'value'});
 
       expect(database.readState('state-1'), {'added': 'value', 'kept': 2});
+    });
+
+    test('persists launch failures and quarantines one card instance', () {
+      database.upsertInstallation(_installation('version-1'));
+      database.upsertSurface(_workspace());
+      database.upsertInstance(_instance());
+
+      expect(database.recordLaunchFailure('instance-1'), 1);
+      expect(database.recordLaunchFailure('instance-1'), 2);
+      expect(database.launchFailureCount('instance-1'), 2);
+      database.quarantineInstance('instance-1');
+      expect(
+        database.listInstances().single.status,
+        CardInstanceStatus.quarantined,
+      );
+      database.clearLaunchFailures('instance-1');
+      expect(database.launchFailureCount('instance-1'), 0);
     });
   });
 }

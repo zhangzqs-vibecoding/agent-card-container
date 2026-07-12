@@ -117,6 +117,25 @@ class SurfaceCoordinator {
       await onOverlayDisplayRequested!();
       return const {'displayMode': true};
     }
+    if (message.payload['event'] == 'codeCardLaunchSucceeded') {
+      if (message.payload.keys.length != 1) {
+        throw const FormatException('invalid CodeCard launch event');
+      }
+      database.clearLaunchFailures(instance.instanceId);
+      return const {'failureCount': 0, 'quarantined': false};
+    }
+    if (message.payload['event'] == 'codeCardLaunchFailed') {
+      if (message.payload.keys.length != 1) {
+        throw const FormatException('invalid CodeCard launch event');
+      }
+      final failures = database.recordLaunchFailure(instance.instanceId);
+      final quarantined = failures >= 3;
+      if (quarantined) {
+        database.quarantineInstance(instance.instanceId);
+        _notifyMoved(instance.instanceId);
+      }
+      return {'failureCount': failures, 'quarantined': quarantined};
+    }
     if (message.payload['event'] != 'windowCloseRequested') {
       throw const FormatException('unsupported surface host event');
     }

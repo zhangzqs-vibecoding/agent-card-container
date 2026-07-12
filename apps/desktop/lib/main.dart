@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
 import 'package:agent_card_desktop/src/app/desktop_bootstrap.dart';
 import 'package:flutter/widgets.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'src/surfaces/surface_window_launcher.dart';
 
 late final DesktopRuntime desktopRuntime;
+late final AppLifecycleListener desktopLifecycle;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,6 +15,12 @@ Future<void> main() async {
     return;
   }
   desktopRuntime = await DesktopBootstrap.start();
+  desktopLifecycle = AppLifecycleListener(
+    onExitRequested: () async {
+      await desktopRuntime.close();
+      return AppExitResponse.exit;
+    },
+  );
   await desktopRuntime.initializePlatformSurfaces();
   runApp(
     AgentCardApp(

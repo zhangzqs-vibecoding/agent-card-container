@@ -293,6 +293,7 @@ class SurfaceWindowApp extends StatelessWidget {
     this.onEnterOverlayDisplayMode,
     this.onCapabilityInvocation,
     this.onStateChanged,
+    this.onCodeCardLaunch,
     super.key,
   });
 
@@ -306,6 +307,8 @@ class SurfaceWindowApp extends StatelessWidget {
   onCapabilityInvocation;
   final Future<void> Function(String instanceId, Map<String, Object?> state)?
   onStateChanged;
+  final Future<void> Function(String instanceId, bool succeeded)?
+  onCodeCardLaunch;
 
   @override
   Widget build(BuildContext context) {
@@ -343,6 +346,7 @@ class SurfaceWindowApp extends StatelessWidget {
                           snapshot: card,
                           capabilityInvocation: onCapabilityInvocation,
                           onStateChanged: onStateChanged,
+                          onCodeCardLaunch: onCodeCardLaunch,
                         ),
                       ),
                     ),
@@ -369,6 +373,7 @@ class _SurfaceCardView extends StatefulWidget {
     required this.snapshot,
     this.capabilityInvocation,
     this.onStateChanged,
+    this.onCodeCardLaunch,
   });
 
   final SurfaceCardSnapshot snapshot;
@@ -380,6 +385,8 @@ class _SurfaceCardView extends StatefulWidget {
   capabilityInvocation;
   final Future<void> Function(String instanceId, Map<String, Object?> state)?
   onStateChanged;
+  final Future<void> Function(String instanceId, bool succeeded)?
+  onCodeCardLaunch;
 
   @override
   State<_SurfaceCardView> createState() => _SurfaceCardViewState();
@@ -461,7 +468,9 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
       if (mounted && identical(port, _webView)) {
         setState(() => _codeCardMounted = true);
       }
+      await widget.onCodeCardLaunch?.call(snapshot.instanceId, true);
     } catch (error) {
+      await widget.onCodeCardLaunch?.call(snapshot.instanceId, false);
       if (mounted && identical(port, _webView)) {
         setState(() => _codeCardError = error);
       }

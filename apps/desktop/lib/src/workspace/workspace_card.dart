@@ -5,10 +5,19 @@ import '../native_card/native_card_spec.dart';
 import '../runtime/runtime_session.dart';
 
 class CodeCardDescriptor {
-  const CodeCardDescriptor({required this.session, required this.entrypoint});
+  const CodeCardDescriptor({
+    required this.session,
+    required this.entrypoint,
+    this.onLaunchFailure,
+    this.onLaunchSuccess,
+    this.onQuarantine,
+  });
 
   final RuntimeSession session;
   final String entrypoint;
+  final Future<int> Function()? onLaunchFailure;
+  final Future<void> Function()? onLaunchSuccess;
+  final Future<void> Function()? onQuarantine;
 }
 
 class WorkspaceCard {

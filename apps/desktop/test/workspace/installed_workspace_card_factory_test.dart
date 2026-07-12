@@ -48,6 +48,25 @@ void main() {
       stateNamespace: 'state-1',
       status: CardInstanceStatus.active,
     );
+    database.registerInstalledInstance(
+      installation: StoredInstallation(
+        installation: CardInstallation(
+          cardId: definition.cardId,
+          versionId: definition.versionId,
+          contentHash: 'content-hash',
+          runtime: definition.runtime,
+          installedAt: DateTime.utc(2026, 7, 12),
+          verified: true,
+        ),
+        definition: definition,
+        keyId: 'key-1',
+      ),
+      surface: const CardSurface(
+        id: 'workspace-main',
+        type: SurfaceType.workspace,
+      ),
+      instance: instance,
+    );
     final factory = InstalledWorkspaceCardFactory(
       runtimeServer: server,
       database: database,
@@ -78,6 +97,14 @@ void main() {
     final response = await _get(session, card.codeCard!.entrypoint);
     expect(response.statusCode, HttpStatus.ok);
     expect(await utf8.decoder.bind(response).join(), contains('Offline'));
+    expect(await card.codeCard!.onLaunchFailure!(), 1);
+    await card.codeCard!.onLaunchSuccess!();
+    expect(database.launchFailureCount('instance-1'), 0);
+    await card.codeCard!.onQuarantine!();
+    expect(
+      database.listInstances().single.status,
+      CardInstanceStatus.quarantined,
+    );
   });
 }
 

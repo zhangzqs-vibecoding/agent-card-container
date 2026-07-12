@@ -92,6 +92,8 @@ class CodeCardHost {
     required this.entrypoint,
     required this.webView,
     this.diagnosticMode = false,
+    this.onLaunchFailure,
+    this.onLaunchSuccess,
     this.onQuarantine,
   });
 
@@ -99,6 +101,8 @@ class CodeCardHost {
   final String entrypoint;
   final WebViewPort webView;
   final bool diagnosticMode;
+  final Future<int> Function()? onLaunchFailure;
+  final Future<void> Function()? onLaunchSuccess;
   final Future<void> Function()? onQuarantine;
 
   CodeCardHostState _state = CodeCardHostState.created;
@@ -128,9 +132,11 @@ class CodeCardHost {
     );
     try {
       await webView.mount(configuration, initialUri);
+      _launchFailures = 0;
+      await onLaunchSuccess?.call();
       _state = CodeCardHostState.mounted;
     } catch (_) {
-      _state = CodeCardHostState.error;
+      await _recordLaunchFailure();
       rethrow;
     }
   }
@@ -160,8 +166,13 @@ class CodeCardHost {
         _state == CodeCardHostState.quarantined) {
       return;
     }
-    _launchFailures++;
+    await _recordLaunchFailure();
+  }
+
+  Future<void> _recordLaunchFailure() async {
+    _launchFailures = await onLaunchFailure?.call() ?? _launchFailures + 1;
     if (_launchFailures < 3) {
+      _state = CodeCardHostState.error;
       return;
     }
     _state = CodeCardHostState.quarantined;

@@ -81,6 +81,12 @@ class InstalledWorkspaceCardFactory {
       codeCard: CodeCardDescriptor(
         session: session,
         entrypoint: '$prefix/${artifact.definition.entrypoint}',
+        onLaunchFailure: () async =>
+            database.recordLaunchFailure(instance.instanceId),
+        onLaunchSuccess: () async =>
+            database.clearLaunchFailures(instance.instanceId),
+        onQuarantine: () async =>
+            database.quarantineInstance(instance.instanceId),
       ),
       persistedState: database.readState(instance.stateNamespace),
       capabilityBroker: capabilityRuntime?.broker,

@@ -22,6 +22,7 @@ import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
 import '../diagnostics/diagnostic_bundle.dart';
 import '../runtime/local_runtime_server.dart';
+import '../recovery/startup_recovery.dart';
 import '../storage/local_database.dart';
 import '../surfaces/surface_coordinator.dart';
 import '../surfaces/overlay_mode_controller.dart';
@@ -50,6 +51,7 @@ class DesktopRuntime {
     required this.overlayModeController,
     required this.displayMonitor,
     required this.permissionRequests,
+    required this.startupRecovery,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -65,6 +67,7 @@ class DesktopRuntime {
   final OverlayModeController overlayModeController;
   final ScreenRetrieverDisplayMonitor displayMonitor;
   final PermissionRequestController permissionRequests;
+  final StartupRecovery startupRecovery;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -120,6 +123,7 @@ class DesktopRuntime {
     await overlayModeController.dispose();
     await runtimeServer.close();
     database.close();
+    startupRecovery.markClean();
   }
 }
 
@@ -131,6 +135,9 @@ abstract final class DesktopBootstrap {
     final processEnvironment = environment ?? Platform.environment;
     final root = appDataDirectory ?? AppDataLocator.resolve();
     root.createSync(recursive: true);
+    final startupRecovery = StartupRecovery.start(
+      File(_join(root.path, 'run.marker')),
+    );
     final database = LocalDatabase.open(_join(root.path, 'agent-card.sqlite3'));
     LocalRuntimeServer? runtimeServer;
     try {
@@ -148,6 +155,14 @@ abstract final class DesktopBootstrap {
       };
       final cards = <WorkspaceCard>[];
       final errors = <RecoveryError>[];
+      if (startupRecovery.previousRunUnclean) {
+        errors.add(
+          const RecoveryError(
+            instanceId: 'desktop-runtime',
+            message: 'previous desktop run did not shut down cleanly',
+          ),
+        );
+      }
       late SurfaceCoordinator surfaceCoordinator;
       late WindowCapabilityHandlers windowCapabilities;
       final workspaceCardFactory = InstalledWorkspaceCardFactory(
@@ -329,6 +344,7 @@ abstract final class DesktopBootstrap {
         overlayModeController: overlayModeController,
         displayMonitor: displayMonitor,
         permissionRequests: permissionRequests,
+        startupRecovery: startupRecovery,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,
@@ -336,6 +352,7 @@ abstract final class DesktopBootstrap {
     } catch (_) {
       await runtimeServer?.close();
       database.close();
+      startupRecovery.markClean();
       rethrow;
     }
   }

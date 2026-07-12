@@ -67,51 +67,49 @@ git add apps/desktop
 git commit -m "feat: export redacted diagnostics"
 ```
 
-### Task 2: Crash recovery and safe-mode startup
+### Task 2: Crash recovery and persistent launch quarantine
 
 **Files:**
 - Create: `apps/desktop/lib/src/recovery/startup_recovery.dart`
 - Create: `apps/desktop/test/recovery/startup_recovery_test.dart`
 - Modify: `apps/desktop/lib/src/app/desktop_bootstrap.dart`
 - Modify: `apps/desktop/lib/src/code_card/code_card_host.dart`
+- Modify: `apps/desktop/lib/src/storage/local_database.dart`
+- Modify: `apps/desktop/lib/src/surfaces/surface_coordinator.dart`
 
-- [ ] **Step 1: Write failing tests for unclean shutdown and quarantine**
+- [x] **Step 1: Write failing tests for unclean shutdown and quarantine**
 
 ```dart
-test('an unclean previous run enters safe mode without mounting CodeCards', () {
-  final recovery = StartupRecovery.inMemory(previousRunClean: false);
-  expect(recovery.safeMode, isTrue);
-  expect(recovery.mayMountCodeCard('instance-1'), isFalse);
+test('an unclean previous run is reported without blocking recovery', () {
+  final recovery = StartupRecovery.start(markerFile);
+  expect(recovery.previousRunUnclean, isTrue);
 });
 ```
 
-- [ ] **Step 2: Run the recovery test and confirm it fails**
+- [x] **Step 2: Run the recovery test and confirm it fails**
 
 Run: `cd apps/desktop && flutter test test/recovery/startup_recovery_test.dart`
 
 Expected: FAIL because startup recovery is not implemented.
 
-- [ ] **Step 3: Implement a durable run marker and per-card failure counters**
+- [x] **Step 3: Implement a durable run marker and per-card failure counters**
 
 ```dart
-abstract interface class RecoveryStore {
-  bool get previousRunClean;
-  void markRunStarted();
-  void markRunClean();
-  int recordLaunchFailure(String instanceId);
-  void clearLaunchFailures(String instanceId);
+class StartupRecovery {
+  final bool previousRunUnclean;
+  void markClean() {}
 }
 ```
 
-Bootstrap must write the dirty marker before mounting cards and write clean only during orderly shutdown. Three consecutive CodeCard mount failures must quarantine that instance; an unclean previous run starts with CodeCards suspended until the user explicitly exits safe mode.
+Bootstrap writes the running marker before mounting cards and removes it only during orderly shutdown. SQLite schema v4 persists per-instance launch failures. Main-workspace and child-surface CodeCards clear the counter on success and quarantine that instance after three consecutive mount failures. An unclean previous run is surfaced in redacted recovery diagnostics and does not prevent unaffected cards from restoring.
 
-- [ ] **Step 4: Run recovery and existing startup tests**
+- [x] **Step 4: Run recovery and existing startup tests**
 
 Run: `cd apps/desktop && flutter test test/recovery test/app/desktop_bootstrap_test.dart test/code_card/code_card_host_test.dart && flutter analyze`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop

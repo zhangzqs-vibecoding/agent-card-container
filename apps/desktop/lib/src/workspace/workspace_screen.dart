@@ -764,6 +764,9 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
       session: descriptor.session,
       entrypoint: descriptor.entrypoint,
       webView: port,
+      onLaunchFailure: descriptor.onLaunchFailure,
+      onLaunchSuccess: descriptor.onLaunchSuccess,
+      onQuarantine: descriptor.onQuarantine,
     );
     _webViewPort = port;
     _codeCardHost = host;

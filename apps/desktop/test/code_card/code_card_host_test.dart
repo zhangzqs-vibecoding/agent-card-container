@@ -94,6 +94,41 @@ void main() {
     expect(quarantined, isTrue);
     expect(host.state, CodeCardHostState.quarantined);
   });
+
+  test(
+    'persists automatic mount failures and clears them on success',
+    () async {
+      var failures = 2;
+      var successes = 0;
+      var quarantined = false;
+      final failing = CodeCardHost(
+        session: _session(),
+        entrypoint: '/bundle/hash/index.html',
+        webView: _FakeWebViewPort(
+          const WebViewCapabilities.secure(),
+          mountError: StateError('renderer crashed'),
+        ),
+        onLaunchFailure: () async => ++failures,
+        onLaunchSuccess: () async => successes++,
+        onQuarantine: () async => quarantined = true,
+      );
+
+      await expectLater(failing.mount(), throwsStateError);
+      expect(failures, 3);
+      expect(quarantined, isTrue);
+      expect(failing.state, CodeCardHostState.quarantined);
+
+      final successful = CodeCardHost(
+        session: _session(),
+        entrypoint: '/bundle/hash/index.html',
+        webView: _FakeWebViewPort(const WebViewCapabilities.secure()),
+        onLaunchFailure: () async => ++failures,
+        onLaunchSuccess: () async => successes++,
+      );
+      await successful.mount();
+      expect(successes, 1);
+    },
+  );
 }
 
 RuntimeSession _session() {
@@ -109,9 +144,10 @@ RuntimeSession _session() {
 }
 
 class _FakeWebViewPort implements WebViewPort {
-  _FakeWebViewPort(this.capabilities);
+  _FakeWebViewPort(this.capabilities, {this.mountError});
 
   final WebViewCapabilities capabilities;
+  final Object? mountError;
   final List<String> calls = [];
   WebViewConfiguration? configuration;
   Uri? initialUri;
@@ -121,6 +157,9 @@ class _FakeWebViewPort implements WebViewPort {
 
   @override
   Future<void> mount(WebViewConfiguration configuration, Uri initialUri) async {
+    if (mountError case final error?) {
+      throw error;
+    }
     this.configuration = configuration;
     this.initialUri = initialUri;
     calls.add('mount');

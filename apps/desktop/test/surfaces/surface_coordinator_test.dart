@@ -233,6 +233,53 @@ void main() {
     expect(displayModeRequests, 1);
   });
 
+  test(
+    'persists child CodeCard launch failures and quarantines the third',
+    () async {
+      await coordinator.detach(
+        'instance-1',
+        const CardPlacement(x: 40, y: 50, width: 480, height: 320),
+      );
+
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        final result =
+            await coordinator.handleBridgeMessage(
+                  SurfaceBridgeMessage.fromJson({
+                    'type': 'hostEvent',
+                    'windowId': 'window-1',
+                    'instanceId': 'instance-1',
+                    'payload': {'event': 'codeCardLaunchFailed'},
+                  }),
+                )
+                as Map<String, Object?>;
+        expect(result['failureCount'], attempt);
+      }
+
+      expect(
+        database.listInstances().single.status,
+        CardInstanceStatus.quarantined,
+      );
+      expect(moved.last.status, CardInstanceStatus.quarantined);
+    },
+  );
+
+  test(
+    'clears child CodeCard launch failures after a successful mount',
+    () async {
+      database.recordLaunchFailure('instance-1');
+      await coordinator.handleBridgeMessage(
+        SurfaceBridgeMessage.fromJson({
+          'type': 'hostEvent',
+          'windowId': 'window-1',
+          'instanceId': 'instance-1',
+          'payload': {'event': 'codeCardLaunchSucceeded'},
+        }),
+      );
+
+      expect(database.launchFailureCount('instance-1'), 0);
+    },
+  );
+
   test('persists detached window placement and last focus time', () async {
     await coordinator.detach(
       'instance-1',

@@ -354,6 +354,48 @@ class LocalDatabase {
     );
   }
 
+  int recordLaunchFailure(String instanceId) {
+    _connection.execute(
+      '''
+      INSERT INTO card_launch_failures (instance_id, failure_count)
+      VALUES (?, 1)
+      ON CONFLICT(instance_id) DO UPDATE SET
+        failure_count = failure_count + 1
+      ''',
+      [instanceId],
+    );
+    return launchFailureCount(instanceId);
+  }
+
+  int launchFailureCount(String instanceId) {
+    final rows = _connection.query(
+      'SELECT failure_count FROM card_launch_failures WHERE instance_id = ?',
+      [instanceId],
+    );
+    return rows.isEmpty ? 0 : rows.single['failure_count']! as int;
+  }
+
+  void clearLaunchFailures(String instanceId) {
+    _connection.execute(
+      'DELETE FROM card_launch_failures WHERE instance_id = ?',
+      [instanceId],
+    );
+  }
+
+  void quarantineInstance(String instanceId) {
+    final exists = _connection.query(
+      'SELECT 1 AS present FROM card_instances WHERE instance_id = ?',
+      [instanceId],
+    );
+    if (exists.isEmpty) {
+      throw StateError('card instance does not exist');
+    }
+    _connection.execute(
+      'UPDATE card_instances SET status = ? WHERE instance_id = ?',
+      [CardInstanceStatus.quarantined.name, instanceId],
+    );
+  }
+
   void upsertGrant(PermissionGrant grant) {
     final domains = grant.domains.toList()..sort();
     _connection.execute(
@@ -480,6 +522,18 @@ class LocalDatabase {
           'ALTER TABLE surfaces ADD COLUMN last_focused_at TEXT',
         );
         _connection.execute('PRAGMA user_version = 3');
+      });
+    }
+    if (schemaVersion < 4) {
+      _connection.transaction(() {
+        _connection.execute('''
+          CREATE TABLE card_launch_failures (
+            instance_id TEXT PRIMARY KEY REFERENCES card_instances(instance_id)
+              ON DELETE CASCADE,
+            failure_count INTEGER NOT NULL CHECK(failure_count > 0)
+          )
+        ''');
+        _connection.execute('PRAGMA user_version = 4');
       });
     }
   }

@@ -137,6 +137,27 @@ void main() {
   });
 
   test(
+    'reports a previous unclean shutdown without blocking startup',
+    () async {
+      final root = Directory.systemTemp.createTempSync('agent-card-bootstrap-');
+      addTearDown(() => root.deleteSync(recursive: true));
+      File('${root.path}/run.marker').writeAsStringSync('running\n');
+
+      final runtime = await DesktopBootstrap.start(appDataDirectory: root);
+      addTearDown(runtime.close);
+
+      expect(runtime.runtimeServer.port, greaterThan(0));
+      expect(
+        runtime.recoveryErrors.map((error) => error.instanceId),
+        contains('desktop-runtime'),
+      );
+      expect(File('${root.path}/run.marker').existsSync(), isTrue);
+      await runtime.close();
+      expect(File('${root.path}/run.marker').existsSync(), isFalse);
+    },
+  );
+
+  test(
     'restores an offline CodeCard into an isolated runtime session',
     () async {
       final root = Directory.systemTemp.createTempSync('agent-card-bootstrap-');
