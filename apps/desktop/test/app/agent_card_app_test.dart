@@ -95,6 +95,51 @@ void main() {
     expect(find.textContaining('1 个实例'), findsOneWidget);
   });
 
+  testWidgets('persists NativeCard interactions with its state namespace', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final writes = <({String namespace, Map<String, Object?> state})>[];
+    final spec = NativeCardSpec.fromJson(
+      jsonDecode(
+            File(
+              '../../contracts/card/fixtures/pomodoro-native.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, Object?>,
+    );
+
+    await tester.pumpWidget(
+      AgentCardApp(
+        onNativeCardStateChanged: (namespace, state) {
+          writes.add((namespace: namespace, state: state));
+        },
+        workspaceCards: [
+          WorkspaceCard(
+            instance: const CardInstance(
+              instanceId: 'instance-1',
+              cardId: 'card-1',
+              versionId: 'version-1',
+              surfaceId: 'workspace-main',
+              placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+              stateNamespace: 'state-1',
+              status: CardInstanceStatus.active,
+            ),
+            spec: spec,
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.text('开始 / 暂停'));
+    await tester.pump(const Duration(milliseconds: 301));
+
+    expect(writes, hasLength(1));
+    expect(writes.single.namespace, 'state-1');
+    expect(writes.single.state['running'], isTrue);
+  });
+
   testWidgets('adds an installed card to the live workspace', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));

@@ -10,6 +10,10 @@ import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import 'workspace_card.dart';
 import 'workspace_controller.dart';
+import 'native_card_state_persistence.dart';
+
+typedef NativeCardStateChanged =
+    void Function(String namespace, Map<String, Object?> state);
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
@@ -19,6 +23,7 @@ class WorkspaceScreen extends StatefulWidget {
     this.agentStudioController,
     this.workspaceController,
     this.cardCatalogController,
+    this.onNativeCardStateChanged,
   });
 
   final int? runtimePort;
@@ -26,6 +31,7 @@ class WorkspaceScreen extends StatefulWidget {
   final AgentStudioController? agentStudioController;
   final WorkspaceController? workspaceController;
   final CardCatalogController? cardCatalogController;
+  final NativeCardStateChanged? onNativeCardStateChanged;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -115,6 +121,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         onOpenAgentPanel: () {
           setState(() => _agentPanelOpen = true);
         },
+        onNativeCardStateChanged: widget.onNativeCardStateChanged,
       ),
     );
   }
@@ -518,11 +525,13 @@ class _WorkspaceCanvas extends StatelessWidget {
     required this.cards,
     required this.agentPanelOpen,
     required this.onOpenAgentPanel,
+    this.onNativeCardStateChanged,
   });
 
   final List<WorkspaceCard> cards;
   final bool agentPanelOpen;
   final VoidCallback onOpenAgentPanel;
+  final NativeCardStateChanged? onNativeCardStateChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -643,6 +652,7 @@ class _WorkspaceCanvas extends StatelessWidget {
                 child: _WorkspaceCardView(
                   key: ValueKey(card.instance.instanceId),
                   card: card,
+                  onNativeCardStateChanged: onNativeCardStateChanged,
                 ),
               ),
             if (!agentPanelOpen)
@@ -664,9 +674,14 @@ class _WorkspaceCanvas extends StatelessWidget {
 }
 
 class _WorkspaceCardView extends StatefulWidget {
-  const _WorkspaceCardView({required this.card, super.key});
+  const _WorkspaceCardView({
+    required this.card,
+    this.onNativeCardStateChanged,
+    super.key,
+  });
 
   final WorkspaceCard card;
+  final NativeCardStateChanged? onNativeCardStateChanged;
 
   @override
   State<_WorkspaceCardView> createState() => _WorkspaceCardViewState();
@@ -674,6 +689,7 @@ class _WorkspaceCardView extends StatefulWidget {
 
 class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   NativeCardController? _nativeController;
+  NativeCardStatePersistence? _nativeStatePersistence;
   InAppWebViewPort? _webViewPort;
   CodeCardHost? _codeCardHost;
   Object? _codeCardError;
@@ -697,10 +713,17 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   void _createController() {
     final nativeSpec = widget.card.nativeSpec;
     if (nativeSpec != null) {
-      _nativeController = NativeCardController({
+      final controller = NativeCardController({
         ...nativeSpec.initialState,
         ...widget.card.persistedState,
       });
+      _nativeController = controller;
+      if (widget.onNativeCardStateChanged case final write?) {
+        _nativeStatePersistence = NativeCardStatePersistence(
+          controller: controller,
+          write: (state) => write(widget.card.instance.stateNamespace, state),
+        );
+      }
       return;
     }
     final descriptor = widget.card.codeCard!;
@@ -729,6 +752,8 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   }
 
   void _disposeRuntime() {
+    _nativeStatePersistence?.dispose();
+    _nativeStatePersistence = null;
     _nativeController?.dispose();
     _nativeController = null;
     final host = _codeCardHost;

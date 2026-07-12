@@ -248,6 +248,28 @@ class LocalDatabase {
     );
   }
 
+  void replaceState(String namespace, Map<String, Object?> state) {
+    _connection.execute('BEGIN IMMEDIATE');
+    try {
+      _connection.execute('DELETE FROM card_state WHERE namespace = ?', [
+        namespace,
+      ]);
+      for (final entry in state.entries) {
+        _connection.execute(
+          '''
+          INSERT INTO card_state (namespace, state_key, value_json)
+          VALUES (?, ?, ?)
+          ''',
+          [namespace, entry.key, jsonEncode(entry.value)],
+        );
+      }
+      _connection.execute('COMMIT');
+    } catch (_) {
+      _connection.execute('ROLLBACK');
+      rethrow;
+    }
+  }
+
   Map<String, Object?> readState(String namespace) {
     final rows = _connection.query(
       '''

@@ -13,6 +13,7 @@ class AgentCardApp extends StatelessWidget {
     this.agentStudioController,
     this.workspaceController,
     this.cardCatalogController,
+    this.onNativeCardStateChanged,
   });
 
   final int? runtimePort;
@@ -20,6 +21,7 @@ class AgentCardApp extends StatelessWidget {
   final AgentStudioController? agentStudioController;
   final WorkspaceController? workspaceController;
   final CardCatalogController? cardCatalogController;
+  final NativeCardStateChanged? onNativeCardStateChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,7 @@ class AgentCardApp extends StatelessWidget {
         agentStudioController: agentStudioController,
         workspaceController: workspaceController,
         cardCatalogController: cardCatalogController,
+        onNativeCardStateChanged: onNativeCardStateChanged,
       ),
     );
   }

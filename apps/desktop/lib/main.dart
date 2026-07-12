@@ -19,6 +19,7 @@ Future<void> main() async {
       workspaceController: desktopRuntime.workspaceController,
       agentStudioController: desktopRuntime.agentStudioController,
       cardCatalogController: desktopRuntime.cardCatalogController,
+      onNativeCardStateChanged: desktopRuntime.database.replaceState,
     ),
   );
 }

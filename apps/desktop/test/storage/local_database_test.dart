@@ -121,6 +121,15 @@ void main() {
         ),
       });
     });
+
+    test('replaces a complete state snapshot and removes stale keys', () {
+      database.putState('state-1', 'kept', 1);
+      database.putState('state-1', 'stale', true);
+
+      database.replaceState('state-1', {'kept': 2, 'added': 'value'});
+
+      expect(database.readState('state-1'), {'added': 'value', 'kept': 2});
+    });
   });
 }
 
