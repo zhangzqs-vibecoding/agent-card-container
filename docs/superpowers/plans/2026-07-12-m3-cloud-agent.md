@@ -17,7 +17,7 @@
 - [ ] 已提供确定性的事务内存实现、PostgreSQL schema 和 SKIP LOCKED 查询；database/sql repository 与 pgx driver 待网络恢复后接入。
 - [x] 实现 SKIP LOCKED 领取语义、租约超时重排、幂等发布和取消，并通过并发 race 测试。
 - [x] 实现设计中的全部 REST 端点、统一错误、OIDC RS256/JWKS Bearer 鉴权边界。
-- [ ] SSE 支持 Last-Event-ID 重连，断线不取消任务。
+- [x] SSE 支持历史补发、持续事件推送和 Last-Event-ID 重连，断线只释放订阅、不取消任务。
 
 ### Task 3：Native-first Agent 与验证器
 
@@ -35,7 +35,7 @@
 
 ### Task 5：桌面端生成与端到端验收
 
-- [ ] 桌面端已接入生成创建、确认、SSE 重连和取消；预览、自动安装和版本历史界面待补。
-- [ ] NativeCard 与 CodeCard 均经过签名安装链路进入 workspace。
+- [ ] 桌面端已接入生成创建、确认、持续 SSE、取消、制品下载验签和 NativeCard 自动安装；独立预览与版本历史界面待补。
+- [ ] NativeCard 已经过签名安装链路动态进入 workspace；CodeCard 已能验签和持久化，但仍待 Windows WebView2 adapter 挂载后进入 workspace。
 - [ ] 运行 Go test、race、vet、Flutter 全量测试、沙箱与篡改回归。
 - [ ] 记录真实模型、PostgreSQL、S3、Docker 和 Windows E2E 环境门禁。
