@@ -1,0 +1,45 @@
+name: deepseek-live
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_test:
+        description: Confirm one paid DeepSeek live generation test
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deepseek-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    if: inputs.confirm_paid_test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: deepseek-live
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: services/cloud/go.sum
+      - name: Generate and validate one NativeCard with DeepSeek
+        working-directory: services/cloud
+        shell: bash
+        env:
+          AGENTCARD_DEEPSEEK_LIVE: '1'
+          AGENTCARD_MODEL_BASE_URL: https://api.deepseek.com
+          AGENTCARD_MODEL: ${{ vars.AGENTCARD_MODEL }}
+          AGENTCARD_MODEL_API_KEY: ${{ secrets.AGENTCARD_MODEL_API_KEY }}
+        run: |
+          test -n "$AGENTCARD_MODEL"
+          test -n "$AGENTCARD_MODEL_API_KEY"
+          go test ./internal/modelprovider \
+            -run TestDeepSeekLiveGeneratesValidNativeCard \
+            -count=1 \
+            -v

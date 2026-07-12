@@ -45,6 +45,57 @@ void main() {
   if (errors.isNotEmpty) {
     throw StateError('valid workflow rejected: ${errors.join('; ')}');
   }
+  final setErrors = validateWorkflowSet({
+    'release.yml': '''
+on:
+  push:
+    tags: ['v*']
+jobs:
+  release:
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - run: pwsh packaging/windows/verify-portable-package.ps1
+      - run: sha256sum --check SHA256SUMS.txt
+      - run: gh release create --prerelease
+''',
+    'deepseek-live.yml': r'''
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_paid_test:
+jobs:
+  live:
+    timeout-minutes: 5
+    if: inputs.confirm_paid_test
+    environment: deepseek-live
+    env:
+      AGENTCARD_MODEL_API_KEY: ${{ secrets.AGENTCARD_MODEL_API_KEY }}
+    steps:
+      - run: go test ./internal/modelprovider
+''',
+  });
+  if (setErrors.isNotEmpty) {
+    throw StateError('valid workflow set rejected: ${setErrors.join('; ')}');
+  }
+  final unsafeSet = validateWorkflowSet({
+    'release.yml': 'on: [push]\njobs: {}',
+    'deepseek-live.yml': r'''on: [push]
+secrets.AGENTCARD_MODEL_API_KEY''',
+  });
+  for (final expected in [
+    'release workflow must be limited to v* tags',
+    'release workflow must verify archives and publish checksums as prerelease',
+    'DeepSeek workflow must be manual and paid-test confirmed',
+    'DeepSeek workflow must use the protected deepseek-live environment',
+  ]) {
+    if (!unsafeSet.any((error) => error.contains(expected))) {
+      throw StateError(
+        'unsafe workflow set did not report "$expected": $unsafeSet',
+      );
+    }
+  }
   print('workflow policy tests passed');
 }
 

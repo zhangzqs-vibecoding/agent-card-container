@@ -1,0 +1,54 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-windows:
+    uses: ./.github/workflows/windows-release-gate.yml
+
+  release:
+    needs: build-windows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: agent-card-windows-portable-${{ github.sha }}
+          path: dist
+      - name: Verify portable artifact and checksum
+        shell: bash
+        run: |
+          archive=$(find dist -maxdepth 1 -type f -name '*.zip' -print -quit)
+          test -n "$archive"
+          version=${GITHUB_REF_NAME#v}
+          pwsh -NoProfile -File packaging/windows/verify-portable-package.ps1 \
+            -Archive "$archive" \
+            -ExpectedVersion "$version" \
+            -ExpectedCommit "$GITHUB_SHA"
+          sha256sum "$archive" > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - name: Publish unsigned prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive=$(find dist -maxdepth 1 -type f -name '*.zip' -print -quit)
+          gh release create "$GITHUB_REF_NAME" \
+            "$archive" SHA256SUMS.txt \
+            --verify-tag \
+            --prerelease \
+            --title "Agent Card Container $GITHUB_REF_NAME (unsigned)" \
+            --notes "UNSIGNED Windows x64 portable snapshot. Extract the ZIP and run agent_card_desktop.exe. Windows SmartScreen may warn until Authenticode signing is configured."

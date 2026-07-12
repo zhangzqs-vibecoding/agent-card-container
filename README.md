@@ -68,3 +68,13 @@ AGENTCARD_DEEPSEEK_LIVE=1 go test ./internal/modelprovider \
 
 详细的平台依赖、云端连接环境变量和离线行为见
 `apps/desktop/README.md`。客户端不保存模型 API key；它只连接 Go 云端。
+
+## GitHub CI 与 Windows 便携包
+
+`develop` 的 Windows workflow 会上传经过解压回验的 x64 便携 ZIP。
+下载后直接解压，双击 `agent_card_desktop.exe` 启动。`v*` tag
+会同时创建包含 ZIP 和 `SHA256SUMS.txt` 的 GitHub prerelease。
+
+当前 CI 产物没有 Authenticode 签名，Windows SmartScreen 可能提示风险。
+ZIP 不包含模型、云端或签名凭据。DeepSeek live test 只能手动运行，
+并从受保护的 `deepseek-live` environment 读取 secret。

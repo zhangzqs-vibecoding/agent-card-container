@@ -31,10 +31,15 @@ List<String> validateWorkflowText(String sourceText, {required String source}) {
   }
 
   for (final job in _jobBlocks(sourceText)) {
-    if (!RegExp(
-      r'^\s{4}timeout-minutes:\s*\d+\s*$',
+    final reusable = RegExp(
+      r'^\s{4}uses:\s*\./',
       multiLine: true,
-    ).hasMatch(job.text)) {
+    ).hasMatch(job.text);
+    if (!reusable &&
+        !RegExp(
+          r'^\s{4}timeout-minutes:\s*\d+\s*$',
+          multiLine: true,
+        ).hasMatch(job.text)) {
       errors.add('$source: job ${job.name} is missing timeout-minutes');
     }
   }
@@ -52,6 +57,38 @@ List<String> validateWorkflowText(String sourceText, {required String source}) {
         '$source: Windows artifact upload must run release and portable verifiers',
       );
     }
+  }
+  return errors;
+}
+
+List<String> validateWorkflowSet(Map<String, String> workflows) {
+  final errors = <String>[];
+  final release = workflows['release.yml'] ?? '';
+  if (!release.contains("'v*'") && !release.contains('"v*"')) {
+    errors.add('release workflow must be limited to v* tags');
+  }
+  if (!release.contains('verify-portable-package.ps1') ||
+      !release.contains('SHA256SUMS.txt') ||
+      !release.contains('--prerelease') ||
+      !RegExp(r'contents:\s*write').hasMatch(release)) {
+    errors.add(
+      'release workflow must verify archives and publish checksums as prerelease',
+    );
+  }
+
+  final deepSeek = workflows['deepseek-live.yml'] ?? '';
+  if (!deepSeek.contains('workflow_dispatch:') ||
+      !deepSeek.contains('confirm_paid_test') ||
+      deepSeek.contains('pull_request:') ||
+      RegExp(r'^\s{2}push\s*:', multiLine: true).hasMatch(deepSeek)) {
+    errors.add('DeepSeek workflow must be manual and paid-test confirmed');
+  }
+  if (!deepSeek.contains('environment: deepseek-live') ||
+      !deepSeek.contains(r'secrets.AGENTCARD_MODEL_API_KEY') ||
+      deepSeek.contains('actions/upload-artifact@')) {
+    errors.add(
+      'DeepSeek workflow must use the protected deepseek-live environment',
+    );
   }
   return errors;
 }
@@ -99,14 +136,18 @@ void main(List<String> arguments) {
     return;
   }
   final errors = <String>[];
+  final workflows = <String, String>{};
   for (final path in arguments) {
     final file = File(path);
     if (!file.existsSync()) {
       errors.add('$path: workflow does not exist');
       continue;
     }
-    errors.addAll(validateWorkflowText(file.readAsStringSync(), source: path));
+    final text = file.readAsStringSync();
+    workflows[file.uri.pathSegments.last] = text;
+    errors.addAll(validateWorkflowText(text, source: path));
   }
+  errors.addAll(validateWorkflowSet(workflows));
   if (errors.isNotEmpty) {
     for (final error in errors) {
       stderr.writeln(error);
