@@ -108,7 +108,7 @@ void _rejects(String name, String workflow, String expected) {
 
 String _workflow({
   String runner = 'ubuntu-24.04',
-  String uses = 'actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5',
+  String uses = 'actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd',
   String extra = '',
   bool includeTimeout = true,
 }) =>
