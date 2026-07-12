@@ -76,12 +76,7 @@ func (service *Service) Create(ctx context.Context, userID string, request Creat
 	if err != nil {
 		return nil, err
 	}
-	session.Summary = summarize(session.Prompt, session.Locale)
-	session.Messages = append(session.Messages, Message{
-		Role:      "user",
-		Content:   session.Prompt,
-		CreatedAt: createdAt,
-	})
+	session.Summary = summarizeRequirement(session.Prompt, session.Messages[1:], session.Locale)
 	if _, err := session.Transition(StatusAwaitingConfirmation, Transition{
 		Stage:    "requirements",
 		Message:  "请确认结构化需求",
@@ -110,7 +105,7 @@ func (service *Service) AddMessage(ctx context.Context, userID, sessionID, conte
 		if _, err := session.AddMessage(content, service.now()); err != nil {
 			return err
 		}
-		session.Summary = summarize(content, session.Locale)
+		session.Summary = summarizeRequirement(session.Prompt, session.Messages[1:], session.Locale)
 		return nil
 	})
 	service.publishLocked(session, err)
@@ -123,13 +118,18 @@ func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (
 		if session.Status != StatusAwaitingConfirmation {
 			return ErrConflict
 		}
-		_, err := session.Transition(StatusQueued, Transition{
-			Stage:    "queued",
-			Message:  "生成任务已入队",
-			Progress: 0.2,
-			At:       service.now(),
-		})
-		return err
+		if _, err := session.Confirm(
+			[]string{"storage", "window.manageSelf"},
+			service.now(),
+		); err != nil {
+			return err
+		}
+		session.Summary = summarizeRequirement(
+			session.ConfirmedRequirement.InitialPrompt,
+			session.ConfirmedRequirement.AdditionalMessages,
+			session.ConfirmedRequirement.Locale,
+		)
+		return nil
 	})
 	if err != nil {
 		service.streamMu.Unlock()
@@ -358,6 +358,17 @@ func summarize(prompt, locale string) RequirementSummary {
 		Constraints: constraints,
 		Locale:      locale,
 	}
+}
+
+func summarizeRequirement(initialPrompt string, additionalMessages []Message, locale string) RequirementSummary {
+	parts := make([]string, 0, len(additionalMessages)+1)
+	parts = append(parts, strings.TrimSpace(initialPrompt))
+	for _, message := range additionalMessages {
+		if content := strings.TrimSpace(message.Content); content != "" {
+			parts = append(parts, content)
+		}
+	}
+	return summarize(strings.Join(parts, "\n"), locale)
 }
 
 func IsClientError(err error) bool {

@@ -3,6 +3,7 @@ package generation
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -76,19 +77,29 @@ type Message struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type RequirementSnapshot struct {
+	InitialPrompt       string    `json:"initialPrompt"`
+	AdditionalMessages  []Message `json:"additionalMessages"`
+	Target              Target    `json:"target"`
+	Locale              string    `json:"locale"`
+	AllowedCapabilities []string  `json:"allowedCapabilities"`
+	ConfirmedAt         time.Time `json:"confirmedAt"`
+}
+
 type Session struct {
-	ID        string             `json:"id"`
-	UserID    string             `json:"-"`
-	Prompt    string             `json:"prompt"`
-	Target    Target             `json:"target"`
-	Locale    string             `json:"locale"`
-	Status    Status             `json:"status"`
-	Summary   RequirementSummary `json:"summary"`
-	Messages  []Message          `json:"messages"`
-	VersionID string             `json:"versionId,omitempty"`
-	CreatedAt time.Time          `json:"createdAt"`
-	UpdatedAt time.Time          `json:"updatedAt"`
-	Events    []Event            `json:"-"`
+	ID                   string               `json:"id"`
+	UserID               string               `json:"-"`
+	Prompt               string               `json:"prompt"`
+	Target               Target               `json:"target"`
+	Locale               string               `json:"locale"`
+	Status               Status               `json:"status"`
+	Summary              RequirementSummary   `json:"summary"`
+	Messages             []Message            `json:"messages"`
+	ConfirmedRequirement *RequirementSnapshot `json:"confirmedRequirement,omitempty"`
+	VersionID            string               `json:"versionId,omitempty"`
+	CreatedAt            time.Time            `json:"createdAt"`
+	UpdatedAt            time.Time            `json:"updatedAt"`
+	Events               []Event              `json:"-"`
 
 	nextEventID int64
 }
@@ -118,17 +129,22 @@ func NewSession(input CreateInput) (*Session, error) {
 		input.CreatedAt = time.Now().UTC()
 	}
 	input.CreatedAt = input.CreatedAt.UTC()
+	prompt := strings.TrimSpace(input.Prompt)
 	return &Session{
 		ID:        input.ID,
 		UserID:    input.UserID,
-		Prompt:    strings.TrimSpace(input.Prompt),
+		Prompt:    prompt,
 		Target:    input.Target,
 		Locale:    input.Locale,
 		Status:    StatusDraft,
 		CreatedAt: input.CreatedAt,
 		UpdatedAt: input.CreatedAt,
 		Events:    make([]Event, 0),
-		Messages:  make([]Message, 0),
+		Messages: []Message{{
+			Role:      "user",
+			Content:   prompt,
+			CreatedAt: input.CreatedAt,
+		}},
 	}, nil
 }
 
@@ -139,6 +155,9 @@ func (session *Session) AddMessage(content string, at time.Time) (Event, error) 
 	}
 	if session.IsTerminal() {
 		return Event{}, ErrTerminalSession
+	}
+	if session.Status != StatusAwaitingConfirmation {
+		return Event{}, fmt.Errorf("%w: cannot add message in %s", ErrInvalidTransition, session.Status)
 	}
 	if at.IsZero() {
 		at = time.Now().UTC()
@@ -161,6 +180,58 @@ func (session *Session) AddMessage(content string, at time.Time) (Event, error) 
 	}
 	session.Events = append(session.Events, event)
 	return event, nil
+}
+
+func (session *Session) Confirm(capabilities []string, at time.Time) (Event, error) {
+	if session.Status != StatusAwaitingConfirmation || session.ConfirmedRequirement != nil {
+		return Event{}, fmt.Errorf("%w: cannot confirm from %s", ErrInvalidTransition, session.Status)
+	}
+	if len(session.Messages) == 0 ||
+		session.Messages[0].Role != "user" ||
+		session.Messages[0].Content != session.Prompt {
+		return Event{}, fmt.Errorf("%w: invalid initial requirement message", ErrInvalidTransition)
+	}
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	at = at.UTC()
+	additionalMessages := make([]Message, len(session.Messages)-1)
+	copy(additionalMessages, session.Messages[1:])
+	snapshot := &RequirementSnapshot{
+		InitialPrompt:       session.Prompt,
+		AdditionalMessages:  additionalMessages,
+		Target:              session.Target,
+		Locale:              session.Locale,
+		AllowedCapabilities: normalizeCapabilities(capabilities),
+		ConfirmedAt:         at,
+	}
+	event, err := session.Transition(StatusQueued, Transition{
+		Stage:    "queued",
+		Message:  "生成任务已入队",
+		Progress: 0.2,
+		At:       at,
+	})
+	if err != nil {
+		return Event{}, err
+	}
+	session.ConfirmedRequirement = snapshot
+	return event, nil
+}
+
+func normalizeCapabilities(capabilities []string) []string {
+	unique := make(map[string]struct{}, len(capabilities))
+	for _, capability := range capabilities {
+		capability = strings.TrimSpace(capability)
+		if capability != "" {
+			unique[capability] = struct{}{}
+		}
+	}
+	normalized := make([]string, 0, len(unique))
+	for capability := range unique {
+		normalized = append(normalized, capability)
+	}
+	sort.Strings(normalized)
+	return normalized
 }
 
 func (session *Session) Transition(next Status, input Transition) (Event, error) {

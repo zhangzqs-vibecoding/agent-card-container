@@ -1,11 +1,14 @@
 package generation
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -90,22 +93,40 @@ func (repository *PostgresRepository) update(
 	if err != nil {
 		return nil, err
 	}
+	previousStatus := session.Status
+	previousConfirmedRequirement, err := encodeConfirmedRequirement(session.ConfirmedRequirement)
+	if err != nil {
+		return nil, err
+	}
 	messageCount := len(session.Messages)
 	eventCount := len(session.Events)
 	if err := change(session); err != nil {
+		return nil, err
+	}
+	if err := enforceConfirmedRequirementWriteOnce(
+		previousStatus,
+		previousConfirmedRequirement,
+		session,
+	); err != nil {
 		return nil, err
 	}
 	summary, err := json.Marshal(session.Summary)
 	if err != nil {
 		return nil, err
 	}
+	confirmedRequirement, err := encodeConfirmedRequirement(session.ConfirmedRequirement)
+	if err != nil {
+		return nil, err
+	}
 	result, err := transaction.ExecContext(
 		ctx,
 		`UPDATE generation_sessions
-		 SET status = $1, summary_json = $2, version_id = NULLIF($3, ''), updated_at = $4
-		 WHERE id = $5`,
+		 SET status = $1, summary_json = $2, confirmed_requirement_json = $3,
+		     version_id = NULLIF($4, ''), updated_at = $5
+		 WHERE id = $6`,
 		session.Status,
 		summary,
+		confirmedRequirement,
 		session.VersionID,
 		session.UpdatedAt.UTC(),
 		session.ID,
@@ -142,12 +163,16 @@ func insertSession(ctx context.Context, executor sqlExecutor, session *Session) 
 	if err != nil {
 		return err
 	}
+	confirmedRequirement, err := encodeConfirmedRequirement(session.ConfirmedRequirement)
+	if err != nil {
+		return err
+	}
 	_, err = executor.ExecContext(
 		ctx,
 		`INSERT INTO generation_sessions (
 		  id, user_id, prompt, target, locale, status, summary_json,
-		  version_id, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, $10)`,
+		  confirmed_requirement_json, version_id, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11)`,
 		session.ID,
 		session.UserID,
 		session.Prompt,
@@ -155,6 +180,7 @@ func insertSession(ctx context.Context, executor sqlExecutor, session *Session) 
 		session.Locale,
 		session.Status,
 		summary,
+		confirmedRequirement,
 		session.VersionID,
 		session.CreatedAt.UTC(),
 		session.UpdatedAt.UTC(),
@@ -226,7 +252,8 @@ func loadSession(
 	forUpdate bool,
 ) (*Session, error) {
 	query := `SELECT id, user_id, prompt, target, locale, status,
-	                 summary_json, version_id, created_at, updated_at
+	                 summary_json, confirmed_requirement_json,
+	                 version_id, created_at, updated_at
 	          FROM generation_sessions WHERE id = $1`
 	arguments := []any{sessionID}
 	if userID != "" {
@@ -238,6 +265,7 @@ func loadSession(
 	}
 	var session Session
 	var summary []byte
+	var confirmedRequirement []byte
 	var versionID sql.NullString
 	if err := executor.QueryRowContext(ctx, query, arguments...).Scan(
 		&session.ID,
@@ -247,6 +275,7 @@ func loadSession(
 		&session.Locale,
 		&session.Status,
 		&summary,
+		&confirmedRequirement,
 		&versionID,
 		&session.CreatedAt,
 		&session.UpdatedAt,
@@ -258,6 +287,13 @@ func loadSession(
 	}
 	if err := json.Unmarshal(summary, &session.Summary); err != nil {
 		return nil, fmt.Errorf("decode generation summary: %w", err)
+	}
+	if confirmedRequirement != nil {
+		requirement, err := decodeConfirmedRequirement(confirmedRequirement)
+		if err != nil {
+			return nil, fmt.Errorf("decode generation confirmed requirement: %w", err)
+		}
+		session.ConfirmedRequirement = requirement
 	}
 	session.VersionID = versionID.String
 	messages, err := loadMessages(ctx, executor, session.ID)
@@ -274,6 +310,114 @@ func loadSession(
 		session.nextEventID = events[len(events)-1].EventID
 	}
 	return &session, nil
+}
+
+func encodeConfirmedRequirement(requirement *RequirementSnapshot) ([]byte, error) {
+	if requirement == nil {
+		return nil, nil
+	}
+	if err := validateConfirmedRequirement(requirement); err != nil {
+		return nil, fmt.Errorf("encode generation confirmed requirement: %w", err)
+	}
+	encoded, err := json.Marshal(requirement)
+	if err != nil {
+		return nil, fmt.Errorf("encode generation confirmed requirement: %w", err)
+	}
+	return encoded, nil
+}
+
+func enforceConfirmedRequirementWriteOnce(
+	previousStatus Status,
+	previousRequirement []byte,
+	session *Session,
+) error {
+	if previousRequirement == nil {
+		if session.ConfirmedRequirement != nil &&
+			(previousStatus != StatusAwaitingConfirmation || session.Status != StatusQueued) {
+			return fmt.Errorf("%w: confirmed requirement can only be set while confirming", ErrConflict)
+		}
+		return nil
+	}
+	if session.ConfirmedRequirement == nil {
+		return fmt.Errorf("%w: confirmed requirement is immutable", ErrConflict)
+	}
+	currentRequirement, err := json.Marshal(session.ConfirmedRequirement)
+	if err != nil || !bytes.Equal(currentRequirement, previousRequirement) {
+		return fmt.Errorf("%w: confirmed requirement is immutable", ErrConflict)
+	}
+	return nil
+}
+
+func decodeConfirmedRequirement(encoded []byte) (*RequirementSnapshot, error) {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.DisallowUnknownFields()
+	var requirement *RequirementSnapshot
+	if err := decoder.Decode(&requirement); err != nil {
+		return nil, err
+	}
+	if requirement == nil {
+		return nil, fmt.Errorf("value is null")
+	}
+	var trailing json.RawMessage
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return nil, fmt.Errorf("multiple JSON values")
+		}
+		return nil, err
+	}
+	if err := validateConfirmedRequirement(requirement); err != nil {
+		return nil, err
+	}
+	return requirement, nil
+}
+
+func validateConfirmedRequirement(requirement *RequirementSnapshot) error {
+	if requirement == nil {
+		return fmt.Errorf("value is null")
+	}
+	if strings.TrimSpace(requirement.InitialPrompt) == "" {
+		return fmt.Errorf("initialPrompt is required")
+	}
+	if requirement.AdditionalMessages == nil {
+		return fmt.Errorf("additionalMessages is required")
+	}
+	for index, message := range requirement.AdditionalMessages {
+		if message.Role != "user" {
+			return fmt.Errorf("additionalMessages[%d].role must be user", index)
+		}
+		if strings.TrimSpace(message.Content) == "" {
+			return fmt.Errorf("additionalMessages[%d].content is required", index)
+		}
+		if message.CreatedAt.IsZero() {
+			return fmt.Errorf("additionalMessages[%d].createdAt is required", index)
+		}
+	}
+	switch requirement.Target {
+	case TargetAuto, TargetNative, TargetWeb:
+	default:
+		return fmt.Errorf("target is invalid")
+	}
+	if strings.TrimSpace(requirement.Locale) == "" {
+		return fmt.Errorf("locale is required")
+	}
+	if requirement.AllowedCapabilities == nil {
+		return fmt.Errorf("allowedCapabilities is required")
+	}
+	seenCapabilities := make(map[string]struct{}, len(requirement.AllowedCapabilities))
+	for index, capability := range requirement.AllowedCapabilities {
+		capability = strings.TrimSpace(capability)
+		if capability == "" {
+			return fmt.Errorf("allowedCapabilities[%d] is required", index)
+		}
+		if _, exists := seenCapabilities[capability]; exists {
+			return fmt.Errorf("allowedCapabilities[%d] is duplicated", index)
+		}
+		seenCapabilities[capability] = struct{}{}
+	}
+	if requirement.ConfirmedAt.IsZero() {
+		return fmt.Errorf("confirmedAt is required")
+	}
+	return nil
 }
 
 func loadMessages(ctx context.Context, executor sqlExecutor, sessionID string) ([]Message, error) {

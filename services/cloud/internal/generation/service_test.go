@@ -3,6 +3,7 @@ package generation_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -57,6 +58,135 @@ func TestServiceCreatesConfirmsAndReplaysGeneration(t *testing.T) {
 	}
 	if events[0].EventID != 2 || events[1].EventID != 3 {
 		t.Fatalf("event IDs = %d, %d, want 2, 3", events[0].EventID, events[1].EventID)
+	}
+}
+
+func TestServiceConfirmFreezesCompleteRequirementAndSummary(t *testing.T) {
+	t.Parallel()
+
+	current := time.Date(2026, 7, 13, 1, 0, 0, 0, time.FixedZone("UTC-4", -4*60*60))
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_complete" },
+		func() time.Time { return current },
+	)
+	session, err := service.Create(context.Background(), "user", generation.CreateRequest{
+		Prompt: "生成离线番茄钟",
+		Target: generation.TargetNative,
+		Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	current = current.Add(time.Minute)
+	if _, err := service.AddMessage(context.Background(), "user", session.ID, "增加暂停按钮"); err != nil {
+		t.Fatalf("AddMessage(first) error = %v", err)
+	}
+	current = current.Add(time.Minute)
+	updated, err := service.AddMessage(context.Background(), "user", session.ID, "使用中文显示")
+	if err != nil {
+		t.Fatalf("AddMessage(second) error = %v", err)
+	}
+	const wantGoal = "生成离线番茄钟\n增加暂停按钮\n使用中文显示"
+	if updated.Summary.Goal != wantGoal {
+		t.Fatalf("updated Summary.Goal = %q, want %q", updated.Summary.Goal, wantGoal)
+	}
+	if !reflect.DeepEqual(updated.Summary.Constraints, []string{
+		"卡片必须通过能力代理访问宿主能力",
+		"纯本地功能必须可离线使用",
+	}) {
+		t.Fatalf("updated Summary.Constraints = %#v", updated.Summary.Constraints)
+	}
+
+	current = current.Add(time.Minute)
+	confirmed, err := service.Confirm(context.Background(), "user", session.ID)
+	if err != nil {
+		t.Fatalf("Confirm() error = %v", err)
+	}
+	if confirmed.Summary.Goal != wantGoal {
+		t.Fatalf("confirmed Summary.Goal = %q, want %q", confirmed.Summary.Goal, wantGoal)
+	}
+	wantSnapshot := &generation.RequirementSnapshot{
+		InitialPrompt: "生成离线番茄钟",
+		AdditionalMessages: []generation.Message{
+			{Role: "user", Content: "增加暂停按钮", CreatedAt: current.Add(-2 * time.Minute).UTC()},
+			{Role: "user", Content: "使用中文显示", CreatedAt: current.Add(-time.Minute).UTC()},
+		},
+		Target:              generation.TargetNative,
+		Locale:              "zh-CN",
+		AllowedCapabilities: []string{"storage", "window.manageSelf"},
+		ConfirmedAt:         current.UTC(),
+	}
+	if !reflect.DeepEqual(confirmed.ConfirmedRequirement, wantSnapshot) {
+		t.Fatalf("ConfirmedRequirement = %#v, want %#v", confirmed.ConfirmedRequirement, wantSnapshot)
+	}
+
+	frozen := *confirmed.ConfirmedRequirement
+	frozen.AdditionalMessages = append([]generation.Message(nil), confirmed.ConfirmedRequirement.AdditionalMessages...)
+	frozen.AllowedCapabilities = append([]string(nil), confirmed.ConfirmedRequirement.AllowedCapabilities...)
+	if _, err := service.Confirm(context.Background(), "user", session.ID); !errors.Is(err, generation.ErrConflict) {
+		t.Fatalf("second Confirm() error = %v, want ErrConflict", err)
+	}
+	if _, err := service.AddMessage(context.Background(), "user", session.ID, "确认后追加"); !errors.Is(err, generation.ErrConflict) {
+		t.Fatalf("AddMessage() after confirmation error = %v, want ErrConflict", err)
+	}
+	reloaded, err := service.Get(context.Background(), "user", session.ID)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if !reflect.DeepEqual(reloaded.ConfirmedRequirement, &frozen) {
+		t.Fatalf("rejected updates changed snapshot to %#v, want %#v", reloaded.ConfirmedRequirement, frozen)
+	}
+}
+
+func TestMemoryRepositoryDeepClonesConfirmedRequirement(t *testing.T) {
+	t.Parallel()
+
+	repository := generation.NewMemoryRepository()
+	service := generation.NewService(
+		repository,
+		func() string { return "gen_clone" },
+		func() time.Time { return time.Date(2026, 7, 13, 1, 0, 0, 0, time.UTC) },
+	)
+	session, err := service.Create(context.Background(), "user", generation.CreateRequest{
+		Prompt: "生成待办卡片",
+		Target: generation.TargetAuto,
+		Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if _, err := service.AddMessage(context.Background(), "user", session.ID, "支持离线保存"); err != nil {
+		t.Fatalf("AddMessage() error = %v", err)
+	}
+	confirmed, err := service.Confirm(context.Background(), "user", session.ID)
+	if err != nil {
+		t.Fatalf("Confirm() error = %v", err)
+	}
+	confirmed.ConfirmedRequirement.AdditionalMessages[0].Content = "已篡改"
+	confirmed.ConfirmedRequirement.AllowedCapabilities[0] = "network"
+
+	firstRead, err := repository.Get(context.Background(), "user", session.ID)
+	if err != nil {
+		t.Fatalf("Get(first) error = %v", err)
+	}
+	if got := firstRead.ConfirmedRequirement.AdditionalMessages[0].Content; got != "支持离线保存" {
+		t.Fatalf("stored AdditionalMessages[0].Content = %q", got)
+	}
+	if got := firstRead.ConfirmedRequirement.AllowedCapabilities[0]; got != "storage" {
+		t.Fatalf("stored AllowedCapabilities[0] = %q", got)
+	}
+	firstRead.ConfirmedRequirement.AdditionalMessages[0].Content = "再次篡改"
+	firstRead.ConfirmedRequirement.AllowedCapabilities[0] = "clipboard"
+	secondRead, err := repository.Get(context.Background(), "user", session.ID)
+	if err != nil {
+		t.Fatalf("Get(second) error = %v", err)
+	}
+	if got := secondRead.ConfirmedRequirement.AdditionalMessages[0].Content; got != "支持离线保存" {
+		t.Fatalf("reloaded AdditionalMessages[0].Content = %q", got)
+	}
+	if got := secondRead.ConfirmedRequirement.AllowedCapabilities[0]; got != "storage" {
+		t.Fatalf("reloaded AllowedCapabilities[0] = %q", got)
 	}
 }
 

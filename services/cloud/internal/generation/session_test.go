@@ -2,6 +2,7 @@ package generation_test
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -96,6 +97,153 @@ func TestSessionCanCancelOnlyBeforeTerminalState(t *testing.T) {
 	if _, err := session.Cancel(time.Now().UTC()); !errors.Is(err, generation.ErrTerminalSession) {
 		t.Fatalf("second Cancel() error = %v, want ErrTerminalSession", err)
 	}
+}
+
+func TestSessionConfirmFreezesCompleteRequirement(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, 7, 13, 8, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	confirmedAt := createdAt.Add(2 * time.Minute)
+	session, err := generation.NewSession(generation.CreateInput{
+		ID:        "gen_confirm",
+		UserID:    "user_confirm",
+		Prompt:    "生成离线番茄钟",
+		Target:    generation.TargetNative,
+		Locale:    "zh-CN",
+		CreatedAt: createdAt,
+	})
+	if err != nil {
+		t.Fatalf("NewSession() error = %v", err)
+	}
+	if len(session.Messages) != 1 || session.Messages[0].Content != session.Prompt {
+		t.Fatalf("initial messages = %#v, want initial prompt at index 0", session.Messages)
+	}
+	if _, err := session.Transition(generation.StatusAwaitingConfirmation, generation.Transition{At: createdAt}); err != nil {
+		t.Fatalf("Transition(awaiting_confirmation) error = %v", err)
+	}
+	firstAt := createdAt.Add(time.Minute)
+	if _, err := session.AddMessage("增加暂停按钮", firstAt); err != nil {
+		t.Fatalf("AddMessage(first) error = %v", err)
+	}
+	if _, err := session.AddMessage("使用中文显示", confirmedAt); err != nil {
+		t.Fatalf("AddMessage(second) error = %v", err)
+	}
+
+	capabilities := []string{" window.manageSelf ", "storage", "storage", " "}
+	event, err := session.Confirm(capabilities, confirmedAt)
+	if err != nil {
+		t.Fatalf("Confirm() error = %v", err)
+	}
+	if session.Status != generation.StatusQueued || event.Stage != "queued" {
+		t.Fatalf("status/event = %q/%q, want queued/queued", session.Status, event.Stage)
+	}
+	want := &generation.RequirementSnapshot{
+		InitialPrompt: "生成离线番茄钟",
+		AdditionalMessages: []generation.Message{
+			{Role: "user", Content: "增加暂停按钮", CreatedAt: firstAt.UTC()},
+			{Role: "user", Content: "使用中文显示", CreatedAt: confirmedAt.UTC()},
+		},
+		Target:              generation.TargetNative,
+		Locale:              "zh-CN",
+		AllowedCapabilities: []string{"storage", "window.manageSelf"},
+		ConfirmedAt:         confirmedAt.UTC(),
+	}
+	if !reflect.DeepEqual(session.ConfirmedRequirement, want) {
+		t.Fatalf("ConfirmedRequirement = %#v, want %#v", session.ConfirmedRequirement, want)
+	}
+
+	capabilities[0] = "network"
+	if got := session.ConfirmedRequirement.AllowedCapabilities[1]; got != "window.manageSelf" {
+		t.Fatalf("AllowedCapabilities mutated through input = %#v", session.ConfirmedRequirement.AllowedCapabilities)
+	}
+	frozen := *session.ConfirmedRequirement
+	frozen.AdditionalMessages = append([]generation.Message(nil), session.ConfirmedRequirement.AdditionalMessages...)
+	frozen.AllowedCapabilities = append([]string(nil), session.ConfirmedRequirement.AllowedCapabilities...)
+	if _, err := session.Confirm([]string{"network"}, confirmedAt.Add(time.Hour)); err == nil {
+		t.Fatal("second Confirm() error = nil, want rejection")
+	}
+	if !reflect.DeepEqual(session.ConfirmedRequirement, &frozen) {
+		t.Fatalf("second Confirm() changed snapshot to %#v, want %#v", session.ConfirmedRequirement, frozen)
+	}
+	if _, err := session.AddMessage("确认后追加", confirmedAt.Add(2*time.Hour)); err == nil {
+		t.Fatal("AddMessage() after confirmation error = nil, want rejection")
+	}
+}
+
+func TestSessionConfirmRejectsMissingInitialMessageWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name     string
+		messages []generation.Message
+	}{
+		{name: "nil", messages: nil},
+		{name: "empty", messages: []generation.Message{}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			session := mustAwaitingSession(t)
+			session.Messages = testCase.messages
+			assertConfirmRejectedWithoutMutation(t, session)
+		})
+	}
+}
+
+func TestSessionConfirmRejectsInvalidInitialMessageWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*generation.Session)
+	}{
+		{
+			name: "role is not user",
+			mutate: func(session *generation.Session) {
+				session.Messages[0].Role = "assistant"
+			},
+		},
+		{
+			name: "content does not exactly match prompt",
+			mutate: func(session *generation.Session) {
+				session.Messages[0].Content += " "
+			},
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			session := mustAwaitingSession(t)
+			testCase.mutate(session)
+			assertConfirmRejectedWithoutMutation(t, session)
+		})
+	}
+}
+
+func assertConfirmRejectedWithoutMutation(t *testing.T, session *generation.Session) {
+	t.Helper()
+	wantStatus := session.Status
+	wantRequirement := session.ConfirmedRequirement
+	wantEvents := append([]generation.Event(nil), session.Events...)
+
+	_, err := session.Confirm([]string{"storage"}, time.Now())
+	if !errors.Is(err, generation.ErrInvalidTransition) {
+		t.Fatalf("Confirm() error = %v, want ErrInvalidTransition", err)
+	}
+	if session.Status != wantStatus {
+		t.Fatalf("Status = %q, want unchanged %q", session.Status, wantStatus)
+	}
+	if !reflect.DeepEqual(session.ConfirmedRequirement, wantRequirement) {
+		t.Fatalf("ConfirmedRequirement = %#v, want unchanged %#v", session.ConfirmedRequirement, wantRequirement)
+	}
+	if !reflect.DeepEqual(session.Events, wantEvents) {
+		t.Fatalf("Events = %#v, want unchanged %#v", session.Events, wantEvents)
+	}
+}
+
+func mustAwaitingSession(t *testing.T) *generation.Session {
+	t.Helper()
+	session := mustSession(t)
+	if _, err := session.Transition(generation.StatusAwaitingConfirmation, generation.Transition{At: time.Now()}); err != nil {
+		t.Fatalf("Transition(awaiting_confirmation) error = %v", err)
+	}
+	return session
 }
 
 func mustSession(t *testing.T) *generation.Session {

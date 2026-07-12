@@ -29,7 +29,11 @@ paths:
                 target: {enum: [auto, native, web], default: auto}
                 locale: {type: string, default: zh-CN}
       responses:
-        "201": {description: Generation awaiting confirmation}
+        "201":
+          description: Generation awaiting confirmation
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GenerationSession"}
         "400": {$ref: "#/components/responses/Error"}
         "401": {$ref: "#/components/responses/Error"}
   /v1/generations/{id}:
@@ -38,7 +42,11 @@ paths:
       parameters:
         - $ref: "#/components/parameters/GenerationID"
       responses:
-        "200": {description: Generation snapshot}
+        "200":
+          description: Generation snapshot
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GenerationSession"}
         "404": {$ref: "#/components/responses/Error"}
   /v1/generations/{id}/messages:
     post:
@@ -46,7 +54,11 @@ paths:
       parameters:
         - $ref: "#/components/parameters/GenerationID"
       responses:
-        "200": {description: Updated generation}
+        "200":
+          description: Updated generation
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GenerationSession"}
         "409": {$ref: "#/components/responses/Error"}
   /v1/generations/{id}/confirm:
     post:
@@ -54,7 +66,11 @@ paths:
       parameters:
         - $ref: "#/components/parameters/GenerationID"
       responses:
-        "200": {description: Queued generation}
+        "200":
+          description: Queued generation
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/GenerationSession"}
         "409": {$ref: "#/components/responses/Error"}
   /v1/generations/{id}/cancel:
     post:
@@ -108,6 +124,84 @@ paths:
         "200": {description: Short-lived artifact URL and signature metadata}
         "404": {$ref: "#/components/responses/Error"}
 components:
+  schemas:
+    GenerationMessage:
+      type: object
+      additionalProperties: false
+      required: [role, content, createdAt]
+      properties:
+        role: {type: string}
+        content: {type: string}
+        createdAt: {type: string, format: date-time}
+    RequirementSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - initialPrompt
+        - additionalMessages
+        - target
+        - locale
+        - allowedCapabilities
+        - confirmedAt
+      properties:
+        initialPrompt: {type: string, minLength: 1}
+        additionalMessages:
+          type: array
+          items: {$ref: "#/components/schemas/GenerationMessage"}
+        target: {type: string, enum: [auto, native, web]}
+        locale: {type: string, minLength: 1}
+        allowedCapabilities:
+          type: array
+          uniqueItems: true
+          items: {type: string, minLength: 1}
+        confirmedAt: {type: string, format: date-time}
+    RequirementSummary:
+      type: object
+      additionalProperties: false
+      required: [goal, constraints, locale]
+      properties:
+        goal: {type: string, minLength: 1}
+        constraints:
+          type: array
+          items: {type: string}
+        locale: {type: string, minLength: 1}
+    GenerationSession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - prompt
+        - target
+        - locale
+        - status
+        - summary
+        - messages
+        - createdAt
+        - updatedAt
+      properties:
+        id: {type: string, pattern: "^gen_[A-Za-z0-9_-]+$"}
+        prompt: {type: string, minLength: 1}
+        target: {type: string, enum: [auto, native, web]}
+        locale: {type: string, minLength: 1}
+        status:
+          type: string
+          enum:
+            - draft
+            - awaiting_confirmation
+            - queued
+            - generating
+            - validating
+            - ready
+            - failed
+            - cancelled
+        summary: {$ref: "#/components/schemas/RequirementSummary"}
+        messages:
+          type: array
+          items: {$ref: "#/components/schemas/GenerationMessage"}
+        confirmedRequirement: {$ref: "#/components/schemas/RequirementSnapshot"}
+        versionId: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
   securitySchemes:
     oidcBearer:
       type: openIdConnect

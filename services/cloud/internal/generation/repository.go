@@ -117,5 +117,17 @@ func cloneSession(session *Session) *Session {
 	cloned.Events = append([]Event(nil), session.Events...)
 	cloned.Messages = append([]Message(nil), session.Messages...)
 	cloned.Summary.Constraints = append([]string(nil), session.Summary.Constraints...)
+	if session.ConfirmedRequirement != nil {
+		requirement := *session.ConfirmedRequirement
+		if session.ConfirmedRequirement.AdditionalMessages != nil {
+			requirement.AdditionalMessages = make([]Message, len(session.ConfirmedRequirement.AdditionalMessages))
+			copy(requirement.AdditionalMessages, session.ConfirmedRequirement.AdditionalMessages)
+		}
+		if session.ConfirmedRequirement.AllowedCapabilities != nil {
+			requirement.AllowedCapabilities = make([]string, len(session.ConfirmedRequirement.AllowedCapabilities))
+			copy(requirement.AllowedCapabilities, session.ConfirmedRequirement.AllowedCapabilities)
+		}
+		cloned.ConfirmedRequirement = &requirement
+	}
 	return &cloned
 }
