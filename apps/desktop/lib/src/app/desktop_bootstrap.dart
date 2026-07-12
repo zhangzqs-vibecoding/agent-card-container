@@ -252,6 +252,7 @@ abstract final class DesktopBootstrap {
           );
         },
         onOverlayDisplayRequested: overlayModeController.enterDisplayMode,
+        onStateChanged: workspaceController.updatePersistedState,
         onCapabilityInvocation: (instanceId, method, params) async {
           final card = workspaceController.cards.singleWhere(
             (candidate) => candidate.instance.instanceId == instanceId,

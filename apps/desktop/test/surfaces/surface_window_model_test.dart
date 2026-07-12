@@ -207,6 +207,59 @@ void main() {
     expect(invocations, ['instance-1:system.metrics.get']);
   });
 
+  testWidgets('publishes child NativeCard state changes to the owner', (
+    tester,
+  ) async {
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'detached-1',
+        'surfaceType': 'detached',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': false,
+        'instanceIds': ['instance-1'],
+        'cards': [
+          {
+            'instanceId': 'instance-1',
+            'runtime': 'native',
+            'spec': {
+              'schemaVersion': 1,
+              'initialState': {'count': 0},
+              'root': {
+                'id': 'button',
+                'type': 'Button',
+                'props': {'label': '增加'},
+                'events': {
+                  'onPressed': [
+                    {'type': 'increment', 'path': 'count'},
+                  ],
+                },
+              },
+            },
+            'state': const <String, Object?>{},
+          },
+        ],
+      }),
+    )!;
+    final model = SurfaceWindowModel(arguments);
+    addTearDown(model.dispose);
+    final states = <Map<String, Object?>>[];
+
+    await tester.pumpWidget(
+      SurfaceWindowApp(
+        model: model,
+        onStateChanged: (instanceId, state) async {
+          expect(instanceId, 'instance-1');
+          states.add(state);
+        },
+      ),
+    );
+    await tester.tap(find.text('增加'));
+    await tester.pump();
+
+    expect(states.single['count'], 1);
+  });
+
   testWidgets('fails closed when child-engine CodeCard isolation is absent', (
     tester,
   ) async {

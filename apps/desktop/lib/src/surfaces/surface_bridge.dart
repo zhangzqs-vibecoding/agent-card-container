@@ -3,6 +3,7 @@ enum SurfaceBridgeMessageType {
   unmount('unmount'),
   placementChanged('placementChanged'),
   focusChanged('focusChanged'),
+  stateChanged('stateChanged'),
   invokeCapability('invokeCapability'),
   hostEvent('hostEvent');
 

@@ -292,6 +292,7 @@ class SurfaceWindowApp extends StatelessWidget {
     required this.model,
     this.onEnterOverlayDisplayMode,
     this.onCapabilityInvocation,
+    this.onStateChanged,
     super.key,
   });
 
@@ -303,6 +304,8 @@ class SurfaceWindowApp extends StatelessWidget {
     Map<String, Object?> params,
   )?
   onCapabilityInvocation;
+  final Future<void> Function(String instanceId, Map<String, Object?> state)?
+  onStateChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -339,6 +342,7 @@ class SurfaceWindowApp extends StatelessWidget {
                         child: _SurfaceCardView(
                           snapshot: card,
                           capabilityInvocation: onCapabilityInvocation,
+                          onStateChanged: onStateChanged,
                         ),
                       ),
                     ),
@@ -361,7 +365,11 @@ class SurfaceWindowApp extends StatelessWidget {
 }
 
 class _SurfaceCardView extends StatefulWidget {
-  const _SurfaceCardView({required this.snapshot, this.capabilityInvocation});
+  const _SurfaceCardView({
+    required this.snapshot,
+    this.capabilityInvocation,
+    this.onStateChanged,
+  });
 
   final SurfaceCardSnapshot snapshot;
   final Future<Object?> Function(
@@ -370,6 +378,8 @@ class _SurfaceCardView extends StatefulWidget {
     Map<String, Object?> params,
   )?
   capabilityInvocation;
+  final Future<void> Function(String instanceId, Map<String, Object?> state)?
+  onStateChanged;
 
   @override
   State<_SurfaceCardView> createState() => _SurfaceCardViewState();
@@ -380,6 +390,7 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
   InAppWebViewPort? _webView;
   Object? _codeCardError;
   var _codeCardMounted = false;
+  Future<void> _statePublishTail = Future.value();
 
   @override
   void initState() {
@@ -396,10 +407,34 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
                 params,
               ),
       );
+      _controller?.addListener(_publishState);
     } else {
       final port = InAppWebViewPort();
       _webView = port;
       unawaited(_mountCodeCard(port, snapshot));
+    }
+  }
+
+  void _publishState() {
+    final callback = widget.onStateChanged;
+    final controller = _controller;
+    if (callback == null || controller == null) {
+      return;
+    }
+    final state = controller.state;
+    _statePublishTail = _statePublishTail.then(
+      (_) => _sendState(callback, state),
+    );
+  }
+
+  Future<void> _sendState(
+    Future<void> Function(String, Map<String, Object?>) callback,
+    Map<String, Object?> state,
+  ) async {
+    try {
+      await callback(widget.snapshot.instanceId, state);
+    } catch (_) {
+      // A later state change retries while the main engine remains authoritative.
     }
   }
 
@@ -435,6 +470,7 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
 
   @override
   void dispose() {
+    _controller?.removeListener(_publishState);
     _controller?.dispose();
     final webView = _webView;
     if (webView != null) {

@@ -66,4 +66,33 @@ class WorkspaceController extends ChangeNotifier {
           );
     notifyListeners();
   }
+
+  void updatePersistedState(
+    String instanceId,
+    Map<String, Object?> persistedState,
+  ) {
+    final index = _cards.indexWhere(
+      (card) => card.instance.instanceId == instanceId,
+    );
+    if (index < 0) {
+      throw StateError('workspace card instance does not exist');
+    }
+    final card = _cards[index];
+    _cards[index] = card.nativeSpec != null
+        ? WorkspaceCard(
+            instance: card.instance,
+            spec: card.spec,
+            persistedState: persistedState,
+            capabilityBroker: card.capabilityBroker,
+            cardContext: card.cardContext,
+          )
+        : WorkspaceCard.code(
+            instance: card.instance,
+            codeCard: card.codeCard!,
+            persistedState: persistedState,
+            capabilityBroker: card.capabilityBroker,
+            cardContext: card.cardContext,
+          );
+    notifyListeners();
+  }
 }

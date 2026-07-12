@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   group('SurfaceBridge', () {
-    test('accepts only the six protocol message types', () {
+    test('accepts only the registered protocol message types', () {
       for (final type in SurfaceBridgeMessageType.values) {
         final message = SurfaceBridgeMessage.fromJson({
           'type': type.wireName,

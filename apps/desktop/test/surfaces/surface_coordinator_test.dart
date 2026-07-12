@@ -271,6 +271,40 @@ void main() {
     expect(surface.lastFocusedAt, DateTime.utc(2026, 7, 12, 10));
   });
 
+  test('persists authenticated NativeCard state from a child window', () async {
+    await coordinator.detach(
+      'instance-1',
+      const CardPlacement(x: 40, y: 50, width: 480, height: 320),
+    );
+
+    final result = await coordinator.handleBridgeMessage(
+      SurfaceBridgeMessage.fromJson({
+        'type': 'stateChanged',
+        'windowId': 'window-1',
+        'instanceId': 'instance-1',
+        'payload': {
+          'state': {'remaining': 42, 'running': true},
+        },
+      }),
+    );
+
+    expect(result, {'persisted': true});
+    expect(database.readState('state-1'), {'remaining': 42, 'running': true});
+  });
+
+  test('removes a docked card from its previous overlay host', () async {
+    await coordinator.moveToOverlay(
+      'instance-1',
+      monitorId: 'monitor-a',
+      placement: const CardPlacement(x: 20, y: 30, width: 360, height: 240),
+    );
+
+    await coordinator.dock('instance-1');
+
+    expect(database.listInstances().single.surfaceId, 'workspace-main');
+    expect(backend.closed, ['overlay-monitor-a']);
+  });
+
   test(
     'moves orphaned overlay cards onto the visible primary display',
     () async {

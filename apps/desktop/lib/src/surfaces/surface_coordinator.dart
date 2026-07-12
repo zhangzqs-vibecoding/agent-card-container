@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../cards/card_instance.dart';
 import '../storage/local_database.dart';
 import 'surface.dart';
@@ -30,6 +32,7 @@ class SurfaceCoordinator {
     this.onInstanceMoved,
     this.onOverlayDisplayRequested,
     this.onCapabilityInvocation,
+    this.onStateChanged,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now;
 
@@ -39,10 +42,31 @@ class SurfaceCoordinator {
   final void Function(CardInstance instance)? onInstanceMoved;
   final Future<void> Function()? onOverlayDisplayRequested;
   final SurfaceCapabilityInvocation? onCapabilityInvocation;
+  final void Function(String instanceId, Map<String, Object?> state)?
+  onStateChanged;
   final DateTime Function() now;
 
   Future<Object?> handleBridgeMessage(SurfaceBridgeMessage message) async {
     final instance = _requireInstance(message.instanceId);
+    if (message.type == SurfaceBridgeMessageType.stateChanged) {
+      if (message.payload.keys.length != 1 ||
+          message.payload['state'] is! Map<String, Object?>) {
+        throw const FormatException('invalid stateChanged payload');
+      }
+      final state = message.payload['state']! as Map<String, Object?>;
+      late final int encodedSize;
+      try {
+        encodedSize = utf8.encode(jsonEncode(state)).length;
+      } catch (_) {
+        throw const FormatException('stateChanged payload is not JSON');
+      }
+      if (encodedSize > 5 * 1024 * 1024) {
+        throw const FormatException('stateChanged payload exceeds quota');
+      }
+      database.replaceState(instance.stateNamespace, state);
+      onStateChanged?.call(instance.instanceId, state);
+      return const {'persisted': true};
+    }
     if (message.type == SurfaceBridgeMessageType.invokeCapability) {
       final invocation = onCapabilityInvocation;
       if (invocation == null) {
@@ -171,7 +195,10 @@ class SurfaceCoordinator {
   }
 
   Future<void> detach(String instanceId, CardPlacement bounds) async {
-    _requireInstance(instanceId);
+    final previous = _requireInstance(instanceId);
+    if (previous.surfaceId.startsWith('detached-')) {
+      return;
+    }
     final surface = CardSurface(
       id: newDetachedSurfaceId(),
       type: SurfaceType.detached,
@@ -188,6 +215,7 @@ class SurfaceCoordinator {
         height: bounds.height,
       ),
     );
+    await _refreshPreviousSurface(previous.surfaceId, instanceId);
     _notifyMoved(instanceId);
   }
 
@@ -196,7 +224,7 @@ class SurfaceCoordinator {
     required String monitorId,
     required CardPlacement placement,
   }) async {
-    _requireInstance(instanceId);
+    final previous = _requireInstance(instanceId);
     final surfaceId = 'overlay-${_safeID(monitorId)}';
     final instances = database
         .listInstances()
@@ -218,6 +246,9 @@ class SurfaceCoordinator {
       instanceId: instanceId,
       placement: placement,
     );
+    if (previous.surfaceId != surfaceId) {
+      await _refreshPreviousSurface(previous.surfaceId, instanceId);
+    }
     _notifyMoved(instanceId);
   }
 
@@ -228,8 +259,12 @@ class SurfaceCoordinator {
     }
     if (instance.surfaceId.startsWith('detached-')) {
       await windows.closeSurface(instance.surfaceId);
+      _moveToWorkspace(instanceId);
+      return;
     }
+    final previousSurfaceId = instance.surfaceId;
     _moveToWorkspace(instanceId);
+    await _refreshPreviousSurface(previousSurfaceId, instanceId);
   }
 
   Map<String, Object?> getState(String instanceId) {
@@ -292,6 +327,31 @@ class SurfaceCoordinator {
     final listener = onInstanceMoved;
     if (listener != null) {
       listener(_requireInstance(instanceId));
+    }
+  }
+
+  Future<void> _refreshPreviousSurface(
+    String surfaceId,
+    String movedInstanceId,
+  ) async {
+    final surface = _requireSurface(surfaceId);
+    if (surface.type == SurfaceType.workspace) {
+      return;
+    }
+    final remaining = database
+        .listInstances()
+        .where(
+          (instance) =>
+              instance.surfaceId == surfaceId &&
+              instance.instanceId != movedInstanceId &&
+              instance.status != CardInstanceStatus.quarantined,
+        )
+        .map((instance) => instance.instanceId)
+        .toList(growable: false);
+    if (remaining.isEmpty) {
+      await windows.closeSurface(surfaceId);
+    } else {
+      await windows.ensureSurface(surface, remaining);
     }
   }
 

@@ -20,6 +20,14 @@ void main() {
     expect(controller.cards.single.instance.placement.width, 480);
     expect(controller.workspaceCards, isEmpty);
   });
+
+  test('refreshes persisted state received from a child surface', () {
+    final controller = WorkspaceController([_card()]);
+
+    controller.updatePersistedState('instance-1', {'count': 7});
+
+    expect(controller.cards.single.persistedState, {'count': 7});
+  });
 }
 
 WorkspaceCard _card() {

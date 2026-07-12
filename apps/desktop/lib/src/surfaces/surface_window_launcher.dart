@@ -113,6 +113,18 @@ abstract final class SurfaceWindowLauncher {
             'invalid capability bridge response',
           );
         },
+        onStateChanged: (instanceId, state) async {
+          final owner = WindowController.fromWindowId(arguments.ownerWindowId);
+          await owner.invokeMethod<Object?>(
+            'surface.bridge',
+            SurfaceBridgeMessage(
+              type: SurfaceBridgeMessageType.stateChanged,
+              windowId: controller.windowId,
+              instanceId: instanceId,
+              payload: {'state': state},
+            ).toJson(),
+          );
+        },
         onEnterOverlayDisplayMode: arguments.surfaceType == 'overlay'
             ? () async {
                 final owner = WindowController.fromWindowId(
