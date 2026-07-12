@@ -3,13 +3,22 @@ import 'dart:io';
 
 import 'cloud_connection_settings.dart';
 
-class CloudSettingsRepository {
+abstract interface class CloudSettingsStore {
+  Future<CloudUserConfig?> read();
+
+  Future<void> save(CloudUserConfig config);
+
+  Future<void> clear();
+}
+
+class CloudSettingsRepository implements CloudSettingsStore {
   CloudSettingsRepository(this.file);
 
   static const maximumBytes = 64 * 1024;
 
   final File file;
 
+  @override
   Future<CloudUserConfig?> read() async {
     if (!await file.exists()) return null;
     if (await file.length() > maximumBytes) {
@@ -28,6 +37,7 @@ class CloudSettingsRepository {
     }
   }
 
+  @override
   Future<void> save(CloudUserConfig config) async {
     config.validate();
     await file.parent.create(recursive: true);
@@ -49,6 +59,7 @@ class CloudSettingsRepository {
     }
   }
 
+  @override
   Future<void> clear() async {
     if (await file.exists()) await file.delete();
   }

@@ -15,6 +15,20 @@ void main() {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
         requests.add(request);
+        if (request.uri.path == '/healthz') {
+          expect(
+            request.headers.value(HttpHeaders.authorizationHeader),
+            isNull,
+          );
+          request.response
+            ..headers.contentType = ContentType.json
+            ..statusCode = HttpStatus.ok
+            ..write(
+              jsonEncode({'status': 'ok', 'service': 'agent-card-cloud'}),
+            );
+          await request.response.close();
+          return;
+        }
         if (request.uri.path == '/artifact.agentcard') {
           expect(
             request.headers.value(HttpHeaders.authorizationHeader),
@@ -240,6 +254,19 @@ void main() {
         'ver_02',
         'ver_01',
       ]);
+    });
+
+    test('tests health and authenticated card access', () async {
+      await client.testConnection();
+
+      expect(requests.map((request) => request.uri.path), [
+        '/healthz',
+        '/v1/cards',
+      ]);
+      expect(
+        requests.last.headers.value(HttpHeaders.authorizationHeader),
+        'Bearer access-token',
+      );
     });
   });
 }

@@ -107,11 +107,107 @@ void main() {
     expect(result.issueCode, 'SECURE_STORE_UNAVAILABLE');
     expect(result.issueMessage, isNot(contains('super-secret-token')));
   });
+
+  test('tests candidate before mutating saved configuration', () async {
+    await repository.save(
+      const CloudUserConfig(baseUrl: 'https://old.example.com'),
+    );
+    secrets.value = 'old-secret';
+    final service = CloudSettingsService(
+      environment: const {},
+      repository: repository,
+      secretStore: secrets,
+      connectionTester: (_, _) async => throw StateError('offline'),
+    );
+
+    await expectLater(
+      service.save(
+        config: const CloudUserConfig(baseUrl: 'https://new.example.com'),
+        accessToken: 'new-secret',
+      ),
+      throwsStateError,
+    );
+
+    expect((await repository.read())?.baseUrl, 'https://old.example.com');
+    expect(secrets.value, 'old-secret');
+  });
+
+  test('secure store failure preserves previous configuration', () async {
+    await repository.save(
+      const CloudUserConfig(baseUrl: 'https://old.example.com'),
+    );
+    secrets
+      ..value = 'old-secret'
+      ..writeError = StateError('vault locked');
+    final service = CloudSettingsService(
+      environment: const {},
+      repository: repository,
+      secretStore: secrets,
+      connectionTester: (_, _) async {},
+    );
+
+    await expectLater(
+      service.save(
+        config: const CloudUserConfig(baseUrl: 'https://new.example.com'),
+        accessToken: 'new-secret',
+      ),
+      throwsStateError,
+    );
+
+    expect((await repository.read())?.baseUrl, 'https://old.example.com');
+    expect(secrets.value, 'old-secret');
+  });
+
+  test('repository failure restores the previous secure token', () async {
+    final store = FailingSettingsStore(
+      const CloudUserConfig(baseUrl: 'https://old.example.com'),
+    );
+    secrets.value = 'old-secret';
+    final service = CloudSettingsService(
+      environment: const {},
+      repository: store,
+      secretStore: secrets,
+      connectionTester: (_, _) async {},
+    );
+
+    await expectLater(
+      service.save(
+        config: const CloudUserConfig(baseUrl: 'https://new.example.com'),
+        accessToken: 'new-secret',
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(secrets.value, 'old-secret');
+  });
+
+  test(
+    'clear reports credential and configuration results separately',
+    () async {
+      final store = FailingSettingsStore(
+        const CloudUserConfig(baseUrl: 'https://old.example.com'),
+        clearFails: true,
+      );
+      secrets.value = 'old-secret';
+      final service = CloudSettingsService(
+        environment: const {},
+        repository: store,
+        secretStore: secrets,
+        connectionTester: (_, _) async {},
+      );
+
+      final result = await service.clear();
+
+      expect(result.credentialCleared, isTrue);
+      expect(result.configurationCleared, isFalse);
+    },
+  );
 }
 
 class MemorySecretStore implements SecretStore {
   String? value;
   Object? readError;
+  Object? writeError;
   int readCount = 0;
 
   @override
@@ -123,11 +219,33 @@ class MemorySecretStore implements SecretStore {
 
   @override
   Future<void> writeAccessToken(String value) async {
+    if (writeError case final error?) throw error;
     this.value = value;
   }
 
   @override
   Future<void> deleteAccessToken() async {
+    value = null;
+  }
+}
+
+class FailingSettingsStore implements CloudSettingsStore {
+  FailingSettingsStore(this.value, {this.clearFails = false});
+
+  CloudUserConfig? value;
+  final bool clearFails;
+
+  @override
+  Future<CloudUserConfig?> read() async => value;
+
+  @override
+  Future<void> save(CloudUserConfig config) async {
+    throw const FileSystemException('disk unavailable');
+  }
+
+  @override
+  Future<void> clear() async {
+    if (clearFails) throw const FileSystemException('disk unavailable');
     value = null;
   }
 }

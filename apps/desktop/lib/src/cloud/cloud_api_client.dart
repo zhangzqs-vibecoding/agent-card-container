@@ -273,6 +273,50 @@ class CloudApiClient {
   final bool allowInsecureForDevelopment;
   final HttpClient _httpClient;
 
+  Future<void> testConnection() async {
+    final uri = baseUri.resolve('/healthz');
+    if (uri.scheme != baseUri.scheme ||
+        uri.host != baseUri.host ||
+        uri.port != baseUri.port) {
+      throw StateError('health request escaped configured origin');
+    }
+    final request = await _httpClient.getUrl(uri);
+    request
+      ..followRedirects = false
+      ..headers.set(HttpHeaders.acceptHeader, 'application/json');
+    final response = await request.close();
+    if (response.isRedirect) {
+      throw const CloudApiException(
+        statusCode: 0,
+        code: 'REDIRECT_REJECTED',
+        message: '云端健康检查禁止重定向',
+      );
+    }
+    if (response.statusCode != HttpStatus.ok) {
+      throw const CloudApiException(
+        statusCode: 0,
+        code: 'HEALTH_CHECK_FAILED',
+        message: '云端服务健康检查失败',
+      );
+    }
+    final bytes = await _readBounded(response, 64 * 1024);
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map<String, Object?> ||
+          decoded['status'] != 'ok' ||
+          decoded['service'] != 'agent-card-cloud') {
+        throw const FormatException('unexpected health response');
+      }
+    } catch (_) {
+      throw const CloudApiException(
+        statusCode: 0,
+        code: 'INCOMPATIBLE_SERVICE',
+        message: '目标地址不是兼容的 Agent Card Cloud',
+      );
+    }
+    await listCards();
+  }
+
   Future<GenerationSession> createGeneration({
     required String prompt,
     GenerationTarget target = GenerationTarget.auto,

@@ -1,8 +1,12 @@
 import 'dart:convert';
 
 import 'cloud_connection_settings.dart';
+import 'cloud_api_client.dart';
 import 'cloud_settings_repository.dart';
 import 'secret_store.dart';
+
+typedef CloudConnectionTester =
+    Future<void> Function(CloudUserConfig config, String accessToken);
 
 class CloudSettingsLoadResult {
   const CloudSettingsLoadResult({
@@ -18,16 +22,29 @@ class CloudSettingsLoadResult {
   final String? issueMessage;
 }
 
+class CloudSettingsClearResult {
+  const CloudSettingsClearResult({
+    required this.credentialCleared,
+    required this.configurationCleared,
+  });
+
+  final bool credentialCleared;
+  final bool configurationCleared;
+}
+
 class CloudSettingsService {
   CloudSettingsService({
     required Map<String, String> environment,
     required this.repository,
     required this.secretStore,
-  }) : environment = Map.unmodifiable(environment);
+    CloudConnectionTester? connectionTester,
+  }) : environment = Map.unmodifiable(environment),
+       connectionTester = connectionTester ?? _testConnection;
 
   final Map<String, String> environment;
-  final CloudSettingsRepository repository;
+  final CloudSettingsStore repository;
   final SecretStore secretStore;
+  final CloudConnectionTester connectionTester;
 
   Future<CloudSettingsLoadResult> load() async {
     final url = _nonEmpty(environment['AGENTCARD_CLOUD_URL']);
@@ -116,6 +133,80 @@ class CloudSettingsService {
         issueMessage: '系统安全凭据库当前不可用',
       );
     }
+  }
+
+  Future<void> test({
+    required CloudUserConfig config,
+    required String accessToken,
+  }) async {
+    config.validate();
+    if (_nonEmpty(accessToken) == null) {
+      throw ArgumentError.value(accessToken, 'accessToken', '访问令牌不能为空');
+    }
+    await connectionTester(config, accessToken);
+  }
+
+  Future<void> save({
+    required CloudUserConfig config,
+    required String accessToken,
+  }) async {
+    if (_environmentManaged) {
+      throw StateError('云端配置由环境变量管理');
+    }
+    await test(config: config, accessToken: accessToken);
+    final previousToken = await secretStore.readAccessToken();
+    await secretStore.writeAccessToken(accessToken);
+    try {
+      await repository.save(config);
+    } catch (_) {
+      if (previousToken == null || previousToken.isEmpty) {
+        await secretStore.deleteAccessToken();
+      } else {
+        await secretStore.writeAccessToken(previousToken);
+      }
+      rethrow;
+    }
+  }
+
+  Future<CloudSettingsClearResult> clear() async {
+    if (_environmentManaged) {
+      throw StateError('云端配置由环境变量管理');
+    }
+    var credentialCleared = false;
+    var configurationCleared = false;
+    try {
+      await secretStore.deleteAccessToken();
+      credentialCleared = true;
+    } catch (_) {
+      credentialCleared = false;
+    }
+    try {
+      await repository.clear();
+      configurationCleared = true;
+    } catch (_) {
+      configurationCleared = false;
+    }
+    return CloudSettingsClearResult(
+      credentialCleared: credentialCleared,
+      configurationCleared: configurationCleared,
+    );
+  }
+
+  bool get _environmentManaged =>
+      _nonEmpty(environment['AGENTCARD_CLOUD_URL']) != null ||
+      _nonEmpty(environment['AGENTCARD_ACCESS_TOKEN']) != null;
+}
+
+Future<void> _testConnection(CloudUserConfig config, String accessToken) async {
+  final client = CloudApiClient(
+    baseUri: config.validate(),
+    tokenProvider: () async => accessToken,
+    allowInsecureForDevelopment: config.allowInsecureLoopback,
+  );
+  try {
+    await client.testConnection();
+  } finally {
+    client.close();
   }
 }
 
