@@ -15,6 +15,7 @@ class LocalRuntimeServer {
     this._rateLimit,
     this._invocationTimeout,
     this._maxResponseBytes,
+    this._minimumMetricsInterval,
   ) {
     _subscription = _server.listen(_handleRequest);
   }
@@ -23,6 +24,7 @@ class LocalRuntimeServer {
     RuntimeRateLimit rateLimit = const RuntimeRateLimit(),
     Duration invocationTimeout = const Duration(seconds: 10),
     int maxResponseBytes = 1024 * 1024,
+    Duration minimumMetricsInterval = const Duration(seconds: 1),
   }) async {
     final server = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
@@ -34,6 +36,7 @@ class LocalRuntimeServer {
       rateLimit,
       invocationTimeout,
       maxResponseBytes,
+      minimumMetricsInterval,
     );
   }
 
@@ -55,7 +58,9 @@ class LocalRuntimeServer {
   final RuntimeRateLimit _rateLimit;
   final Duration _invocationTimeout;
   final int _maxResponseBytes;
+  final Duration _minimumMetricsInterval;
   final _sessionsByAuthority = <String, RuntimeSession>{};
+  final _metricsSubscriptions = <String, _MetricsSubscription>{};
   late final StreamSubscription<HttpRequest> _subscription;
   final Random _random = Random.secure();
 
@@ -95,6 +100,7 @@ class LocalRuntimeServer {
         .where((session) => session.id == id)
         .toList(growable: false);
     for (final session in sessions) {
+      _metricsSubscriptions.remove(session.id)?.cancel();
       session.closeEventSockets();
       _sessionsByAuthority.remove(session.authority);
     }
@@ -114,6 +120,10 @@ class LocalRuntimeServer {
   }
 
   Future<void> close() async {
+    for (final subscription in _metricsSubscriptions.values) {
+      subscription.cancel();
+    }
+    _metricsSubscriptions.clear();
     for (final session in _sessionsByAuthority.values) {
       session.closeEventSockets();
     }
@@ -371,6 +381,33 @@ class LocalRuntimeServer {
         return {'deleted': session.storage.delete(key)};
       case 'storage.list':
         return {'keys': session.storage.listKeys()};
+      case 'system.metrics.subscribe':
+        if (params.keys.toSet().difference(const {'intervalMs'}).isNotEmpty) {
+          throw const _InvalidParams('unknown metrics subscription parameter');
+        }
+        final intervalMs = params['intervalMs'] ?? 5000;
+        if (intervalMs is! int ||
+            intervalMs < _minimumMetricsInterval.inMilliseconds ||
+            intervalMs > const Duration(minutes: 1).inMilliseconds) {
+          throw _InvalidParams(
+            'intervalMs must be between '
+            '${_minimumMetricsInterval.inMilliseconds} and 60000',
+          );
+        }
+        _metricsSubscriptions.remove(session.id)?.cancel();
+        _metricsSubscriptions[session.id] = _MetricsSubscription(
+          Duration(milliseconds: intervalMs),
+          () => _publishMetrics(session),
+        );
+        return {'subscribed': true, 'intervalMs': intervalMs};
+      case 'system.metrics.unsubscribe':
+        if (params.isNotEmpty) {
+          throw const _InvalidParams(
+            'system.metrics.unsubscribe does not accept parameters',
+          );
+        }
+        _metricsSubscriptions.remove(session.id)?.cancel();
+        return {'subscribed': false};
       default:
         final handler = session.rpcHandler;
         if (handler == null) {
@@ -380,6 +417,24 @@ class LocalRuntimeServer {
           );
         }
         return handler(session.rpcContext, method, params);
+    }
+  }
+
+  Future<void> _publishMetrics(RuntimeSession session) async {
+    if (!_sessionsByAuthority.containsKey(session.authority)) {
+      return;
+    }
+    try {
+      final metrics = await _invoke(
+        session,
+        'system.metrics.get',
+        const {},
+      ).timeout(_invocationTimeout);
+      if (_metricsSubscriptions.containsKey(session.id)) {
+        session.publishEvent('system.metrics', metrics);
+      }
+    } catch (_) {
+      // A transient metrics read must not terminate the runtime or leak details.
     }
   }
 
@@ -526,6 +581,27 @@ class LocalRuntimeServer {
   String _randomToken(int byteCount) {
     return base64Url.encode(_randomBytes(byteCount)).replaceAll('=', '');
   }
+}
+
+class _MetricsSubscription {
+  _MetricsSubscription(Duration interval, Future<void> Function() sample)
+    : _sample = sample {
+    _timer = Timer.periodic(interval, (_) => _tick());
+  }
+
+  final Future<void> Function() _sample;
+  late final Timer _timer;
+  var _sampling = false;
+
+  void _tick() {
+    if (_sampling) {
+      return;
+    }
+    _sampling = true;
+    unawaited(_sample().whenComplete(() => _sampling = false));
+  }
+
+  void cancel() => _timer.cancel();
 }
 
 class _InvalidParams implements Exception {

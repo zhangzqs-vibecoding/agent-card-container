@@ -366,6 +366,59 @@ void main() {
       await messages.cancel();
     });
 
+    test('subscribes and unsubscribes bounded system metrics events', () async {
+      await server.close();
+      server = await LocalRuntimeServer.start(
+        minimumMetricsInterval: const Duration(milliseconds: 10),
+      );
+      var reads = 0;
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+        declaredCapabilities: const {'system.metrics.read'},
+        rpcHandler: (_, method, params) async {
+          expect(method, 'system.metrics.get');
+          expect(params, isEmpty);
+          return {'processorCount': 8, 'sample': ++reads};
+        },
+      );
+      final socket = await WebSocket.connect(
+        'ws://127.0.0.1:${server.port}/v1/events',
+        headers: {
+          HttpHeaders.hostHeader: session.authority,
+          'Origin': session.origin,
+        },
+      );
+      addTearDown(socket.close);
+      final messages = StreamIterator<dynamic>(socket);
+      socket.add(jsonEncode({'type': 'authenticate', 'token': session.token}));
+      expect(await messages.moveNext(), isTrue);
+
+      final subscribed = await _rpc(
+        server,
+        session,
+        id: 1,
+        method: 'system.metrics.subscribe',
+        params: {'intervalMs': 10},
+      );
+      expect(subscribed['result'], {'subscribed': true, 'intervalMs': 10});
+      expect(await messages.moveNext(), isTrue);
+      final event = jsonDecode(messages.current as String) as Map;
+      expect(event['event'], 'system.metrics');
+      expect((event['payload'] as Map)['processorCount'], 8);
+
+      final unsubscribed = await _rpc(
+        server,
+        session,
+        id: 2,
+        method: 'system.metrics.unsubscribe',
+      );
+      expect(unsubscribed['result'], {'subscribed': false});
+      await messages.cancel();
+    });
+
     test('rejects invalid event authentication and unknown events', () async {
       final session = server.createSession(
         instanceId: 'instance-1',
