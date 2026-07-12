@@ -56,6 +56,32 @@ class CardInstallCoordinator {
         message: '待安装版本不存在',
       );
     }
+    return _install(version);
+  }
+
+  Future<InstalledCardResult> installCardVersion(
+    String cardId,
+    String versionId,
+  ) async {
+    final card = await client.getCard(cardId);
+    CloudCardVersion? version;
+    for (final candidate in card.versions) {
+      if (candidate.versionId == versionId) {
+        version = candidate;
+        break;
+      }
+    }
+    if (version == null) {
+      throw const CloudApiException(
+        statusCode: HttpStatus.notFound,
+        code: 'NOT_FOUND',
+        message: '待安装版本不存在',
+      );
+    }
+    return _install(version);
+  }
+
+  Future<InstalledCardResult> _install(CloudCardVersion version) async {
     final download = await client.artifactDownload(
       version.cardId,
       version.versionId,

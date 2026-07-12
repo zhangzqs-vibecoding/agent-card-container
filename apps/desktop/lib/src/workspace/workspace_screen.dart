@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../agent_studio/agent_studio_controller.dart';
+import '../cloud/card_catalog_controller.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import 'workspace_card.dart';
@@ -13,12 +14,14 @@ class WorkspaceScreen extends StatefulWidget {
     this.workspaceCards = const [],
     this.agentStudioController,
     this.workspaceController,
+    this.cardCatalogController,
   });
 
   final int? runtimePort;
   final List<WorkspaceCard> workspaceCards;
   final AgentStudioController? agentStudioController;
   final WorkspaceController? workspaceController;
+  final CardCatalogController? cardCatalogController;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -51,25 +54,15 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       selectedIndex: _selectedDestination,
                       onSelected: (index) {
                         setState(() => _selectedDestination = index);
+                        if (index == 1 &&
+                            widget.cardCatalogController?.cards.isEmpty ==
+                                true) {
+                          widget.cardCatalogController?.refresh();
+                        }
                       },
                     ),
                     VerticalDivider(width: 1, color: colors.outlineVariant),
-                    Expanded(
-                      child: AnimatedBuilder(
-                        animation:
-                            widget.workspaceController ??
-                            _NoopListenable.instance,
-                        builder: (context, _) => _WorkspaceCanvas(
-                          cards:
-                              widget.workspaceController?.cards ??
-                              widget.workspaceCards,
-                          agentPanelOpen: _agentPanelOpen,
-                          onOpenAgentPanel: () {
-                            setState(() => _agentPanelOpen = true);
-                          },
-                        ),
-                      ),
-                    ),
+                    Expanded(child: _destinationContent()),
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeOutCubic,
@@ -93,6 +86,212 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         ),
       ),
     );
+  }
+
+  Widget _destinationContent() {
+    if (_selectedDestination == 1) {
+      return _CardLibrary(
+        controller: widget.cardCatalogController,
+        onShowVersions: (cardId) async {
+          await widget.cardCatalogController?.selectCard(cardId);
+          if (mounted) {
+            setState(() => _selectedDestination = 2);
+          }
+        },
+      );
+    }
+    if (_selectedDestination == 2) {
+      return _VersionHistory(controller: widget.cardCatalogController);
+    }
+    return AnimatedBuilder(
+      animation: widget.workspaceController ?? _NoopListenable.instance,
+      builder: (context, _) => _WorkspaceCanvas(
+        cards: widget.workspaceController?.cards ?? widget.workspaceCards,
+        agentPanelOpen: _agentPanelOpen,
+        onOpenAgentPanel: () {
+          setState(() => _agentPanelOpen = true);
+        },
+      ),
+    );
+  }
+}
+
+class _CardLibrary extends StatelessWidget {
+  const _CardLibrary({required this.controller, required this.onShowVersions});
+
+  final CardCatalogController? controller;
+  final Future<void> Function(String cardId) onShowVersions;
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = controller;
+    if (catalog == null) {
+      return const _CloudUnavailable();
+    }
+    return AnimatedBuilder(
+      animation: catalog,
+      builder: (context, _) => _CatalogPage(
+        title: '我的卡片',
+        subtitle: '云端生成并签名的卡片',
+        loading: catalog.loading,
+        errorMessage: catalog.errorMessage,
+        onRefresh: catalog.refresh,
+        child: catalog.cards.isEmpty
+            ? const Center(child: Text('还没有已生成的卡片'))
+            : ListView.separated(
+                padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+                itemCount: catalog.cards.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final card = catalog.cards[index];
+                  return Card(
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.all(18),
+                      leading: const CircleAvatar(
+                        child: Icon(Icons.widgets_outlined),
+                      ),
+                      title: Text(card.title),
+                      subtitle: Text(
+                        '${card.description}\n最新版本 ${card.latestVersion.displayVersion} · ${card.latestVersion.runtime}',
+                      ),
+                      isThreeLine: true,
+                      trailing: FilledButton.tonal(
+                        onPressed: () => onShowVersions(card.cardId),
+                        child: const Text('查看版本'),
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+    );
+  }
+}
+
+class _VersionHistory extends StatelessWidget {
+  const _VersionHistory({required this.controller});
+
+  final CardCatalogController? controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final catalog = controller;
+    if (catalog == null) {
+      return const _CloudUnavailable();
+    }
+    return AnimatedBuilder(
+      animation: catalog,
+      builder: (context, _) {
+        final card = catalog.selectedCard;
+        return _CatalogPage(
+          title: '版本历史',
+          subtitle: card?.title ?? '请先从卡片库选择一张卡片',
+          loading: catalog.loading,
+          errorMessage: catalog.errorMessage,
+          onRefresh: card == null
+              ? catalog.refresh
+              : () => catalog.selectCard(card.cardId),
+          child: card == null
+              ? const Center(child: Text('暂无选中的卡片'))
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+                  itemCount: card.versions.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final version = card.versions[index];
+                    final installing =
+                        catalog.installingVersionId == version.versionId;
+                    return Card(
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(18),
+                        title: Text(version.displayVersion),
+                        subtitle: Text(
+                          '${version.runtime} · ${version.createdAt.toLocal()}\n签名密钥 ${version.keyId}',
+                        ),
+                        isThreeLine: true,
+                        trailing: FilledButton(
+                          onPressed:
+                              catalog.installationAvailable &&
+                                  catalog.installingVersionId == null
+                              ? () => catalog.install(version.versionId)
+                              : null,
+                          child: Text(installing ? '安装中…' : '安装此版本'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _CatalogPage extends StatelessWidget {
+  const _CatalogPage({
+    required this.title,
+    required this.subtitle,
+    required this.loading,
+    required this.errorMessage,
+    required this.onRefresh,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final bool loading;
+  final String? errorMessage;
+  final Future<void> Function() onRefresh;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(subtitle),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: '刷新',
+                onPressed: loading ? null : onRefresh,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+        ),
+        if (loading) const LinearProgressIndicator(minHeight: 2),
+        if (errorMessage != null)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
+            child: Text(
+              errorMessage!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        Expanded(child: child),
+      ],
+    );
+  }
+}
+
+class _CloudUnavailable extends StatelessWidget {
+  const _CloudUnavailable();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text('未配置云端连接，离线卡片仍可正常使用'));
   }
 }
 

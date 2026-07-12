@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
+import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_api_client.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
@@ -127,4 +129,71 @@ void main() {
     expect(find.text('专注时间'), findsOneWidget);
     expect(find.text('和 Agent 对话，生成你的第一张卡片'), findsNothing);
   });
+
+  testWidgets('browses cards and installs a selected historical version', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final installed = <String>[];
+    final catalog = CardCatalogController(
+      port: _CatalogFixture(),
+      installVersion: (cardId, versionId) async {
+        installed.add('$cardId/$versionId');
+      },
+    );
+    addTearDown(catalog.dispose);
+    await catalog.refresh();
+    await tester.pumpWidget(AgentCardApp(cardCatalogController: catalog));
+
+    await tester.tap(find.byIcon(Icons.widgets_outlined));
+    await tester.pump();
+    expect(find.text('我的卡片'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byType(ListTile), matching: find.text('离线番茄钟')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('查看版本'));
+    await tester.pumpAndSettle();
+    expect(find.text('版本历史'), findsOneWidget);
+    expect(find.text('1.0.0'), findsOneWidget);
+
+    await tester.tap(find.text('安装此版本'));
+    await tester.pumpAndSettle();
+    expect(installed, ['card_01/ver_01']);
+  });
 }
+
+class _CatalogFixture implements CloudCatalogPort {
+  @override
+  Future<List<CloudCardSummary>> listCards() async => [
+    CloudCardSummary(
+      cardId: 'card_01',
+      title: '离线番茄钟',
+      description: '无需网络即可计时',
+      latestVersion: _catalogVersion,
+    ),
+  ];
+
+  @override
+  Future<CloudCardDetail> getCard(String cardId) async => CloudCardDetail(
+    cardId: cardId,
+    title: '离线番茄钟',
+    description: '无需网络即可计时',
+    versions: [_catalogVersion],
+  );
+}
+
+final _catalogVersion = CloudCardVersion(
+  versionId: 'ver_01',
+  cardId: 'card_01',
+  runtime: 'native',
+  displayVersion: '1.0.0',
+  title: '离线番茄钟',
+  description: '无需网络即可计时',
+  artifactSha256: List.filled(64, 'a').join(),
+  keyId: 'key-1',
+  preview: const {},
+  createdAt: DateTime.utc(2026, 7, 12),
+);

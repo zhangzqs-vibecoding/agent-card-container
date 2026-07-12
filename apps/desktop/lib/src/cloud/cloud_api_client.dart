@@ -180,6 +180,40 @@ class CloudCardSummary {
   final CloudCardVersion latestVersion;
 }
 
+class CloudCardDetail {
+  const CloudCardDetail({
+    required this.cardId,
+    required this.title,
+    required this.description,
+    required this.versions,
+  });
+
+  factory CloudCardDetail.fromJson(Map<String, Object?> json) {
+    final versions = json['versions'];
+    if (versions is! List) {
+      throw const FormatException('versions must be an array');
+    }
+    return CloudCardDetail(
+      cardId: _string(json, 'cardId'),
+      title: _string(json, 'title'),
+      description: _string(json, 'description'),
+      versions: versions
+          .map((version) {
+            if (version is! Map<String, Object?>) {
+              throw const FormatException('card version must be an object');
+            }
+            return CloudCardVersion.fromJson(version);
+          })
+          .toList(growable: false),
+    );
+  }
+
+  final String cardId;
+  final String title;
+  final String description;
+  final List<CloudCardVersion> versions;
+}
+
 class ArtifactDownload {
   const ArtifactDownload({
     required this.url,
@@ -302,6 +336,14 @@ class CloudApiClient {
           return CloudCardSummary.fromJson(card);
         })
         .toList(growable: false);
+  }
+
+  Future<CloudCardDetail> getCard(String cardId) async {
+    final response = await _json(
+      'GET',
+      '/v1/cards/${Uri.encodeComponent(cardId)}',
+    );
+    return CloudCardDetail.fromJson(response);
   }
 
   Future<ArtifactDownload> artifactDownload(

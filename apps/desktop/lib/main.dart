@@ -13,6 +13,7 @@ Future<void> main() async {
       workspaceCards: desktopRuntime.workspaceCards,
       workspaceController: desktopRuntime.workspaceController,
       agentStudioController: desktopRuntime.agentStudioController,
+      cardCatalogController: desktopRuntime.cardCatalogController,
     ),
   );
 }

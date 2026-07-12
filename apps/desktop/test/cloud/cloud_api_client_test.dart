@@ -56,6 +56,46 @@ void main() {
           await request.response.close();
           return;
         }
+        if (request.uri.path == '/v1/cards/card_01') {
+          request.response
+            ..headers.contentType = ContentType.json
+            ..statusCode = HttpStatus.ok
+            ..write(
+              jsonEncode({
+                'cardId': 'card_01',
+                'title': '番茄钟',
+                'description': '离线',
+                'versions': [
+                  {
+                    'versionId': 'ver_02',
+                    'cardId': 'card_01',
+                    'runtime': 'native',
+                    'displayVersion': '2.0.0',
+                    'title': '番茄钟',
+                    'description': '离线',
+                    'artifactSha256': List.filled(64, 'b').join(),
+                    'keyId': 'key-1',
+                    'preview': {},
+                    'createdAt': '2026-07-12T13:30:00Z',
+                  },
+                  {
+                    'versionId': 'ver_01',
+                    'cardId': 'card_01',
+                    'runtime': 'native',
+                    'displayVersion': '1.0.0',
+                    'title': '番茄钟',
+                    'description': '离线',
+                    'artifactSha256': List.filled(64, 'a').join(),
+                    'keyId': 'key-1',
+                    'preview': {},
+                    'createdAt': '2026-07-12T13:00:00Z',
+                  },
+                ],
+              }),
+            );
+          await request.response.close();
+          return;
+        }
         if (request.uri.path.endsWith('/artifact')) {
           request.response
             ..headers.contentType = ContentType.json
@@ -191,5 +231,15 @@ void main() {
         expect(bytes, [1, 2, 3, 4]);
       },
     );
+
+    test('loads immutable version history for one card', () async {
+      final detail = await client.getCard('card_01');
+
+      expect(detail.cardId, 'card_01');
+      expect(detail.versions.map((version) => version.versionId), [
+        'ver_02',
+        'ver_01',
+      ]);
+    });
   });
 }

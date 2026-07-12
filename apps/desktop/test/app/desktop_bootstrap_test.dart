@@ -141,6 +141,7 @@ void main() {
 
       expect(runtime.agentStudioController, isNotNull);
       expect(runtime.cloudClient, isNotNull);
+      expect(runtime.cardCatalogController, isNotNull);
     },
   );
 }

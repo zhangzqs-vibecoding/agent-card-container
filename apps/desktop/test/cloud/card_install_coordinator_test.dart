@@ -27,17 +27,41 @@ void main() {
                   'title': '番茄钟',
                   'description': '离线',
                   'latestVersion': {
-                    'versionId': 'ver_pomodoro_1',
+                    'versionId': 'ver_pomodoro_2',
                     'cardId': 'card_pomodoro',
                     'runtime': 'native',
                     'displayVersion': '1.0.0',
                     'title': '番茄钟',
                     'description': '离线',
-                    'artifactSha256': artifact.sha256,
+                    'artifactSha256': List.filled(64, 'f').join(),
                     'keyId': artifact.keyId,
                     'preview': {},
                     'createdAt': '2026-07-12T13:00:00Z',
                   },
+                },
+              ],
+            }),
+          );
+      } else if (request.uri.path == '/v1/cards/card_pomodoro') {
+        request.response
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'cardId': 'card_pomodoro',
+              'title': '番茄钟',
+              'description': '离线',
+              'versions': [
+                {
+                  'versionId': 'ver_pomodoro_1',
+                  'cardId': 'card_pomodoro',
+                  'runtime': 'native',
+                  'displayVersion': '1.0.0',
+                  'title': '番茄钟',
+                  'description': '离线',
+                  'artifactSha256': artifact.sha256,
+                  'keyId': artifact.keyId,
+                  'preview': {},
+                  'createdAt': '2026-07-12T13:00:00Z',
                 },
               ],
             }),
@@ -83,7 +107,10 @@ void main() {
       now: () => DateTime.utc(2026, 7, 12),
     );
 
-    final installed = await coordinator.installVersion('ver_pomodoro_1');
+    final installed = await coordinator.installCardVersion(
+      'card_pomodoro',
+      'ver_pomodoro_1',
+    );
 
     expect(installed.workspaceCard, isNotNull);
     expect(installed.workspaceCard?.spec.initialState['title'], '专注时间');

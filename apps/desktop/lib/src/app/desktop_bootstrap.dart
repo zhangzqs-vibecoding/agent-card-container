@@ -7,6 +7,7 @@ import '../agent_studio/agent_studio_controller.dart';
 import '../artifacts/artifact_crypto.dart';
 import '../artifacts/artifact_installer.dart';
 import '../cloud/card_install_coordinator.dart';
+import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
 import '../contracts/card_definition.dart';
 import '../native_card/native_card_spec.dart';
@@ -32,6 +33,7 @@ class DesktopRuntime {
     required this.workspaceController,
     this.cloudClient,
     this.agentStudioController,
+    this.cardCatalogController,
   });
 
   final LocalDatabase database;
@@ -41,6 +43,7 @@ class DesktopRuntime {
   final WorkspaceController workspaceController;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
+  final CardCatalogController? cardCatalogController;
   var _closed = false;
 
   Future<void> close() async {
@@ -49,6 +52,7 @@ class DesktopRuntime {
     }
     _closed = true;
     agentStudioController?.dispose();
+    cardCatalogController?.dispose();
     workspaceController.dispose();
     cloudClient?.close();
     await runtimeServer.close();
@@ -131,6 +135,7 @@ abstract final class DesktopBootstrap {
         workspaceController: workspaceController,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
+        cardCatalogController: cloud?.catalog,
       );
     } catch (_) {
       database.close();
@@ -139,7 +144,11 @@ abstract final class DesktopBootstrap {
   }
 }
 
-({CloudApiClient client, AgentStudioController controller})?
+({
+  CloudApiClient client,
+  AgentStudioController controller,
+  CardCatalogController catalog,
+})?
 _cloudConfiguration(
   Map<String, String> environment,
   Directory root,
@@ -173,6 +182,14 @@ _cloudConfiguration(
       now: DateTime.now,
     );
   }
+  Future<void> installCardVersion(String cardId, String versionId) async {
+    final result = await coordinator!.installCardVersion(cardId, versionId);
+    final card = result.workspaceCard;
+    if (card != null) {
+      workspace.add(card);
+    }
+  }
+
   return (
     client: client,
     controller: AgentStudioController(
@@ -189,7 +206,23 @@ _cloudConfiguration(
               }
             },
     ),
+    catalog: CardCatalogController(
+      port: _CloudCatalogClient(client),
+      installVersion: coordinator == null ? null : installCardVersion,
+    ),
   );
+}
+
+class _CloudCatalogClient implements CloudCatalogPort {
+  const _CloudCatalogClient(this.client);
+
+  final CloudApiClient client;
+
+  @override
+  Future<CloudCardDetail> getCard(String cardId) => client.getCard(cardId);
+
+  @override
+  Future<List<CloudCardSummary>> listCards() => client.listCards();
 }
 
 Map<String, Uint8List> _trustedKeys(String? source) {
