@@ -1,7 +1,7 @@
 # M3 production integration evidence
 
 Status: **PASS (local production adapters)**  
-Commit: `59e7e4eb014cfaaafbe17bfc6d268c3bf63a5d66`  
+Latest verified code commit: `98a8609d92be7f94b4dddd9785f97fe443bb24a0`
 Recorded: 2026-07-12 (Asia/Shanghai)
 
 This evidence uses disposable local containers and repository integration
@@ -33,7 +33,7 @@ Containers and their network were removed by a shell trap after the run.
 The builder used the immutable base manifest
 `node@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2`.
 The resulting temporary builder image was
-`sha256:f0f2b8550462e0e1d5441d1da95d0b758d8105821d7cf3a9bb1a1d83384ee31b`.
+`sha256:d3079f42004566af17ddfbb67be2949b86e1d784ba50f06ca4e02190def815f7`.
 
 ```sh
 NODE_IMAGE="node@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2" \

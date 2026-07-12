@@ -29,7 +29,8 @@
 ### Task 4：CodeCard OCI 沙箱与签名发布
 
 - [x] 定义 sandbox 接口与 Docker OCI adapter：无网络、非 root、只读根、2 CPU、2 GiB、5 分钟、白名单输出。
-- [ ] 固定 pnpm lockfile、TypeScript、Preact、Vite 模板，接通类型检查、测试、构建、静态 bundle policy、许可白名单与高危漏洞审计；隔离浏览器加载仍待 Windows 门禁。
+- [x] 固定 pnpm lockfile、TypeScript、Preact、Vite 模板，接通类型检查、测试、构建、静态 bundle policy、许可白名单与高危漏洞审计。
+- [ ] 隔离浏览器加载仍待 Windows WebView2 门禁。
 - [x] 生成规范化 manifest、文件 hash、Ed25519 签名和 agentcard ZIP。
 - [x] 实现内存与 S3 兼容对象存储 adapter、条件写入、短期签名下载及不可变 CardVersion 幂等发布。
 
