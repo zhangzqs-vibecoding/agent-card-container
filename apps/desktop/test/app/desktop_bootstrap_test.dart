@@ -123,4 +123,24 @@ void main() {
     expect(runtime.recoveryErrors, hasLength(1));
     expect(runtime.recoveryErrors.single.instanceId, 'broken-instance');
   });
+
+  test(
+    'enables Agent Studio only from process environment configuration',
+    () async {
+      final root = Directory.systemTemp.createTempSync('agent-card-bootstrap-');
+      addTearDown(() => root.deleteSync(recursive: true));
+
+      final runtime = await DesktopBootstrap.start(
+        appDataDirectory: root,
+        environment: const {
+          'AGENTCARD_CLOUD_URL': 'https://api.agentcard.example',
+          'AGENTCARD_ACCESS_TOKEN': 'ephemeral-test-token',
+        },
+      );
+      addTearDown(runtime.close);
+
+      expect(runtime.agentStudioController, isNotNull);
+      expect(runtime.cloudClient, isNotNull);
+    },
+  );
 }

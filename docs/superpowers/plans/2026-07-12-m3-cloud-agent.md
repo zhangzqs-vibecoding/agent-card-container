@@ -8,7 +8,7 @@
 
 ### Task 1：共享云合同与生成状态机
 
-- [ ] 建立 OpenAPI、SSE event schema、错误 envelope 和 Go 一致性测试。
+- [x] 建立 OpenAPI、SSE event schema、错误 envelope 和 Go 一致性测试。
 - [x] 先写失败测试，覆盖固定状态转换、非法转换、取消和 ready 终态。
 - [x] 实现 GenerationSession、Message、Event 核心领域模型；Job 与 CardVersion 在任务和发布步骤补齐。
 
@@ -21,10 +21,10 @@
 
 ### Task 3：Native-first Agent 与验证器
 
-- [ ] 定义 modelprovider 接口，密钥只从环境注入，日志不记录 prompt 或密钥。
-- [ ] 实现结构化需求摘要、确认、auto、native、web 选择和禁止能力拒绝。
-- [ ] NativeCard 生成并通过共享 schema、catalog、限制验证。
-- [ ] 失败最多自动修复三轮，随后产生稳定失败 code。
+- [x] 定义 modelprovider 接口，密钥只从环境注入，日志不记录 prompt 或密钥。
+- [x] 实现结构化需求摘要、确认、auto、native、web 选择和禁止能力拒绝。
+- [x] NativeCard 生成并通过共享 schema、catalog、限制验证。
+- [x] 失败最多自动修复三轮，随后产生稳定失败 code。
 
 ### Task 4：CodeCard OCI 沙箱与签名发布
 
@@ -35,7 +35,7 @@
 
 ### Task 5：桌面端生成与端到端验收
 
-- [ ] 桌面端接入生成创建、确认、SSE 重连、取消、预览、安装和版本历史。
+- [ ] 桌面端已接入生成创建、确认、SSE 重连和取消；预览、自动安装和版本历史界面待补。
 - [ ] NativeCard 与 CodeCard 均经过签名安装链路进入 workspace。
 - [ ] 运行 Go test、race、vet、Flutter 全量测试、沙箱与篡改回归。
 - [ ] 记录真实模型、PostgreSQL、S3、Docker 和 Windows E2E 环境门禁。

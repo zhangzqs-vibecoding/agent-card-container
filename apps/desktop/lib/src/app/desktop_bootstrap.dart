@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../agent_studio/agent_studio_controller.dart';
+import '../cloud/cloud_api_client.dart';
 import '../contracts/card_definition.dart';
 import '../native_card/native_card_spec.dart';
 import '../runtime/local_runtime_server.dart';
@@ -21,12 +23,16 @@ class DesktopRuntime {
     required this.runtimeServer,
     required this.workspaceCards,
     required this.recoveryErrors,
+    this.cloudClient,
+    this.agentStudioController,
   });
 
   final LocalDatabase database;
   final LocalRuntimeServer runtimeServer;
   final List<WorkspaceCard> workspaceCards;
   final List<RecoveryError> recoveryErrors;
+  final CloudApiClient? cloudClient;
+  final AgentStudioController? agentStudioController;
   var _closed = false;
 
   Future<void> close() async {
@@ -34,13 +40,19 @@ class DesktopRuntime {
       return;
     }
     _closed = true;
+    agentStudioController?.dispose();
+    cloudClient?.close();
     await runtimeServer.close();
     database.close();
   }
 }
 
 abstract final class DesktopBootstrap {
-  static Future<DesktopRuntime> start({Directory? appDataDirectory}) async {
+  static Future<DesktopRuntime> start({
+    Directory? appDataDirectory,
+    Map<String, String>? environment,
+  }) async {
+    final processEnvironment = environment ?? Platform.environment;
     final root = appDataDirectory ?? AppDataLocator.resolve();
     root.createSync(recursive: true);
     final database = LocalDatabase.open(_join(root.path, 'agent-card.sqlite3'));
@@ -94,18 +106,40 @@ abstract final class DesktopBootstrap {
           );
         }
       }
+      final cloud = _cloudConfiguration(processEnvironment);
       final runtimeServer = await LocalRuntimeServer.start();
       return DesktopRuntime(
         database: database,
         runtimeServer: runtimeServer,
         workspaceCards: List.unmodifiable(cards),
         recoveryErrors: List.unmodifiable(errors),
+        cloudClient: cloud?.client,
+        agentStudioController: cloud?.controller,
       );
     } catch (_) {
       database.close();
       rethrow;
     }
   }
+}
+
+({CloudApiClient client, AgentStudioController controller})?
+_cloudConfiguration(Map<String, String> environment) {
+  final url = environment['AGENTCARD_CLOUD_URL'];
+  final token = environment['AGENTCARD_ACCESS_TOKEN'];
+  if (url == null || url.isEmpty || token == null || token.isEmpty) {
+    return null;
+  }
+  final client = CloudApiClient(
+    baseUri: Uri.parse(url),
+    tokenProvider: () async => token,
+    allowInsecureForDevelopment:
+        environment['AGENTCARD_ALLOW_INSECURE_CLOUD'] == 'true',
+  );
+  return (
+    client: client,
+    controller: AgentStudioController(port: CloudGenerationPort(client)),
+  );
 }
 
 String _artifactPath(Directory root, String contentHash, String entrypoint) {

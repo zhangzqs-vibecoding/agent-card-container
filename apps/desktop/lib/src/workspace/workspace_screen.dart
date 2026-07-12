@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../agent_studio/agent_studio_controller.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import 'workspace_card.dart';
@@ -9,10 +10,12 @@ class WorkspaceScreen extends StatefulWidget {
     super.key,
     this.runtimePort,
     this.workspaceCards = const [],
+    this.agentStudioController,
   });
 
   final int? runtimePort;
   final List<WorkspaceCard> workspaceCards;
+  final AgentStudioController? agentStudioController;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -65,6 +68,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       decoration: const BoxDecoration(),
                       child: _agentPanelOpen
                           ? _AgentPanel(
+                              controller: widget.agentStudioController,
                               onCollapse: () {
                                 setState(() => _agentPanelOpen = false);
                               },
@@ -511,10 +515,34 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   }
 }
 
-class _AgentPanel extends StatelessWidget {
-  const _AgentPanel({required this.onCollapse});
+class _AgentPanel extends StatefulWidget {
+  const _AgentPanel({required this.onCollapse, this.controller});
 
   final VoidCallback onCollapse;
+  final AgentStudioController? controller;
+
+  @override
+  State<_AgentPanel> createState() => _AgentPanelState();
+}
+
+class _AgentPanelState extends State<_AgentPanel> {
+  final TextEditingController _promptController = TextEditingController();
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final controller = widget.controller;
+    if (controller == null) {
+      return;
+    }
+    final prompt = _promptController.text;
+    _promptController.clear();
+    await controller.submit(prompt);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -550,7 +578,7 @@ class _AgentPanel extends StatelessWidget {
                 IconButton(
                   key: const Key('collapse-agent-panel'),
                   tooltip: '收起',
-                  onPressed: onCollapse,
+                  onPressed: widget.onCollapse,
                   icon: const Icon(Icons.keyboard_double_arrow_right_rounded),
                 ),
               ],
@@ -558,74 +586,95 @@ class _AgentPanel extends StatelessWidget {
           ),
           Divider(height: 1, color: colors.outlineVariant),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _AgentMessage(
-                    label: 'AGENT',
-                    body: '描述你想放在桌面上的工具。我会先确认需求，再选择 NativeCard 或 CodeCard。',
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    '试试这些',
-                    style: TextStyle(
-                      color: colors.onSurfaceVariant,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+            child: AnimatedBuilder(
+              animation: widget.controller ?? _NoopListenable.instance,
+              builder: (context, _) => Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _AgentMessage(
+                      label: 'AGENT',
+                      body: '描述你想放在桌面上的工具。我会先确认需求，再选择 NativeCard 或 CodeCard。',
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  const Wrap(
-                    spacing: 7,
-                    runSpacing: 7,
-                    children: [
-                      _PromptChip(label: '离线番茄钟'),
-                      _PromptChip(label: '系统状态'),
-                      _PromptChip(label: '本地待办'),
-                    ],
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0D1112),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: const Color(0xFF343C3D)),
+                    const SizedBox(height: 16),
+                    Text(
+                      '试试这些',
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 7,
                       children: [
-                        const Expanded(
-                          child: TextField(
-                            maxLines: 4,
-                            minLines: 1,
-                            decoration: InputDecoration(
-                              hintText: '描述一张新卡片…',
-                              border: InputBorder.none,
-                              isDense: true,
-                            ),
-                          ),
+                        _PromptChip(
+                          label: '离线番茄钟',
+                          onTap: () => _promptController.text = '做一个离线番茄钟',
                         ),
-                        const SizedBox(width: 8),
-                        IconButton.filled(
-                          tooltip: '发送',
-                          onPressed: null,
-                          icon: const Icon(Icons.arrow_upward_rounded),
+                        _PromptChip(
+                          label: '系统状态',
+                          onTap: () => _promptController.text = '做一个系统状态卡片',
+                        ),
+                        _PromptChip(
+                          label: '本地待办',
+                          onTap: () => _promptController.text = '做一个本地待办卡片',
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 9),
-                  Text(
-                    '本地状态不会作为 AI 上下文上传',
-                    style: TextStyle(
-                      color: colors.onSurfaceVariant,
-                      fontSize: 10,
+                    if (widget.controller?.session != null) ...[
+                      const SizedBox(height: 18),
+                      _GenerationStatusCard(controller: widget.controller!),
+                    ],
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0D1112),
+                        borderRadius: BorderRadius.circular(15),
+                        border: Border.all(color: const Color(0xFF343C3D)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: const Key('agent-prompt-field'),
+                              controller: _promptController,
+                              maxLines: 4,
+                              minLines: 1,
+                              decoration: InputDecoration(
+                                hintText: '描述一张新卡片…',
+                                border: InputBorder.none,
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            key: const Key('agent-submit'),
+                            tooltip: '发送',
+                            onPressed: widget.controller?.canSubmit == true
+                                ? _submit
+                                : null,
+                            icon: const Icon(Icons.arrow_upward_rounded),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 9),
+                    Text(
+                      '本地状态不会作为 AI 上下文上传',
+                      style: TextStyle(
+                        color: colors.onSurfaceVariant,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -676,21 +725,140 @@ class _AgentMessage extends StatelessWidget {
 }
 
 class _PromptChip extends StatelessWidget {
-  const _PromptChip({required this.label});
+  const _PromptChip({required this.label, this.onTap});
 
   final String label;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF343C3D)),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xFF343C3D)),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 11)),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 11)),
     );
   }
+}
+
+class _GenerationStatusCard extends StatelessWidget {
+  const _GenerationStatusCard({required this.controller});
+
+  final AgentStudioController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = controller.session!;
+    final awaiting = controller.phase == AgentStudioPhase.awaitingConfirmation;
+    final running =
+        controller.phase == AgentStudioPhase.queued ||
+        controller.phase == AgentStudioPhase.generating ||
+        controller.phase == AgentStudioPhase.validating;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1B2223),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF343C3D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _phaseLabel(controller.phase),
+            style: const TextStyle(
+              color: Color(0xFFE8FF47),
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(session.summary.goal, style: const TextStyle(fontSize: 12)),
+          if (session.summary.constraints.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            for (final constraint in session.summary.constraints)
+              Text(
+                '· $constraint',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  fontSize: 10,
+                ),
+              ),
+          ],
+          if (running) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: controller.events.isEmpty
+                  ? null
+                  : controller.events.last.progress,
+            ),
+          ],
+          if (controller.errorMessage.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              controller.errorMessage,
+              style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 10),
+            ),
+          ],
+          if (awaiting) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    key: const Key('confirm-generation'),
+                    onPressed: controller.confirm,
+                    child: const Text('确认生成'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton(
+                  onPressed: controller.cancel,
+                  child: const Text('取消'),
+                ),
+              ],
+            ),
+          ],
+          if (controller.phase == AgentStudioPhase.ready &&
+              session.versionId != null) ...[
+            const SizedBox(height: 9),
+            Text(
+              '版本 ${session.versionId} 已就绪',
+              style: const TextStyle(fontSize: 10),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+String _phaseLabel(AgentStudioPhase phase) {
+  return switch (phase) {
+    AgentStudioPhase.idle => 'READY',
+    AgentStudioPhase.submitting => 'ANALYZING',
+    AgentStudioPhase.awaitingConfirmation => 'CONFIRM REQUIREMENTS',
+    AgentStudioPhase.queued => 'QUEUED',
+    AgentStudioPhase.generating => 'GENERATING',
+    AgentStudioPhase.validating => 'VALIDATING',
+    AgentStudioPhase.ready => 'READY',
+    AgentStudioPhase.failed => 'FAILED',
+    AgentStudioPhase.cancelled => 'CANCELLED',
+    AgentStudioPhase.error => 'CONNECTION ERROR',
+  };
+}
+
+class _NoopListenable extends ChangeNotifier {
+  _NoopListenable._();
+
+  static final instance = _NoopListenable._();
 }
 
 class _GridPainter extends CustomPainter {

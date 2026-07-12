@@ -1,3 +1,4 @@
+import 'package:agent_card_desktop/src/agent_studio/agent_studio_controller.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_screen.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:flutter/material.dart';
@@ -7,10 +8,12 @@ class AgentCardApp extends StatelessWidget {
     super.key,
     this.runtimePort,
     this.workspaceCards = const [],
+    this.agentStudioController,
   });
 
   final int? runtimePort;
   final List<WorkspaceCard> workspaceCards;
+  final AgentStudioController? agentStudioController;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +26,7 @@ class AgentCardApp extends StatelessWidget {
       home: WorkspaceScreen(
         runtimePort: runtimePort,
         workspaceCards: workspaceCards,
+        agentStudioController: agentStudioController,
       ),
     );
   }
