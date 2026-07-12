@@ -5,6 +5,8 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
 sh "$ROOT/tooling/security/run-contract-gate.sh"
+dart "$ROOT/tooling/security/validate-workflows_test.dart"
+dart "$ROOT/tooling/security/validate-workflows.dart" "$ROOT"/.github/workflows/*.yml
 
 cd "$ROOT/apps/desktop"
 flutter test \

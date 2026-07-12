@@ -1,35 +1,77 @@
 name: windows-release-gate
 
 on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
   workflow_dispatch:
+    inputs:
+      version:
+        description: Portable package semantic version
+        type: string
+        required: false
+        default: 0.1.0
   pull_request:
     paths:
       - 'apps/desktop/**'
       - 'packaging/windows/**'
       - '.github/workflows/windows-release-gate.yml'
+  push:
+    branches:
+      - develop
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
 
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+
 jobs:
-  build-unsigned-structure:
+  build-portable:
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: Install pinned Flutter SDK
         shell: pwsh
         run: |
           git clone --filter=blob:none https://github.com/flutter/flutter.git C:\flutter
-          git -C C:\flutter checkout edada7c56e
+          git -C C:\flutter checkout edada7c56edf4a183c1735310e123c7f923584f1
           'C:\flutter\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Resolve package version
+        id: version
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $version = $env:REQUESTED_VERSION
+          if (-not $version -and $env:GITHUB_REF -like 'refs/tags/v*') {
+            $version = $env:GITHUB_REF.Substring('refs/tags/v'.Length)
+          }
+          if (-not $version) {
+            $version = "0.1.0-dev.$env:GITHUB_RUN_NUMBER"
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+([+-][0-9A-Za-z.-]+)?$') {
+            throw "Invalid semantic version: $version"
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Test and build desktop client
         working-directory: apps/desktop
+        shell: pwsh
         run: |
           flutter pub get
           flutter analyze
           flutter test
-          flutter build windows --release
+          flutter build windows --release --build-name '${{ steps.version.outputs.version }}'
       - name: Build pinned native runtime dependencies
         shell: pwsh
         run: |
@@ -40,11 +82,31 @@ jobs:
           $bundle = 'apps\desktop\build\windows\x64\runner\Release'
           Copy-Item C:\vcpkg\installed\x64-windows\bin\libsodium.dll $bundle
           Copy-Item C:\vcpkg\installed\x64-windows\bin\sqlite3.dll $bundle
-      - name: Assert native release prerequisites are supplied
+      - name: Verify release bundle and build portable archive
         shell: pwsh
         run: |
-          pwsh packaging/windows/verify-release.ps1 -Bundle apps/desktop/build/windows/x64/runner/Release
-
-# This workflow intentionally produces no publishable installer. A release job must
-# supply approved x64 native DLLs, use protected signing credentials, run the verifier
-# with -RequireSignature, build/sign the installer, and retain its verification JSON.
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          pwsh packaging/windows/verify-release.ps1 `
+            -Bundle apps/desktop/build/windows/x64/runner/Release |
+            Set-Content dist/windows-release-evidence.json
+          pwsh packaging/windows/build-portable-package.ps1 `
+            -Bundle apps/desktop/build/windows/x64/runner/Release `
+            -OutputDirectory dist `
+            -Version '${{ steps.version.outputs.version }}' `
+            -Commit '${{ github.sha }}'
+          $archive = Get-ChildItem dist -Filter '*.zip' | Select-Object -First 1
+          pwsh packaging/windows/verify-portable-package.ps1 `
+            -Archive $archive.FullName `
+            -ExpectedVersion '${{ steps.version.outputs.version }}' `
+            -ExpectedCommit '${{ github.sha }}' |
+            Set-Content dist/windows-portable-evidence.json
+      - name: Upload verified portable archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agent-card-windows-portable-${{ github.sha }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+            dist/*-evidence.json
+          if-no-files-found: error
+          retention-days: 14

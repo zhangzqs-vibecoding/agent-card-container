@@ -1,0 +1,101 @@
+name: ci
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_STORAGE_BASE_URL: https://storage.flutter-io.cn
+  PUB_HOSTED_URL: https://pub.flutter-io.cn
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: services/cloud/go.sum
+      - name: Install pinned Flutter SDK
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          git -C "$RUNNER_TEMP/flutter" checkout edada7c56edf4a183c1735310e123c7f923584f1
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Install native and Node dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsodium-dev
+          corepack enable
+          pnpm --dir tooling/codecard-template install --frozen-lockfile
+      - name: Run shared security and contract gate
+        shell: bash
+        run: sh tooling/security/run-security-gate.sh
+      - name: Validate workflow policy
+        shell: bash
+        run: |
+          dart tooling/security/validate-workflows_test.dart
+          dart tooling/security/validate-workflows.dart .github/workflows/*.yml
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Install Linux build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev \
+            liblzma-dev libstdc++-12-dev libsodium-dev \
+            libayatana-appindicator3-dev libkeybinder-3.0-dev libnotify-dev
+      - name: Install pinned Flutter SDK
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          git -C "$RUNNER_TEMP/flutter" checkout edada7c56edf4a183c1735310e123c7f923584f1
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Analyze, test and build Linux desktop
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build linux --release
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Install native dependencies
+        shell: bash
+        run: brew install libsodium
+      - name: Install pinned Flutter SDK
+        shell: bash
+        run: |
+          git clone --filter=blob:none https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          git -C "$RUNNER_TEMP/flutter" checkout edada7c56edf4a183c1735310e123c7f923584f1
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Analyze, test and build macOS desktop
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build macos --release
