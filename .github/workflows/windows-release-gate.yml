@@ -67,7 +67,10 @@ jobs:
       - name: Test and build desktop client
         working-directory: apps/desktop
         shell: pwsh
+        env:
+          CMAKE_GENERATOR: Visual Studio 17 2022
         run: |
+          flutter doctor -v
           flutter pub get
           flutter analyze
           flutter test
