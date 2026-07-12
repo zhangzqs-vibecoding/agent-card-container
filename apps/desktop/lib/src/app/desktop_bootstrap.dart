@@ -9,12 +9,11 @@ import '../artifacts/artifact_installer.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
-import '../contracts/card_definition.dart';
-import '../native_card/native_card_spec.dart';
 import '../runtime/local_runtime_server.dart';
 import '../storage/local_database.dart';
 import '../workspace/workspace_card.dart';
 import '../workspace/workspace_controller.dart';
+import '../workspace/installed_workspace_card_factory.dart';
 import 'app_data_locator.dart';
 
 class RecoveryError {
@@ -69,13 +68,19 @@ abstract final class DesktopBootstrap {
     final root = appDataDirectory ?? AppDataLocator.resolve();
     root.createSync(recursive: true);
     final database = LocalDatabase.open(_join(root.path, 'agent-card.sqlite3'));
+    LocalRuntimeServer? runtimeServer;
     try {
+      runtimeServer = await LocalRuntimeServer.start();
       final installations = {
         for (final record in database.listInstallations())
           record.installation.versionId: record,
       };
       final cards = <WorkspaceCard>[];
       final errors = <RecoveryError>[];
+      final workspaceCardFactory = InstalledWorkspaceCardFactory(
+        runtimeServer: runtimeServer,
+        database: database,
+      );
       for (final instance in database.listInstances()) {
         if (instance.surfaceId != 'workspace-main' ||
             instance.status.name == 'quarantined') {
@@ -91,23 +96,21 @@ abstract final class DesktopBootstrap {
           );
           continue;
         }
-        if (installation.definition.runtime != CardRuntime.native) {
-          continue;
-        }
         try {
-          final payload = File(
-            _artifactPath(
-              root,
-              installation.installation.contentHash,
-              installation.definition.entrypoint,
-            ),
-          );
-          final decoded =
-              jsonDecode(payload.readAsStringSync()) as Map<String, Object?>;
           cards.add(
-            WorkspaceCard(
-              instance: instance,
-              spec: NativeCardSpec.fromJson(decoded),
+            workspaceCardFactory.create(
+              InstalledArtifact(
+                definition: installation.definition,
+                contentHash: installation.installation.contentHash,
+                directory: Directory(
+                  _artifactDirectory(
+                    root,
+                    installation.installation.contentHash,
+                  ),
+                ),
+                keyId: installation.keyId,
+              ),
+              instance,
             ),
           );
         } catch (_) {
@@ -125,8 +128,8 @@ abstract final class DesktopBootstrap {
         root,
         database,
         workspaceController,
+        workspaceCardFactory,
       );
-      final runtimeServer = await LocalRuntimeServer.start();
       return DesktopRuntime(
         database: database,
         runtimeServer: runtimeServer,
@@ -138,6 +141,7 @@ abstract final class DesktopBootstrap {
         cardCatalogController: cloud?.catalog,
       );
     } catch (_) {
+      await runtimeServer?.close();
       database.close();
       rethrow;
     }
@@ -154,6 +158,7 @@ _cloudConfiguration(
   Directory root,
   LocalDatabase database,
   WorkspaceController workspace,
+  InstalledWorkspaceCardFactory workspaceCardFactory,
 ) {
   final url = environment['AGENTCARD_CLOUD_URL'];
   final token = environment['AGENTCARD_ACCESS_TOKEN'];
@@ -180,6 +185,7 @@ _cloudConfiguration(
       newInstanceId: () => _randomID('instance_'),
       newStateNamespace: () => _randomID('state_'),
       now: DateTime.now,
+      workspaceCardFactory: workspaceCardFactory,
     );
   }
   Future<void> installCardVersion(String cardId, String versionId) async {
@@ -254,13 +260,12 @@ String _randomID(String prefix) {
   return '$prefix$value';
 }
 
-String _artifactPath(Directory root, String contentHash, String entrypoint) {
+String _artifactDirectory(Directory root, String contentHash) {
   return [
     root.path,
     'artifacts',
     'sha256',
     contentHash,
-    ...entrypoint.split('/'),
   ].join(Platform.pathSeparator);
 }
 

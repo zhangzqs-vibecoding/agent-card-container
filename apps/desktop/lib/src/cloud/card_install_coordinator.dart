@@ -9,6 +9,7 @@ import '../native_card/native_card_spec.dart';
 import '../storage/local_database.dart';
 import '../surfaces/surface.dart';
 import '../workspace/workspace_card.dart';
+import '../workspace/installed_workspace_card_factory.dart';
 import 'cloud_api_client.dart';
 
 class InstalledCardResult {
@@ -31,6 +32,7 @@ class CardInstallCoordinator {
     required this.newInstanceId,
     required this.newStateNamespace,
     required this.now,
+    this.workspaceCardFactory,
   });
 
   final CloudApiClient client;
@@ -39,6 +41,7 @@ class CardInstallCoordinator {
   final String Function() newInstanceId;
   final String Function() newStateNamespace;
   final DateTime Function() now;
+  final InstalledWorkspaceCardFactory? workspaceCardFactory;
 
   Future<InstalledCardResult> installVersion(String versionId) async {
     final cards = await client.listCards();
@@ -153,7 +156,9 @@ class CardInstallCoordinator {
     );
 
     WorkspaceCard? workspaceCard;
-    if (nativeSpec != null) {
+    if (workspaceCardFactory != null) {
+      workspaceCard = workspaceCardFactory!.create(installed, instance);
+    } else if (nativeSpec != null) {
       workspaceCard = WorkspaceCard(
         instance: instance,
         spec: nativeSpec,

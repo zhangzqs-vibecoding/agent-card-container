@@ -125,6 +125,71 @@ void main() {
   });
 
   test(
+    'restores an offline CodeCard into an isolated runtime session',
+    () async {
+      final root = Directory.systemTemp.createTempSync('agent-card-bootstrap-');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final definition = CardDefinition.fromJson(
+        jsonDecode(
+              File(
+                '../../contracts/card/fixtures/web-card.json',
+              ).readAsStringSync(),
+            )
+            as Map<String, Object?>,
+      );
+      final database = LocalDatabase.open('${root.path}/agent-card.sqlite3');
+      database.registerInstallation(
+        StoredInstallation(
+          installation: CardInstallation(
+            cardId: definition.cardId,
+            versionId: definition.versionId,
+            contentHash: 'web-content-hash',
+            runtime: definition.runtime,
+            installedAt: DateTime.utc(2026, 7, 12),
+            verified: true,
+          ),
+          definition: definition,
+          keyId: 'test-key',
+        ),
+      );
+      database.upsertSurface(
+        const CardSurface(id: 'workspace-main', type: SurfaceType.workspace),
+      );
+      database.upsertInstance(
+        CardInstance(
+          instanceId: 'web-instance',
+          cardId: definition.cardId,
+          versionId: definition.versionId,
+          surfaceId: 'workspace-main',
+          placement: const CardPlacement(x: 0, y: 0, width: 4, height: 3),
+          stateNamespace: 'web-state',
+          status: CardInstanceStatus.active,
+        ),
+      );
+      database.close();
+      final payload = File(
+        '${root.path}/artifacts/sha256/web-content-hash/payload/web/index.html',
+      );
+      payload.parent.createSync(recursive: true);
+      payload.writeAsStringSync(
+        '<script src="/runtime/bootstrap.js"></script><h1>Offline CodeCard</h1>',
+      );
+
+      final runtime = await DesktopBootstrap.start(appDataDirectory: root);
+      addTearDown(runtime.close);
+
+      expect(runtime.workspaceCards, hasLength(1));
+      expect(runtime.workspaceCards.single.nativeSpec, isNull);
+      expect(runtime.workspaceCards.single.codeCard, isNotNull);
+      expect(
+        runtime.workspaceCards.single.codeCard?.entrypoint,
+        '/bundle/web-content-hash/payload/web/index.html',
+      );
+      expect(runtime.recoveryErrors, isEmpty);
+    },
+  );
+
+  test(
     'enables Agent Studio only from process environment configuration',
     () async {
       final root = Directory.systemTemp.createTempSync('agent-card-bootstrap-');

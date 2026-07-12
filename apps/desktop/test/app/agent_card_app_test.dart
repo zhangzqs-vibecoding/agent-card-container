@@ -6,6 +6,7 @@ import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_api_client.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
+import 'package:agent_card_desktop/src/runtime/runtime_session.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_controller.dart';
@@ -162,6 +163,47 @@ void main() {
     await tester.tap(find.text('安装此版本'));
     await tester.pumpAndSettle();
     expect(installed, ['card_01/ver_01']);
+  });
+
+  testWidgets('fails closed when CodeCard isolation is unavailable', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final session = RuntimeSession(
+      id: '0123456789abcdef0123456789abcdef',
+      authority: '0123456789abcdef0123456789abcdef.localhost:43125',
+      token: 'secret',
+      instanceId: 'code-instance',
+      cardId: 'card-code',
+      versionId: 'version-code',
+      resources: const {},
+    );
+
+    await tester.pumpWidget(
+      AgentCardApp(
+        workspaceCards: [
+          WorkspaceCard.code(
+            instance: const CardInstance(
+              instanceId: 'code-instance',
+              cardId: 'card-code',
+              versionId: 'version-code',
+              surfaceId: 'workspace-main',
+              placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+              stateNamespace: 'code-state',
+              status: CardInstanceStatus.active,
+            ),
+            codeCard: CodeCardDescriptor(
+              session: session,
+              entrypoint: '/bundle/hash/index.html',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('当前平台无法满足 CodeCard 的安全隔离要求'), findsOneWidget);
   });
 }
 

@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../adapters/in_app_webview_port.dart';
 import '../agent_studio/agent_studio_controller.dart';
 import '../cloud/card_catalog_controller.dart';
+import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import 'workspace_card.dart';
@@ -669,7 +673,11 @@ class _WorkspaceCardView extends StatefulWidget {
 }
 
 class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
-  late NativeCardController _controller;
+  NativeCardController? _nativeController;
+  InAppWebViewPort? _webViewPort;
+  CodeCardHost? _codeCardHost;
+  Object? _codeCardError;
+  var _codeCardMounted = false;
 
   @override
   void initState() {
@@ -681,21 +689,61 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   void didUpdateWidget(covariant _WorkspaceCardView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.card.instance.versionId != widget.card.instance.versionId) {
-      _controller.dispose();
+      _disposeRuntime();
       _createController();
     }
   }
 
   void _createController() {
-    _controller = NativeCardController({
-      ...widget.card.spec.initialState,
-      ...widget.card.persistedState,
-    });
+    final nativeSpec = widget.card.nativeSpec;
+    if (nativeSpec != null) {
+      _nativeController = NativeCardController({
+        ...nativeSpec.initialState,
+        ...widget.card.persistedState,
+      });
+      return;
+    }
+    final descriptor = widget.card.codeCard!;
+    final port = InAppWebViewPort();
+    final host = CodeCardHost(
+      session: descriptor.session,
+      entrypoint: descriptor.entrypoint,
+      webView: port,
+    );
+    _webViewPort = port;
+    _codeCardHost = host;
+    unawaited(_mountCodeCard(host));
+  }
+
+  Future<void> _mountCodeCard(CodeCardHost host) async {
+    try {
+      await host.mount();
+      if (mounted && identical(host, _codeCardHost)) {
+        setState(() => _codeCardMounted = true);
+      }
+    } catch (error) {
+      if (mounted && identical(host, _codeCardHost)) {
+        setState(() => _codeCardError = error);
+      }
+    }
+  }
+
+  void _disposeRuntime() {
+    _nativeController?.dispose();
+    _nativeController = null;
+    final host = _codeCardHost;
+    _codeCardHost = null;
+    _webViewPort = null;
+    _codeCardMounted = false;
+    _codeCardError = null;
+    if (host != null) {
+      unawaited(host.dispose());
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _disposeRuntime();
     super.dispose();
   }
 
@@ -716,11 +764,24 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
           ),
         ],
       ),
-      child: NativeCardRenderer(
-        spec: widget.card.spec,
-        controller: _controller,
-      ),
+      child: _cardContent(),
     );
+  }
+
+  Widget _cardContent() {
+    final nativeSpec = widget.card.nativeSpec;
+    final nativeController = _nativeController;
+    if (nativeSpec != null && nativeController != null) {
+      return NativeCardRenderer(spec: nativeSpec, controller: nativeController);
+    }
+    if (_codeCardError != null) {
+      return const Center(child: Text('当前平台无法满足 CodeCard 的安全隔离要求'));
+    }
+    final port = _webViewPort;
+    if (!_codeCardMounted || port == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return CodeCardWebView(port: port);
   }
 }
 
