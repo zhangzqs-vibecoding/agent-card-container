@@ -190,7 +190,7 @@ void main() {
 
     expect(find.text('card-19'), findsOneWidget);
     expect(find.text('card-20'), findsNothing);
-    expect(find.text('已暂停：超过当前活动卡片上限'), findsOneWidget);
+    expect(find.text('已暂停：卡片不可见或超过活动上限'), findsOneWidget);
   });
 
   testWidgets('routes child NativeCard capabilities through the owner', (

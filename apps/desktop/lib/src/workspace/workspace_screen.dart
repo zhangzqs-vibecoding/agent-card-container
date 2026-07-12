@@ -554,16 +554,27 @@ class _WorkspaceCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final activeIndexes = RuntimeActivityBudget.activeIndexes(
-      cards.map(
-        (card) => card.nativeSpec == null
-            ? CardRuntimeKind.code
-            : CardRuntimeKind.native,
-      ),
-    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final columnWidth = (constraints.maxWidth - 56) / 12;
+        final viewport = Offset.zero & constraints.biggest;
+        final activeIndexes = RuntimeActivityBudget.activeIndexes(
+          cards.map(
+            (card) => card.nativeSpec == null
+                ? CardRuntimeKind.code
+                : CardRuntimeKind.native,
+          ),
+          eligible: cards.map((card) {
+            if (card.nativeSpec != null) return true;
+            final placement = card.instance.placement;
+            return Rect.fromLTWH(
+              28 + placement.x * columnWidth,
+              80 + placement.y * 80,
+              placement.width * columnWidth - 12,
+              placement.height * 80 - 12,
+            ).overlaps(viewport);
+          }),
+        );
         return Stack(
           children: [
             const Positioned.fill(child: CustomPaint(painter: _GridPainter())),
@@ -925,7 +936,7 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
 
   Widget _cardContent() {
     if (!widget.active) {
-      return const Center(child: Text('已暂停：超过当前活动卡片上限'));
+      return const Center(child: Text('已暂停：卡片不可见或超过活动上限'));
     }
     final nativeSpec = widget.card.nativeSpec;
     final nativeController = _nativeController;

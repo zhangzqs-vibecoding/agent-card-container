@@ -533,7 +533,7 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
   @override
   Widget build(BuildContext context) {
     if (!widget.active) {
-      return const Center(child: Text('已暂停：超过当前活动卡片上限'));
+      return const Center(child: Text('已暂停：卡片不可见或超过活动上限'));
     }
     final spec = widget.snapshot.nativeSpec;
     final controller = _controller;

@@ -25,4 +25,15 @@ void main() {
 
     expect(active, {0, 1, 2});
   });
+
+  test('does not allocate CodeCard slots to invisible cards', () {
+    final active = RuntimeActivityBudget.activeIndexes(
+      List.filled(10, CardRuntimeKind.code),
+      eligible: [false, ...List.filled(9, true)],
+    );
+
+    expect(active, isNot(contains(0)));
+    expect(active, containsAll(List.generate(8, (index) => index + 1)));
+    expect(active, isNot(contains(9)));
+  });
 }

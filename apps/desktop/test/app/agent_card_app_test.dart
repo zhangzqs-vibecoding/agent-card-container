@@ -385,6 +385,46 @@ void main() {
 
     expect(find.text('当前平台无法满足 CodeCard 的安全隔离要求'), findsOneWidget);
   });
+
+  testWidgets('keeps an offscreen CodeCard suspended', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final session = RuntimeSession(
+      id: 'fedcba9876543210fedcba9876543210',
+      authority: 'fedcba9876543210fedcba9876543210.localhost:43125',
+      token: 'secret',
+      instanceId: 'offscreen-code',
+      cardId: 'card-code',
+      versionId: 'version-code',
+      resources: const {},
+    );
+
+    await tester.pumpWidget(
+      AgentCardApp(
+        workspaceCards: [
+          WorkspaceCard.code(
+            instance: const CardInstance(
+              instanceId: 'offscreen-code',
+              cardId: 'card-code',
+              versionId: 'version-code',
+              surfaceId: 'workspace-main',
+              placement: CardPlacement(x: 100, y: 0, width: 4, height: 3),
+              stateNamespace: 'offscreen-state',
+              status: CardInstanceStatus.active,
+            ),
+            codeCard: CodeCardDescriptor(
+              session: session,
+              entrypoint: '/bundle/hash/index.html',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('已暂停：卡片不可见或超过活动上限'), findsOneWidget);
+    expect(find.text('当前平台无法满足 CodeCard 的安全隔离要求'), findsNothing);
+  });
 }
 
 class _CatalogFixture implements CloudCatalogPort {
