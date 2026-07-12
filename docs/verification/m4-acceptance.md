@@ -5,6 +5,14 @@ Automated code commit: `ddb9dcdfde954f89b81c9743947a93575bd75e59`
 
 Recorded: 2026-07-12 (Asia/Shanghai)
 
+The desktop cloud-settings extension is governed by
+`docs/superpowers/specs/2026-07-12-desktop-cloud-settings-design.md`. Its local
+acceptance includes repository, secure-store, authenticated connection,
+bootstrap, widget, and restart tests plus the complete Flutter and shared
+security gates. Remote deployment and Windows portable-package evidence are
+recorded only after those checks run against the dedicated test host; this
+record never includes tokens, passwords, or signing private keys.
+
 This record distinguishes reproducible host-independent evidence from physical
 desktop-device evidence. `NOT RUN` is not a pass and the MVP is not
 release-ready until every mandatory Windows scenario passes for the release

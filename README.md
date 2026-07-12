@@ -67,7 +67,9 @@ AGENTCARD_DEEPSEEK_LIVE=1 go test ./internal/modelprovider \
 ## 桌面端运行
 
 详细的平台依赖、云端连接环境变量和离线行为见
-`apps/desktop/README.md`。客户端不保存模型 API key；它只连接 Go 云端。
+`apps/desktop/README.md`。桌面包也可在“设置 → 云端服务”中测试并保存 Go
+后端连接；Access Token 只进入操作系统安全凭据库，保存后重启应用生效。
+客户端不保存模型 API key；它只连接 Go 云端。
 
 ## GitHub CI 与 Windows 便携包
 

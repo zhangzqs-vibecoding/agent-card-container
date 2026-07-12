@@ -59,9 +59,7 @@ void main() {
       'schemaVersion': 1,
       'commit': 'abc123',
       'host': {'os': 'linux'},
-      'scenarios': {
-        'coldStartupMs': List.filled(20, 6000),
-      },
+      'scenarios': {'coldStartupMs': List.filled(20, 6000)},
     });
 
     expect(baseline.evaluate(), contains('coldStartupMs:p95'));

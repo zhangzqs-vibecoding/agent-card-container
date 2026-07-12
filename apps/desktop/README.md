@@ -30,6 +30,21 @@ sh ../../tooling/device-gates/linux-m4.sh
 
 ## 连接 Go 云端
 
+Windows、macOS 和 Linux 桌面包可在“设置 → 云端服务”中填写服务地址和
+Access Token。点击“测试连接”会依次验证 `/healthz` 与认证卡片列表；只有
+测试成功后才能保存。保存后选择“立即重启”，新配置会在下一进程启动时生效。
+
+服务地址、loopback HTTP 开关和可信公钥保存在应用数据目录的
+`cloud-config.json`；Access Token 通过操作系统安全凭据库保存，不会写入该
+JSON、SQLite 或诊断包。如果安全凭据库不可用，保存会失败且保留原配置，
+不会降级为明文存储。
+
+HTTP 仅用于本机开发，并只接受 `localhost`、`127.0.0.0/8` 或 `::1`。
+远程服务器必须使用 HTTPS。
+
+进程环境变量用于部署，优先级高于界面配置。只要 URL 或 Token 任一由环境
+变量提供，界面就进入只读模式，且不会把环境变量与用户配置混合。
+
 仅当 URL 和 access token 同时存在时启用 Agent Studio 和云端卡片库：
 
 ~~~text
