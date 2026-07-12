@@ -218,7 +218,7 @@ git commit -m "test: add desktop performance baseline harness"
 - Create: `packaging/windows/README.md`
 - Create: `.github/workflows/windows-release-gate.yml`
 
-- [ ] **Step 1: Write release verification checks**
+- [x] **Step 1: Write release verification checks**
 
 ```powershell
 $required = @('agent_card_desktop.exe', 'flutter_windows.dll', 'sqlite3.dll', 'libsodium.dll')
@@ -232,11 +232,11 @@ if (-not (Get-AuthenticodeSignature (Join-Path $Bundle 'agent_card_desktop.exe')
 
 The script must also verify the package signature, version, stable upgrade AppId, absence of `.env`/database/log/private-key files, and WebView2 Runtime detection behavior.
 
-- [ ] **Step 2: Add the Inno Setup definition**
+- [x] **Step 2: Add the Inno Setup definition**
 
 Use per-user installation, a stable AppId, semantic `AppVersion`, atomic replacement, uninstall entries and explicit preservation/removal choices for user data. If Evergreen WebView2 is missing, show a link to Microsoft's official installer and abort rather than silently installing an unverified binary.
 
-- [ ] **Step 3: Add a Windows CI release gate**
+- [x] **Step 3: Add a Windows CI release gate**
 
 The workflow runs `flutter test`, `flutter analyze`, `flutter build windows --release`, copies approved native DLLs, signs when protected signing secrets are available, runs `verify-release.ps1`, builds the installer, and uploads checksums plus evidence. Pull requests run unsigned structural checks but cannot be marked release-ready.
 
