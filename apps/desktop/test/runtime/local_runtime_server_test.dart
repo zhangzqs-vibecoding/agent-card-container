@@ -366,6 +366,34 @@ void main() {
       await messages.cancel();
     });
 
+    test('publishes runtime events to every session for one instance', () {
+      final first = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+      );
+      final second = server.createSession(
+        instanceId: 'instance-2',
+        cardId: 'card-two',
+        versionId: 'version-two',
+        resources: const {},
+      );
+
+      expect(
+        server.publishEventForInstance('instance-1', 'surface.changed', {
+          'surfaceId': 'detached-1',
+        }),
+        1,
+      );
+      expect(server.publishEvent(first.id, 'theme.changed', {}), 2);
+      expect(server.publishEvent(second.id, 'theme.changed', {}), 1);
+      expect(
+        server.publishEventForInstance('native-only', 'surface.changed', {}),
+        0,
+      );
+    });
+
     test('subscribes and unsubscribes bounded system metrics events', () async {
       await server.close();
       server = await LocalRuntimeServer.start(

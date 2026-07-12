@@ -107,9 +107,7 @@ class LocalRuntimeServer {
   }
 
   int publishEvent(String sessionId, String event, Object? payload) {
-    if (!LocalRpcContract.events.contains(event)) {
-      throw ArgumentError.value(event, 'event', 'unknown runtime event');
-    }
+    _validateEvent(event);
     final session = _sessionsByAuthority.values
         .where((candidate) => candidate.id == sessionId)
         .firstOrNull;
@@ -117,6 +115,28 @@ class LocalRuntimeServer {
       throw StateError('runtime session is expired');
     }
     return session.publishEvent(event, payload);
+  }
+
+  int publishEventForInstance(
+    String instanceId,
+    String event,
+    Object? payload,
+  ) {
+    _validateEvent(event);
+    var published = 0;
+    for (final session in _sessionsByAuthority.values) {
+      if (session.instanceId == instanceId) {
+        session.publishEvent(event, payload);
+        published++;
+      }
+    }
+    return published;
+  }
+
+  void _validateEvent(String event) {
+    if (!LocalRpcContract.events.contains(event)) {
+      throw ArgumentError.value(event, 'event', 'unknown runtime event');
+    }
   }
 
   Future<void> close() async {

@@ -290,6 +290,19 @@ abstract final class DesktopBootstrap {
             surfaceId: instance.surfaceId,
             placement: instance.placement,
           );
+          runtimeServer!.publishEventForInstance(
+            instance.instanceId,
+            'surface.changed',
+            {
+              'surfaceId': instance.surfaceId,
+              'placement': {
+                'x': instance.placement.x,
+                'y': instance.placement.y,
+                'width': instance.placement.width,
+                'height': instance.placement.height,
+              },
+            },
+          );
         },
         onOverlayDisplayRequested: overlayModeController.enterDisplayMode,
         onStateChanged: workspaceController.updatePersistedState,
