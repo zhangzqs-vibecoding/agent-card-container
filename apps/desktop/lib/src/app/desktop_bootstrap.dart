@@ -39,6 +39,7 @@ class DesktopRuntime {
     required this.recoveryErrors,
     required this.workspaceController,
     required this.surfaceCoordinator,
+    required this.windowBackend,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -50,10 +51,21 @@ class DesktopRuntime {
   final List<RecoveryError> recoveryErrors;
   final WorkspaceController workspaceController;
   final SurfaceCoordinator surfaceCoordinator;
+  final MultiWindowBackend windowBackend;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
   var _closed = false;
+  var _platformInitialized = false;
+
+  Future<void> initializePlatformSurfaces() async {
+    if (_platformInitialized) {
+      return;
+    }
+    _platformInitialized = true;
+    await windowBackend.initializeBridge();
+    await surfaceCoordinator.restorePersistedSurfaces();
+  }
 
   Future<void> close() async {
     if (_closed) {
@@ -151,12 +163,16 @@ abstract final class DesktopBootstrap {
         cards: () => workspaceController.cards,
         readState: database.readState,
       );
-      final surfaceCoordinator = SurfaceCoordinator(
+      late SurfaceCoordinator surfaceCoordinator;
+      final windowBackend = MultiWindowBackend(
+        DesktopMultiWindowDriver(),
+        snapshotProvider: snapshotProvider.call,
+        onBridgeMessage: (message) =>
+            surfaceCoordinator.handleBridgeMessage(message),
+      );
+      surfaceCoordinator = SurfaceCoordinator(
         database: database,
-        windows: MultiWindowBackend(
-          DesktopMultiWindowDriver(),
-          snapshotProvider: snapshotProvider.call,
-        ),
+        windows: windowBackend,
         newDetachedSurfaceId: () => _randomID('detached-'),
         onInstanceMoved: (instance) {
           workspaceController.moveInstance(
@@ -166,7 +182,6 @@ abstract final class DesktopBootstrap {
           );
         },
       );
-      await surfaceCoordinator.restorePersistedSurfaces();
       final cloud = _cloudConfiguration(
         processEnvironment,
         root,
@@ -181,6 +196,7 @@ abstract final class DesktopBootstrap {
         recoveryErrors: List.unmodifiable(errors),
         workspaceController: workspaceController,
         surfaceCoordinator: surfaceCoordinator,
+        windowBackend: windowBackend,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,

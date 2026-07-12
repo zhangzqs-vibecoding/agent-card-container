@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:agent_card_desktop/src/surfaces/surface_window.dart';
+import 'package:agent_card_desktop/src/surfaces/surface_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -177,5 +178,25 @@ void main() {
     await tester.pump();
 
     expect(find.text('当前平台无法安全挂载 CodeCard'), findsOneWidget);
+  });
+
+  test('builds a close request scoped to the child window and instance', () {
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'detached-1',
+        'surfaceType': 'detached',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': false,
+        'instanceIds': ['instance-1'],
+      }),
+    )!;
+
+    final message = buildSurfaceCloseRequest(arguments, 'child-window');
+
+    expect(message.type, SurfaceBridgeMessageType.hostEvent);
+    expect(message.windowId, 'child-window');
+    expect(message.instanceId, 'instance-1');
+    expect(message.payload, {'event': 'windowCloseRequested'});
   });
 }

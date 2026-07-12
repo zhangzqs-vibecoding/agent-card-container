@@ -5,6 +5,7 @@ import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/contracts/card_definition.dart';
 import 'package:agent_card_desktop/src/storage/local_database.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
+import 'package:agent_card_desktop/src/surfaces/surface_bridge.dart';
 import 'package:agent_card_desktop/src/surfaces/surface_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -149,6 +150,30 @@ void main() {
     expect(backend.opened.single.surface.id, 'detached-restored');
     expect(backend.opened.single.instanceIds, ['instance-1']);
   });
+
+  test(
+    'docks a detached instance after an authenticated close event',
+    () async {
+      await coordinator.detach(
+        'instance-1',
+        const CardPlacement(x: 40, y: 50, width: 480, height: 320),
+      );
+
+      final result = await coordinator.handleBridgeMessage(
+        SurfaceBridgeMessage.fromJson({
+          'type': 'hostEvent',
+          'windowId': 'window-1',
+          'instanceId': 'instance-1',
+          'payload': {'event': 'windowCloseRequested'},
+        }),
+      );
+
+      expect(result, {'allowClose': true});
+      expect(database.listInstances().single.surfaceId, 'workspace-main');
+      expect(backend.released, ['detached-1']);
+      expect(backend.closed, isEmpty);
+    },
+  );
 }
 
 const _instance = CardInstance(
@@ -171,6 +196,7 @@ class _OpenedSurface {
 class _FakeWindowBackend implements WindowBackend {
   final opened = <_OpenedSurface>[];
   final closed = <String>[];
+  final released = <String>[];
   var failOpening = false;
 
   @override
@@ -187,5 +213,10 @@ class _FakeWindowBackend implements WindowBackend {
   @override
   Future<void> closeSurface(String surfaceId) async {
     closed.add(surfaceId);
+  }
+
+  @override
+  void releaseSurface(String surfaceId) {
+    released.add(surfaceId);
   }
 }

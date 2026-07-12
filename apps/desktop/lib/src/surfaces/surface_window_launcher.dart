@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +15,7 @@ abstract final class SurfaceWindowLauncher {
       return false;
     }
     final model = SurfaceWindowModel(arguments);
+    final closeListener = _SurfaceCloseListener(controller, arguments);
     await controller.setWindowMethodHandler((call) async {
       switch (call.method) {
         case 'surface.updateCards':
@@ -26,14 +29,16 @@ abstract final class SurfaceWindowLauncher {
           model.updateCards(cards);
           return null;
         case 'surface.close':
-          await windowManager.setPreventClose(false);
-          await windowManager.close();
+          await closeListener.closeFromHost();
           return null;
         default:
           throw MissingPluginException('unknown surface window method');
       }
     });
     await windowManager.ensureInitialized();
+    if (arguments.surfaceType == 'detached') {
+      windowManager.addListener(closeListener);
+    }
     final overlay = arguments.surfaceType == 'overlay';
     final bounds = arguments.bounds;
     await windowManager.waitUntilReadyToShow(
@@ -58,5 +63,44 @@ abstract final class SurfaceWindowLauncher {
     );
     runApp(SurfaceWindowApp(model: model));
     return true;
+  }
+}
+
+class _SurfaceCloseListener with WindowListener {
+  _SurfaceCloseListener(this.controller, this.arguments);
+
+  final WindowController controller;
+  final SurfaceWindowArguments arguments;
+  var _closing = false;
+
+  @override
+  void onWindowClose() {
+    if (!_closing) {
+      unawaited(_requestDockAndClose());
+    }
+  }
+
+  Future<void> _requestDockAndClose() async {
+    _closing = true;
+    try {
+      final owner = WindowController.fromWindowId(arguments.ownerWindowId);
+      final response = await owner.invokeMethod<Object?>(
+        'surface.bridge',
+        buildSurfaceCloseRequest(arguments, controller.windowId).toJson(),
+      );
+      if (response is Map && response['allowClose'] == true) {
+        await closeFromHost();
+      } else {
+        _closing = false;
+      }
+    } catch (_) {
+      _closing = false;
+    }
+  }
+
+  Future<void> closeFromHost() async {
+    _closing = true;
+    await windowManager.setPreventClose(false);
+    await windowManager.close();
   }
 }

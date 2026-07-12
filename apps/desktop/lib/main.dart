@@ -12,6 +12,7 @@ Future<void> main() async {
     return;
   }
   desktopRuntime = await DesktopBootstrap.start();
+  await desktopRuntime.initializePlatformSurfaces();
   runApp(
     AgentCardApp(
       runtimePort: desktopRuntime.runtimeServer.port,

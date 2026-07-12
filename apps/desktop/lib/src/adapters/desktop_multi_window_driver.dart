@@ -1,12 +1,26 @@
 import 'dart:convert';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/services.dart';
 
 import 'multi_window_backend.dart';
 import '../surfaces/surface_window.dart';
 
 class DesktopMultiWindowDriver implements MultiWindowDriver {
   final Map<String, WindowController> _windows = {};
+
+  @override
+  Future<void> setBridgeHandler(
+    Future<Object?> Function(Map<String, Object?> message) handler,
+  ) async {
+    final owner = await WindowController.fromCurrentEngine();
+    await owner.setWindowMethodHandler((call) async {
+      if (call.method != 'surface.bridge' || call.arguments is! Map) {
+        throw MissingPluginException('unknown main window method');
+      }
+      return handler((call.arguments as Map).cast<String, Object?>());
+    });
+  }
 
   @override
   Future<String> create(SurfaceWindowConfiguration configuration) async {

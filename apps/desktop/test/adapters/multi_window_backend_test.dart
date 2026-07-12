@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:agent_card_desktop/src/adapters/multi_window_backend.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
+import 'package:agent_card_desktop/src/surfaces/surface_bridge.dart';
 import 'package:agent_card_desktop/src/surfaces/surface_window.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +53,46 @@ void main() {
 
     expect(driver.closed, ['window-1']);
   });
+
+  test(
+    'dispatches bridge messages only for the owning window instance',
+    () async {
+      final driver = _FakeMultiWindowDriver();
+      final accepted = <SurfaceBridgeMessage>[];
+      final backend = MultiWindowBackend(
+        driver,
+        snapshotProvider: _snapshot,
+        onBridgeMessage: (message) async {
+          accepted.add(message);
+          return {'accepted': true};
+        },
+      );
+      await backend.initializeBridge();
+      await backend.ensureSurface(
+        const CardSurface(id: 'detached-1', type: SurfaceType.detached),
+        ['instance-1'],
+      );
+
+      final result = await driver.sendBridge({
+        'type': 'hostEvent',
+        'windowId': 'window-1',
+        'instanceId': 'instance-1',
+        'payload': {'event': 'windowCloseRequested'},
+      });
+
+      expect(result, {'accepted': true});
+      expect(accepted.single.instanceId, 'instance-1');
+      await expectLater(
+        driver.sendBridge({
+          'type': 'hostEvent',
+          'windowId': 'window-1',
+          'instanceId': 'instance-2',
+          'payload': {'event': 'windowCloseRequested'},
+        }),
+        throwsStateError,
+      );
+    },
+  );
 }
 
 class _FakeMultiWindowDriver implements MultiWindowDriver {
@@ -59,6 +100,22 @@ class _FakeMultiWindowDriver implements MultiWindowDriver {
   final shown = <String>[];
   final updates = <({String windowId, List<SurfaceCardSnapshot> cards})>[];
   final closed = <String>[];
+  Future<Object?> Function(Map<String, Object?>)? bridgeHandler;
+
+  Future<Object?> sendBridge(Map<String, Object?> message) {
+    final handler = bridgeHandler;
+    if (handler == null) {
+      throw StateError('bridge handler is missing');
+    }
+    return handler(message);
+  }
+
+  @override
+  Future<void> setBridgeHandler(
+    Future<Object?> Function(Map<String, Object?> message) handler,
+  ) async {
+    bridgeHandler = handler;
+  }
 
   @override
   Future<String> create(SurfaceWindowConfiguration configuration) async {

@@ -8,6 +8,7 @@ import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import '../native_card/native_card_spec.dart';
+import 'surface_bridge.dart';
 
 enum SurfaceCardRuntime { native, code }
 
@@ -170,6 +171,24 @@ class SurfaceWindowArguments {
       return null;
     }
   }
+}
+
+SurfaceBridgeMessage buildSurfaceCloseRequest(
+  SurfaceWindowArguments arguments,
+  String windowId,
+) {
+  if (arguments.surfaceType != 'detached' ||
+      arguments.instanceIds.length != 1) {
+    throw const FormatException(
+      'only a single-instance detached window can request close',
+    );
+  }
+  return SurfaceBridgeMessage(
+    type: SurfaceBridgeMessageType.hostEvent,
+    windowId: windowId,
+    instanceId: arguments.instanceIds.single,
+    payload: const {'event': 'windowCloseRequested'},
+  );
 }
 
 class SurfaceWindowModel extends ChangeNotifier {

@@ -1,10 +1,12 @@
 import 'dart:convert';
 
 import '../surfaces/surface.dart';
+import '../surfaces/surface_bridge.dart';
 import '../surfaces/surface_coordinator.dart';
 import '../surfaces/surface_window.dart';
 
 typedef SurfaceSnapshotProvider = SurfaceCardSnapshot Function(String);
+typedef SurfaceBridgeHandler = Future<Object?> Function(SurfaceBridgeMessage);
 
 class SurfaceWindowConfiguration {
   const SurfaceWindowConfiguration({
@@ -17,6 +19,10 @@ class SurfaceWindowConfiguration {
 }
 
 abstract interface class MultiWindowDriver {
+  Future<void> setBridgeHandler(
+    Future<Object?> Function(Map<String, Object?> message) handler,
+  );
+
   Future<String> create(SurfaceWindowConfiguration configuration);
 
   Future<void> show(String windowId);
@@ -27,11 +33,31 @@ abstract interface class MultiWindowDriver {
 }
 
 class MultiWindowBackend implements WindowBackend {
-  MultiWindowBackend(this.driver, {required this.snapshotProvider});
+  MultiWindowBackend(
+    this.driver, {
+    required this.snapshotProvider,
+    this.onBridgeMessage,
+  });
 
   final MultiWindowDriver driver;
   final SurfaceSnapshotProvider snapshotProvider;
+  final SurfaceBridgeHandler? onBridgeMessage;
   final Map<String, String> _surfaceWindows = {};
+  final SurfaceBridgeBindings _bindings = SurfaceBridgeBindings();
+
+  Future<void> initializeBridge() {
+    return driver.setBridgeHandler((json) async {
+      final message = SurfaceBridgeMessage.fromJson(json);
+      if (!_bindings.accepts(message)) {
+        throw StateError('surface bridge window does not own instance');
+      }
+      final handler = onBridgeMessage;
+      if (handler == null) {
+        throw StateError('surface bridge handler is unavailable');
+      }
+      return handler(message);
+    });
+  }
 
   @override
   Future<void> ensureSurface(
@@ -42,6 +68,7 @@ class MultiWindowBackend implements WindowBackend {
     final existing = _surfaceWindows[surface.id];
     if (existing != null) {
       await driver.updateCards(existing, cards);
+      _bindings.replaceWindowInstances(existing, instanceIds);
       return;
     }
     final arguments = jsonEncode({
@@ -58,6 +85,7 @@ class MultiWindowBackend implements WindowBackend {
       SurfaceWindowConfiguration(arguments: arguments),
     );
     _surfaceWindows[surface.id] = windowId;
+    _bindings.replaceWindowInstances(windowId, instanceIds);
     await driver.show(windowId);
   }
 
@@ -65,7 +93,16 @@ class MultiWindowBackend implements WindowBackend {
   Future<void> closeSurface(String surfaceId) async {
     final windowId = _surfaceWindows.remove(surfaceId);
     if (windowId != null) {
+      _bindings.removeWindow(windowId);
       await driver.close(windowId);
+    }
+  }
+
+  @override
+  void releaseSurface(String surfaceId) {
+    final windowId = _surfaceWindows.remove(surfaceId);
+    if (windowId != null) {
+      _bindings.removeWindow(windowId);
     }
   }
 }

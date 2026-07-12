@@ -1,11 +1,14 @@
 import '../cards/card_instance.dart';
 import '../storage/local_database.dart';
 import 'surface.dart';
+import 'surface_bridge.dart';
 
 abstract interface class WindowBackend {
   Future<void> ensureSurface(CardSurface surface, List<String> instanceIds);
 
   Future<void> closeSurface(String surfaceId);
+
+  void releaseSurface(String surfaceId);
 }
 
 class SurfaceCoordinator {
@@ -20,6 +23,21 @@ class SurfaceCoordinator {
   final WindowBackend windows;
   final String Function() newDetachedSurfaceId;
   final void Function(CardInstance instance)? onInstanceMoved;
+
+  Future<Object?> handleBridgeMessage(SurfaceBridgeMessage message) async {
+    if (message.type != SurfaceBridgeMessageType.hostEvent ||
+        message.payload['event'] != 'windowCloseRequested') {
+      throw const FormatException('unsupported surface host event');
+    }
+    final instance = _requireInstance(message.instanceId);
+    if (!instance.surfaceId.startsWith('detached-')) {
+      throw StateError('only detached windows can request close docking');
+    }
+    final surfaceId = instance.surfaceId;
+    _moveToWorkspace(message.instanceId);
+    windows.releaseSurface(surfaceId);
+    return const {'allowClose': true};
+  }
 
   Future<void> restorePersistedSurfaces() async {
     final instances = database.listInstances();
@@ -100,6 +118,10 @@ class SurfaceCoordinator {
     if (instance.surfaceId.startsWith('detached-')) {
       await windows.closeSurface(instance.surfaceId);
     }
+    _moveToWorkspace(instanceId);
+  }
+
+  void _moveToWorkspace(String instanceId) {
     database.moveInstanceToSurface(
       surface: const CardSurface(
         id: 'workspace-main',
