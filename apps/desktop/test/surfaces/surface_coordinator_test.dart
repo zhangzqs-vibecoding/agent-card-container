@@ -15,6 +15,7 @@ void main() {
   late _FakeWindowBackend backend;
   late SurfaceCoordinator coordinator;
   late List<CardInstance> moved;
+  late int displayModeRequests;
 
   setUp(() {
     root = Directory.systemTemp.createTempSync('surface-coordinator-');
@@ -47,11 +48,15 @@ void main() {
     database.upsertInstance(_instance);
     backend = _FakeWindowBackend();
     moved = [];
+    displayModeRequests = 0;
     coordinator = SurfaceCoordinator(
       database: database,
       windows: backend,
       newDetachedSurfaceId: () => 'detached-1',
       onInstanceMoved: moved.add,
+      onOverlayDisplayRequested: () async {
+        displayModeRequests++;
+      },
     );
   });
 
@@ -174,6 +179,26 @@ void main() {
       expect(backend.closed, isEmpty);
     },
   );
+
+  test('forwards an authenticated overlay display-mode event', () async {
+    await coordinator.moveToOverlay(
+      'instance-1',
+      monitorId: 'monitor-a',
+      placement: const CardPlacement(x: 20, y: 30, width: 360, height: 240),
+    );
+
+    final result = await coordinator.handleBridgeMessage(
+      SurfaceBridgeMessage.fromJson({
+        'type': 'hostEvent',
+        'windowId': 'window-1',
+        'instanceId': 'instance-1',
+        'payload': {'event': 'overlayDisplayRequested'},
+      }),
+    );
+
+    expect(result, {'displayMode': true});
+    expect(displayModeRequests, 1);
+  });
 }
 
 const _instance = CardInstance(

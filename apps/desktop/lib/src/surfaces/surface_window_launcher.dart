@@ -31,6 +31,15 @@ abstract final class SurfaceWindowLauncher {
         case 'surface.close':
           await closeListener.closeFromHost();
           return null;
+        case 'surface.setOverlayEditing':
+          if (arguments.surfaceType != 'overlay' || call.arguments is! bool) {
+            throw const FormatException('invalid overlay mode command');
+          }
+          await windowManager.setIgnoreMouseEvents(
+            !(call.arguments! as bool),
+            forward: true,
+          );
+          return null;
         default:
           throw MissingPluginException('unknown surface window method');
       }
@@ -61,7 +70,25 @@ abstract final class SurfaceWindowLauncher {
         await windowManager.focus();
       },
     );
-    runApp(SurfaceWindowApp(model: model));
+    runApp(
+      SurfaceWindowApp(
+        model: model,
+        onEnterOverlayDisplayMode: arguments.surfaceType == 'overlay'
+            ? () async {
+                final owner = WindowController.fromWindowId(
+                  arguments.ownerWindowId,
+                );
+                await owner.invokeMethod<Object?>(
+                  'surface.bridge',
+                  buildOverlayDisplayRequest(
+                    arguments,
+                    controller.windowId,
+                  ).toJson(),
+                );
+              }
+            : null,
+      ),
+    );
     return true;
   }
 }

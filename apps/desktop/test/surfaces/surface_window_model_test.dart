@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:agent_card_desktop/src/surfaces/surface_window.dart';
 import 'package:agent_card_desktop/src/surfaces/surface_bridge.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -198,5 +199,55 @@ void main() {
     expect(message.windowId, 'child-window');
     expect(message.instanceId, 'instance-1');
     expect(message.payload, {'event': 'windowCloseRequested'});
+  });
+
+  test('builds an overlay display request for one owned instance', () {
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'overlay-primary',
+        'surfaceType': 'overlay',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': true,
+        'instanceIds': ['instance-1', 'instance-2'],
+      }),
+    )!;
+
+    final message = buildOverlayDisplayRequest(arguments, 'child-window');
+
+    expect(message.windowId, 'child-window');
+    expect(message.instanceId, 'instance-1');
+    expect(message.payload, {'event': 'overlayDisplayRequested'});
+  });
+
+  testWidgets('overlay edit mode exposes an explicit display-mode action', (
+    tester,
+  ) async {
+    var requested = false;
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'overlay-primary',
+        'surfaceType': 'overlay',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': true,
+        'instanceIds': ['instance-1'],
+      }),
+    )!;
+    final model = SurfaceWindowModel(arguments);
+    addTearDown(model.dispose);
+    await tester.pumpWidget(
+      SurfaceWindowApp(
+        model: model,
+        onEnterOverlayDisplayMode: () async {
+          requested = true;
+        },
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('enter-overlay-display-mode')));
+    await tester.pump();
+
+    expect(requested, isTrue);
   });
 }

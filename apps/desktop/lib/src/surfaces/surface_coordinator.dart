@@ -17,19 +17,31 @@ class SurfaceCoordinator {
     required this.windows,
     required this.newDetachedSurfaceId,
     this.onInstanceMoved,
+    this.onOverlayDisplayRequested,
   });
 
   final LocalDatabase database;
   final WindowBackend windows;
   final String Function() newDetachedSurfaceId;
   final void Function(CardInstance instance)? onInstanceMoved;
+  final Future<void> Function()? onOverlayDisplayRequested;
 
   Future<Object?> handleBridgeMessage(SurfaceBridgeMessage message) async {
-    if (message.type != SurfaceBridgeMessageType.hostEvent ||
-        message.payload['event'] != 'windowCloseRequested') {
+    if (message.type != SurfaceBridgeMessageType.hostEvent) {
       throw const FormatException('unsupported surface host event');
     }
     final instance = _requireInstance(message.instanceId);
+    if (message.payload['event'] == 'overlayDisplayRequested') {
+      if (!instance.surfaceId.startsWith('overlay-') ||
+          onOverlayDisplayRequested == null) {
+        throw StateError('overlay display mode is unavailable');
+      }
+      await onOverlayDisplayRequested!();
+      return const {'displayMode': true};
+    }
+    if (message.payload['event'] != 'windowCloseRequested') {
+      throw const FormatException('unsupported surface host event');
+    }
     if (!instance.surfaceId.startsWith('detached-')) {
       throw StateError('only detached windows can request close docking');
     }

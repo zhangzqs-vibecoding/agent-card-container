@@ -191,6 +191,23 @@ SurfaceBridgeMessage buildSurfaceCloseRequest(
   );
 }
 
+SurfaceBridgeMessage buildOverlayDisplayRequest(
+  SurfaceWindowArguments arguments,
+  String windowId,
+) {
+  if (arguments.surfaceType != 'overlay' || arguments.instanceIds.isEmpty) {
+    throw const FormatException(
+      'only a populated overlay can request display mode',
+    );
+  }
+  return SurfaceBridgeMessage(
+    type: SurfaceBridgeMessageType.hostEvent,
+    windowId: windowId,
+    instanceId: arguments.instanceIds.first,
+    payload: const {'event': 'overlayDisplayRequested'},
+  );
+}
+
 class SurfaceWindowModel extends ChangeNotifier {
   SurfaceWindowModel(this.arguments)
     : _instanceIds = List.of(arguments.instanceIds),
@@ -227,9 +244,14 @@ class SurfaceWindowModel extends ChangeNotifier {
 }
 
 class SurfaceWindowApp extends StatelessWidget {
-  const SurfaceWindowApp({required this.model, super.key});
+  const SurfaceWindowApp({
+    required this.model,
+    this.onEnterOverlayDisplayMode,
+    super.key,
+  });
 
   final SurfaceWindowModel model;
+  final Future<void> Function()? onEnterOverlayDisplayMode;
 
   @override
   Widget build(BuildContext context) {
@@ -242,6 +264,16 @@ class SurfaceWindowApp extends StatelessWidget {
           backgroundColor: model.arguments.surfaceType == 'overlay'
               ? Colors.transparent
               : const Color(0xFF0B0E0F),
+          floatingActionButton:
+              model.arguments.surfaceType == 'overlay' &&
+                  onEnterOverlayDisplayMode != null
+              ? FloatingActionButton.small(
+                  key: const Key('enter-overlay-display-mode'),
+                  tooltip: '进入展示模式（Ctrl+Shift+F12 恢复编辑）',
+                  onPressed: onEnterOverlayDisplayMode,
+                  child: const Icon(Icons.touch_app_outlined),
+                )
+              : null,
           body: SafeArea(
             child: Center(
               child: Wrap(

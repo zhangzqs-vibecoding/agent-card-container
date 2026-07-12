@@ -4,6 +4,7 @@ import '../surfaces/surface.dart';
 import '../surfaces/surface_bridge.dart';
 import '../surfaces/surface_coordinator.dart';
 import '../surfaces/surface_window.dart';
+import '../surfaces/overlay_mode_controller.dart';
 
 typedef SurfaceSnapshotProvider = SurfaceCardSnapshot Function(String);
 typedef SurfaceBridgeHandler = Future<Object?> Function(SurfaceBridgeMessage);
@@ -29,10 +30,12 @@ abstract interface class MultiWindowDriver {
 
   Future<void> updateCards(String windowId, List<SurfaceCardSnapshot> cards);
 
+  Future<void> setOverlayEditing(String windowId, bool editing);
+
   Future<void> close(String windowId);
 }
 
-class MultiWindowBackend implements WindowBackend {
+class MultiWindowBackend implements WindowBackend, OverlaySurfaceModePort {
   MultiWindowBackend(
     this.driver, {
     required this.snapshotProvider,
@@ -43,6 +46,7 @@ class MultiWindowBackend implements WindowBackend {
   final SurfaceSnapshotProvider snapshotProvider;
   final SurfaceBridgeHandler? onBridgeMessage;
   final Map<String, String> _surfaceWindows = {};
+  final Map<String, SurfaceType> _surfaceTypes = {};
   final SurfaceBridgeBindings _bindings = SurfaceBridgeBindings();
 
   Future<void> initializeBridge() {
@@ -85,6 +89,7 @@ class MultiWindowBackend implements WindowBackend {
       SurfaceWindowConfiguration(arguments: arguments),
     );
     _surfaceWindows[surface.id] = windowId;
+    _surfaceTypes[surface.id] = surface.type;
     _bindings.replaceWindowInstances(windowId, instanceIds);
     await driver.show(windowId);
   }
@@ -92,6 +97,7 @@ class MultiWindowBackend implements WindowBackend {
   @override
   Future<void> closeSurface(String surfaceId) async {
     final windowId = _surfaceWindows.remove(surfaceId);
+    _surfaceTypes.remove(surfaceId);
     if (windowId != null) {
       _bindings.removeWindow(windowId);
       await driver.close(windowId);
@@ -101,8 +107,18 @@ class MultiWindowBackend implements WindowBackend {
   @override
   void releaseSurface(String surfaceId) {
     final windowId = _surfaceWindows.remove(surfaceId);
+    _surfaceTypes.remove(surfaceId);
     if (windowId != null) {
       _bindings.removeWindow(windowId);
+    }
+  }
+
+  @override
+  Future<void> setEditing(bool editing) async {
+    for (final entry in _surfaceWindows.entries) {
+      if (_surfaceTypes[entry.key] == SurfaceType.overlay) {
+        await driver.setOverlayEditing(entry.value, editing);
+      }
     }
   }
 }

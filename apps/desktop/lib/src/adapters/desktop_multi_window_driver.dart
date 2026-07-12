@@ -53,6 +53,13 @@ class DesktopMultiWindowDriver implements MultiWindowDriver {
   }
 
   @override
+  Future<void> setOverlayEditing(String windowId, bool editing) async {
+    await _controller(
+      windowId,
+    ).invokeMethod<void>('surface.setOverlayEditing', editing);
+  }
+
+  @override
   Future<void> close(String windowId) async {
     final controller = _windows.remove(windowId);
     await controller?.invokeMethod<void>('surface.close');

@@ -93,6 +93,23 @@ void main() {
       );
     },
   );
+
+  test('changes click-through mode only on overlay host windows', () async {
+    final driver = _FakeMultiWindowDriver();
+    final backend = MultiWindowBackend(driver, snapshotProvider: _snapshot);
+    await backend.ensureSurface(
+      const CardSurface(id: 'overlay-a', type: SurfaceType.overlay),
+      ['instance-1'],
+    );
+    await backend.ensureSurface(
+      const CardSurface(id: 'detached-1', type: SurfaceType.detached),
+      ['instance-2'],
+    );
+
+    await backend.setEditing(false);
+
+    expect(driver.overlayModes, [(windowId: 'window-1', editing: false)]);
+  });
 }
 
 class _FakeMultiWindowDriver implements MultiWindowDriver {
@@ -100,6 +117,7 @@ class _FakeMultiWindowDriver implements MultiWindowDriver {
   final shown = <String>[];
   final updates = <({String windowId, List<SurfaceCardSnapshot> cards})>[];
   final closed = <String>[];
+  final overlayModes = <({String windowId, bool editing})>[];
   Future<Object?> Function(Map<String, Object?>)? bridgeHandler;
 
   Future<Object?> sendBridge(Map<String, Object?> message) {
@@ -139,6 +157,11 @@ class _FakeMultiWindowDriver implements MultiWindowDriver {
   @override
   Future<void> close(String windowId) async {
     closed.add(windowId);
+  }
+
+  @override
+  Future<void> setOverlayEditing(String windowId, bool editing) async {
+    overlayModes.add((windowId: windowId, editing: editing));
   }
 }
 

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../agent_studio/agent_studio_controller.dart';
 import '../adapters/desktop_multi_window_driver.dart';
+import '../adapters/hotkey_overlay_restore_shortcut.dart';
 import '../adapters/multi_window_backend.dart';
 import '../artifacts/artifact_crypto.dart';
 import '../artifacts/artifact_installer.dart';
@@ -18,6 +19,7 @@ import '../runtime/local_runtime_server.dart';
 import '../runtime/runtime_capability_adapter.dart';
 import '../storage/local_database.dart';
 import '../surfaces/surface_coordinator.dart';
+import '../surfaces/overlay_mode_controller.dart';
 import '../workspace/workspace_card.dart';
 import '../workspace/workspace_controller.dart';
 import '../workspace/installed_workspace_card_factory.dart';
@@ -40,6 +42,7 @@ class DesktopRuntime {
     required this.workspaceController,
     required this.surfaceCoordinator,
     required this.windowBackend,
+    required this.overlayModeController,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -52,6 +55,7 @@ class DesktopRuntime {
   final WorkspaceController workspaceController;
   final SurfaceCoordinator surfaceCoordinator;
   final MultiWindowBackend windowBackend;
+  final OverlayModeController overlayModeController;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -64,6 +68,7 @@ class DesktopRuntime {
     }
     _platformInitialized = true;
     await windowBackend.initializeBridge();
+    await overlayModeController.initialize();
     await surfaceCoordinator.restorePersistedSurfaces();
   }
 
@@ -76,6 +81,7 @@ class DesktopRuntime {
     cardCatalogController?.dispose();
     workspaceController.dispose();
     cloudClient?.close();
+    await overlayModeController.dispose();
     await runtimeServer.close();
     database.close();
   }
@@ -170,6 +176,10 @@ abstract final class DesktopBootstrap {
         onBridgeMessage: (message) =>
             surfaceCoordinator.handleBridgeMessage(message),
       );
+      final overlayModeController = OverlayModeController(
+        shortcut: HotKeyOverlayRestoreShortcut(),
+        surfaces: windowBackend,
+      );
       surfaceCoordinator = SurfaceCoordinator(
         database: database,
         windows: windowBackend,
@@ -181,6 +191,7 @@ abstract final class DesktopBootstrap {
             placement: instance.placement,
           );
         },
+        onOverlayDisplayRequested: overlayModeController.enterDisplayMode,
       );
       final cloud = _cloudConfiguration(
         processEnvironment,
@@ -197,6 +208,7 @@ abstract final class DesktopBootstrap {
         workspaceController: workspaceController,
         surfaceCoordinator: surfaceCoordinator,
         windowBackend: windowBackend,
+        overlayModeController: overlayModeController,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,
