@@ -176,7 +176,7 @@ git commit -m "test: gate malicious card artifacts"
 - Create: `tooling/performance/summarize.dart`
 - Create: `docs/verification/performance-baseline-template.md`
 
-- [ ] **Step 1: Test percentile and budget evaluation**
+- [x] **Step 1: Test percentile and budget evaluation**
 
 ```dart
 test('reports p50 p95 and failed budgets', () {
@@ -187,17 +187,17 @@ test('reports p50 p95 and failed budgets', () {
 });
 ```
 
-- [ ] **Step 2: Run and confirm the missing report fails**
+- [x] **Step 2: Run and confirm the missing report fails**
 
 Run: `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart`
 
 Expected: FAIL because the report type is missing.
 
-- [ ] **Step 3: Implement deterministic sampling and scenarios**
+- [x] **Step 3: Implement deterministic sampling and scenarios**
 
 The integration harness must emit JSON for cold startup, cached NativeCard first frame, cached CodeCard first frame, 1/5/20 NativeCards, 1/3/8 CodeCards and frame timings while moving/resizing. It records the host description and never hard-codes a passing result.
 
-- [ ] **Step 4: Run host-independent evaluator tests**
+- [x] **Step 4: Run host-independent evaluator tests**
 
 Run: `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart`
 

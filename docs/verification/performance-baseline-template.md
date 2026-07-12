@@ -20,8 +20,18 @@ Recorded at (UTC): `<ISO-8601>`
 Store the raw machine-readable samples beside this record and evaluate them with:
 
 ```powershell
+pwsh tooling/performance/capture-windows.ps1 `
+  -Bundle apps/desktop/build/windows/x64/runner/Release `
+  -Output docs/verification/performance-baseline.json
 dart tooling/performance/summarize.dart docs/verification/performance-baseline.json
 ```
+
+The capture command launches the signed release executable 20 times, then runs
+the profile-mode integration harness for 30 NativeCard mounts, 20 CodeCard
+mounts, the 1/5/20 NativeCard and 1/3/8 CodeCard populations, 60 seconds of
+10-NativeCard + 3-CodeCard process sampling, and 1000 moving/resizing frames.
+It fails closed when the commit, sample population, WebView mount, or any budget
+is invalid. Do not hand-edit its JSON output.
 
 | Scenario | Required population | Budget | Result |
 |---|---:|---:|---|
