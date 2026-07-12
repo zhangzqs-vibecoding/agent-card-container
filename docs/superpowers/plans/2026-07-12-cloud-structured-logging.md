@@ -60,4 +60,4 @@
 - [x] Build a static Linux binary and verify its hash.
 - [x] Upload atomically, restart systemd, and verify service health.
 - [x] Send health, valid-auth, invalid-auth, and generation requests; assert expected JSON events/statuses in journald and absence of credentials/content.
-- [ ] Record redacted evidence, commit, push, observe CI, and independently recheck server status.
+- [x] Record redacted evidence, commit, push, observe CI, and independently recheck server status.
