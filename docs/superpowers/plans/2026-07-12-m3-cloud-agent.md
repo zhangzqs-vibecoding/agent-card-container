@@ -35,7 +35,7 @@
 
 ### Task 5：桌面端生成与端到端验收
 
-- [ ] 桌面端已接入生成创建、确认、持续 SSE、取消、卡片库、不可变版本历史、制品下载验签和 NativeCard 自动/指定版本安装；独立预览待补。
+- [x] 桌面端已接入生成创建、确认、持续 SSE、取消、卡片库、不可变版本历、安装前只读预览、制品下载验签和 NativeCard 自动/指定版本安装。
 - [ ] NativeCard 与 CodeCard 均经过签名安装链路动态进入 workspace；CodeCard 已创建独立 RuntimeSession 并接入 WebView2 adapter，仍待 Windows 实机门禁。
 - [ ] 运行 Go test、race、vet、Flutter 全量测试、沙箱与篡改回归。
 - [ ] 已用 PostgreSQL 17、MinIO 与无网络/只读/非 root Docker 沙箱验证生产链路；真实模型与 Windows E2E 门禁待记录。
