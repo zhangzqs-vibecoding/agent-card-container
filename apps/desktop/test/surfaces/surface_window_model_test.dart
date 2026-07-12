@@ -150,6 +150,49 @@ void main() {
     expect(find.textContaining('正在挂载'), findsNothing);
   });
 
+  testWidgets('pauses NativeCards beyond the active runtime budget', (
+    tester,
+  ) async {
+    final cards = List.generate(
+      21,
+      (index) => {
+        'instanceId': 'instance-$index',
+        'runtime': 'native',
+        'spec': {
+          'schemaVersion': 1,
+          'initialState': const <String, Object?>{},
+          'root': {
+            'id': 'label',
+            'type': 'Text',
+            'props': {'text': 'card-$index'},
+          },
+        },
+        'state': const <String, Object?>{},
+      },
+    );
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'detached-many',
+        'surfaceType': 'detached',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': false,
+        'instanceIds': [
+          for (var index = 0; index < 21; index++) 'instance-$index',
+        ],
+        'cards': cards,
+      }),
+    )!;
+    final model = SurfaceWindowModel(arguments);
+    addTearDown(model.dispose);
+
+    await tester.pumpWidget(SurfaceWindowApp(model: model));
+
+    expect(find.text('card-19'), findsOneWidget);
+    expect(find.text('card-20'), findsNothing);
+    expect(find.text('已暂停：超过当前活动卡片上限'), findsOneWidget);
+  });
+
   testWidgets('routes child NativeCard capabilities through the owner', (
     tester,
   ) async {

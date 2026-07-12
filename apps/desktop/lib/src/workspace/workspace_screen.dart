@@ -8,6 +8,7 @@ import '../cloud/card_catalog_controller.dart';
 import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
+import '../runtime/runtime_activity_budget.dart';
 import '../surfaces/surface.dart';
 import 'workspace_card.dart';
 import 'workspace_controller.dart';
@@ -553,6 +554,13 @@ class _WorkspaceCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final activeIndexes = RuntimeActivityBudget.activeIndexes(
+      cards.map(
+        (card) => card.nativeSpec == null
+            ? CardRuntimeKind.code
+            : CardRuntimeKind.native,
+      ),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final columnWidth = (constraints.maxWidth - 56) / 12;
@@ -660,7 +668,7 @@ class _WorkspaceCanvas extends StatelessWidget {
                   ),
                 ),
               ),
-            for (final card in cards)
+            for (final (index, card) in cards.indexed)
               Positioned(
                 left: 28 + card.instance.placement.x * columnWidth,
                 top: 80 + card.instance.placement.y * 80,
@@ -669,6 +677,7 @@ class _WorkspaceCanvas extends StatelessWidget {
                 child: _WorkspaceCardView(
                   key: ValueKey(card.instance.instanceId),
                   card: card,
+                  active: activeIndexes.contains(index),
                   onNativeCardStateChanged: onNativeCardStateChanged,
                   surfacePlacement: CardPlacement(
                     x: 100 + card.instance.placement.x * columnWidth,
@@ -701,6 +710,7 @@ class _WorkspaceCanvas extends StatelessWidget {
 class _WorkspaceCardView extends StatefulWidget {
   const _WorkspaceCardView({
     required this.card,
+    required this.active,
     required this.surfacePlacement,
     this.onNativeCardStateChanged,
     this.onDetachCard,
@@ -709,6 +719,7 @@ class _WorkspaceCardView extends StatefulWidget {
   });
 
   final WorkspaceCard card;
+  final bool active;
   final CardPlacement surfacePlacement;
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
@@ -735,13 +746,17 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   @override
   void didUpdateWidget(covariant _WorkspaceCardView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.card.instance.versionId != widget.card.instance.versionId) {
+    if (oldWidget.card.instance.versionId != widget.card.instance.versionId ||
+        oldWidget.active != widget.active) {
       _disposeRuntime();
       _createController();
     }
   }
 
   void _createController() {
+    if (!widget.active) {
+      return;
+    }
     final nativeSpec = widget.card.nativeSpec;
     if (nativeSpec != null) {
       final controller = NativeCardController(
@@ -868,6 +883,9 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   }
 
   Widget _cardContent() {
+    if (!widget.active) {
+      return const Center(child: Text('已暂停：超过当前活动卡片上限'));
+    }
     final nativeSpec = widget.card.nativeSpec;
     final nativeController = _nativeController;
     if (nativeSpec != null && nativeController != null) {

@@ -8,6 +8,7 @@ import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import '../native_card/native_card_spec.dart';
+import '../runtime/runtime_activity_budget.dart';
 import 'surface_bridge.dart';
 
 enum SurfaceCardRuntime { native, code }
@@ -312,6 +313,13 @@ class SurfaceWindowApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final activeIndexes = RuntimeActivityBudget.activeIndexes(
+      model.cards.map(
+        (card) => card.runtime == SurfaceCardRuntime.code
+            ? CardRuntimeKind.code
+            : CardRuntimeKind.native,
+      ),
+    );
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark(useMaterial3: true),
@@ -337,13 +345,15 @@ class SurfaceWindowApp extends StatelessWidget {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  for (final card in model.cards)
+                  for (final (index, card) in model.cards.indexed)
                     SizedBox(
                       width: 420,
                       height: 280,
                       child: Card(
                         child: _SurfaceCardView(
+                          key: ValueKey(card.instanceId),
                           snapshot: card,
+                          active: activeIndexes.contains(index),
                           capabilityInvocation: onCapabilityInvocation,
                           onStateChanged: onStateChanged,
                           onCodeCardLaunch: onCodeCardLaunch,
@@ -371,12 +381,15 @@ class SurfaceWindowApp extends StatelessWidget {
 class _SurfaceCardView extends StatefulWidget {
   const _SurfaceCardView({
     required this.snapshot,
+    required this.active,
     this.capabilityInvocation,
     this.onStateChanged,
     this.onCodeCardLaunch,
+    super.key,
   });
 
   final SurfaceCardSnapshot snapshot;
+  final bool active;
   final Future<Object?> Function(
     String instanceId,
     String method,
@@ -402,6 +415,25 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
   @override
   void initState() {
     super.initState();
+    if (!widget.active) {
+      return;
+    }
+    _createRuntime();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SurfaceCardView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active == widget.active) {
+      return;
+    }
+    _disposeRuntime();
+    if (widget.active) {
+      _createRuntime();
+    }
+  }
+
+  void _createRuntime() {
     final snapshot = widget.snapshot;
     if (snapshot.nativeSpec case final spec?) {
       _controller = NativeCardController(
@@ -419,6 +451,19 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
       final port = InAppWebViewPort();
       _webView = port;
       unawaited(_mountCodeCard(port, snapshot));
+    }
+  }
+
+  void _disposeRuntime() {
+    _controller?.removeListener(_publishState);
+    _controller?.dispose();
+    _controller = null;
+    final webView = _webView;
+    _webView = null;
+    _codeCardMounted = false;
+    _codeCardError = null;
+    if (webView != null) {
+      unawaited(webView.dispose());
     }
   }
 
@@ -465,31 +510,31 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
         ),
         origin.replace(path: snapshot.entrypoint),
       );
-      if (mounted && identical(port, _webView)) {
-        setState(() => _codeCardMounted = true);
+      if (!mounted || !identical(port, _webView)) {
+        return;
       }
+      setState(() => _codeCardMounted = true);
       await widget.onCodeCardLaunch?.call(snapshot.instanceId, true);
     } catch (error) {
-      await widget.onCodeCardLaunch?.call(snapshot.instanceId, false);
-      if (mounted && identical(port, _webView)) {
-        setState(() => _codeCardError = error);
+      if (!mounted || !identical(port, _webView)) {
+        return;
       }
+      await widget.onCodeCardLaunch?.call(snapshot.instanceId, false);
+      setState(() => _codeCardError = error);
     }
   }
 
   @override
   void dispose() {
-    _controller?.removeListener(_publishState);
-    _controller?.dispose();
-    final webView = _webView;
-    if (webView != null) {
-      unawaited(webView.dispose());
-    }
+    _disposeRuntime();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.active) {
+      return const Center(child: Text('已暂停：超过当前活动卡片上限'));
+    }
     final spec = widget.snapshot.nativeSpec;
     final controller = _controller;
     if (spec != null && controller != null) {
