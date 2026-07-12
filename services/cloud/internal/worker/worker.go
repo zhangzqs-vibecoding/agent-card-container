@@ -71,18 +71,34 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "INTERNAL", err)
 	}
+	runtime := contracts.CardRuntimeNative
+	entrypoint := "payload/native.json"
+	catalogVersion := "1"
+	artifactFiles := map[string][]byte{
+		"reports/validation.json": report,
+	}
+	if result.Runtime == agent.RuntimeWeb {
+		runtime = contracts.CardRuntimeWeb
+		entrypoint = "payload/web/index.html"
+		catalogVersion = ""
+		for name, content := range result.Files {
+			artifactFiles["payload/web/"+name] = content
+		}
+	} else {
+		artifactFiles["payload/native.json"] = []byte(result.Content)
+	}
 	definition := contracts.CardDefinition{
 		FormatVersion:      1,
 		MinHostVersion:     "1.0.0",
 		CardID:             cardID,
 		VersionID:          versionID,
 		DisplayVersion:     "1.0.0",
-		Runtime:            contracts.CardRuntimeNative,
+		Runtime:            runtime,
 		StateSchemaVersion: 1,
 		Title:              titleFromPrompt(session.Prompt),
 		Description:        session.Summary.Goal,
-		Entrypoint:         "payload/native.json",
-		CatalogVersion:     "1",
+		Entrypoint:         entrypoint,
+		CatalogVersion:     catalogVersion,
 		MinSize:            contracts.Size{Width: 240, Height: 160},
 		PreferredSize:      contracts.Size{Width: 360, Height: 240},
 		MaxSize:            contracts.Size{Width: 1200, Height: 900},
@@ -93,10 +109,7 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 	version, err := worker.config.Publisher.Publish(ctx, publish.Input{
 		UserID:     session.UserID,
 		Definition: definition,
-		Files: map[string][]byte{
-			"payload/native.json":     []byte(result.Content),
-			"reports/validation.json": report,
-		},
+		Files:      artifactFiles,
 		Preview: map[string]any{
 			"title":   definition.Title,
 			"runtime": string(result.Runtime),

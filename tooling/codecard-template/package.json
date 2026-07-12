@@ -1,0 +1,21 @@
+{
+  "name": "agent-card-codecard-template",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "build": "vite build",
+    "validate:bundle": "node scripts/validate-bundle.mjs"
+  },
+  "dependencies": {
+    "preact": "10.26.4"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.1",
+    "typescript": "5.7.3",
+    "vite": "6.1.0",
+    "vitest": "3.0.5"
+  }
+}

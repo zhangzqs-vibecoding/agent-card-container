@@ -124,8 +124,78 @@ func TestWorkerFailsSessionAfterAgentValidationFailure(t *testing.T) {
 	}
 }
 
+func TestWorkerPublishesSandboxedCodeCard(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_web" },
+		func() time.Time { return now },
+	)
+	session, err := service.Create(
+		context.Background(),
+		"user",
+		generation.CreateRequest{
+			Prompt: "做一个自由绘制的离线画板",
+			Target: generation.TargetAuto,
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(context.Background(), "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewMemoryStore(func() string { return "job_web" })
+	if _, err := jobStore.Enqueue(context.Background(), session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	seed := sha256.Sum256([]byte("web-key"))
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("key", ed25519.NewKeyFromSeed(seed[:])),
+		publish.NewMemoryObjectStore(),
+		publish.NewMemoryVersionRepository(),
+	)
+	codingAgent := agent.NewCodingAgent(
+		staticProvider{content: `{"files":{"src/card.tsx":"export function Card(){return <canvas/>}"}}`},
+		agent.NewNativeValidator(),
+		agent.WithWebBuilder(staticWebBuilder{}),
+	)
+	runner := worker.New(worker.Config{
+		WorkerID:     "worker",
+		Jobs:         jobStore,
+		Generations:  service,
+		Agent:        codingAgent,
+		Publisher:    publisher,
+		NewCardID:    func() string { return "card_web" },
+		NewVersionID: func() string { return "ver_web" },
+		Now:          func() time.Time { return now },
+	})
+
+	if _, err := runner.RunOnce(context.Background()); err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+	card, err := publisher.Card(context.Background(), "user", "card_web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if card.Versions[0].Runtime != "web" {
+		t.Fatalf("runtime = %q, want web", card.Versions[0].Runtime)
+	}
+}
+
 type staticProvider struct {
 	content string
+}
+
+type staticWebBuilder struct{}
+
+func (staticWebBuilder) Build(context.Context, map[string]string) (map[string][]byte, error) {
+	return map[string][]byte{
+		"index.html":    []byte(`<script src="/runtime/bootstrap.js"></script><canvas></canvas>`),
+		"assets/app.js": []byte("const offline = true"),
+	}, nil
 }
 
 func (provider staticProvider) Generate(context.Context, modelprovider.Request) (modelprovider.Response, error) {

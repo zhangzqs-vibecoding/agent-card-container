@@ -94,13 +94,83 @@ func TestCodingAgentStopsAfterThreeInvalidOutputs(t *testing.T) {
 	}
 }
 
+func TestCodingAgentBuildsWebOutputOnlyThroughSandbox(t *testing.T) {
+	t.Parallel()
+
+	provider := &fakeProvider{outputs: []string{
+		`{"files":{"src/card.tsx":"export function Card(){return <div>离线画板</div>}","src/card.css":"div{color:white}"}}`,
+	}}
+	builder := &fakeWebBuilder{
+		output: map[string][]byte{
+			"index.html":    []byte(`<script src="/runtime/bootstrap.js"></script><div id="app"></div>`),
+			"assets/app.js": []byte("console.log('offline')"),
+		},
+	}
+	codingAgent := agent.NewCodingAgent(
+		provider,
+		agent.NewNativeValidator(),
+		agent.WithWebBuilder(builder),
+	)
+
+	result, err := codingAgent.Generate(context.Background(), agent.Request{
+		SessionID: "gen_web",
+		Prompt:    "做一个自由绘制的离线画板",
+		Target:    generation.TargetAuto,
+		Locale:    "zh-CN",
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if result.Runtime != agent.RuntimeWeb || len(result.Files) != 2 {
+		t.Fatalf("result = %#v", result)
+	}
+	if builder.input["src/card.tsx"] == "" {
+		t.Fatalf("builder input = %#v", builder.input)
+	}
+}
+
+func TestCodingAgentRejectsWebSourceOutsideWhitelist(t *testing.T) {
+	t.Parallel()
+
+	provider := &fakeProvider{outputs: []string{
+		`{"files":{"../../escape":"secret"}}`,
+	}}
+	codingAgent := agent.NewCodingAgent(
+		provider,
+		agent.NewNativeValidator(),
+		agent.WithWebBuilder(&fakeWebBuilder{}),
+	)
+
+	_, err := codingAgent.Generate(context.Background(), agent.Request{
+		SessionID: "gen_web",
+		Prompt:    "做一个离线画板",
+		Target:    generation.TargetWeb,
+	})
+	if !errors.Is(err, agent.ErrValidationFailed) {
+		t.Fatalf("Generate() error = %v, want ErrValidationFailed", err)
+	}
+}
+
 type fakeProvider struct {
 	outputs  []string
 	requests []modelprovider.Request
 }
 
+type fakeWebBuilder struct {
+	input  map[string]string
+	output map[string][]byte
+}
+
+func (builder *fakeWebBuilder) Build(_ context.Context, files map[string]string) (map[string][]byte, error) {
+	builder.input = files
+	return builder.output, nil
+}
+
 func (provider *fakeProvider) Generate(_ context.Context, request modelprovider.Request) (modelprovider.Response, error) {
 	provider.requests = append(provider.requests, request)
 	index := len(provider.requests) - 1
+	if index >= len(provider.outputs) {
+		index = len(provider.outputs) - 1
+	}
 	return modelprovider.Response{Content: provider.outputs[index]}, nil
 }

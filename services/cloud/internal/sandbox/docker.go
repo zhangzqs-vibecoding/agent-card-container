@@ -95,7 +95,7 @@ func (builder *DockerBuilder) Build(ctx context.Context, request BuildRequest) (
 			"--workdir", "/workspace",
 			builder.config.Image,
 			"/bin/sh", "-lc",
-			"pnpm run typecheck && pnpm test -- --run && pnpm run build && pnpm run validate:bundle",
+			"ln -s /opt/codecard-template/node_modules /workspace/node_modules && pnpm run typecheck && pnpm test -- --run && pnpm run build && pnpm run validate:bundle",
 		},
 		Directory: workspace,
 	}

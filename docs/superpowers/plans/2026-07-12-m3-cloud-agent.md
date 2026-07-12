@@ -28,10 +28,10 @@
 
 ### Task 4：CodeCard OCI 沙箱与签名发布
 
-- [ ] 定义 sandbox 接口与 Docker OCI adapter：无网络、非 root、只读根、2 CPU、2 GiB、5 分钟、白名单输出。
-- [ ] 固定 TypeScript、Preact、Vite 模板，执行类型检查、测试、构建、依赖和浏览器安全验证。
-- [ ] 生成规范化 manifest、文件 hash、Ed25519 签名和 agentcard ZIP。
-- [ ] 对象存储上传、短期下载地址及不可变 CardVersion 幂等发布。
+- [x] 定义 sandbox 接口与 Docker OCI adapter：无网络、非 root、只读根、2 CPU、2 GiB、5 分钟、白名单输出。
+- [ ] 固定 TypeScript、Preact、Vite 模板并接通类型检查、测试、构建和静态 bundle policy；隔离浏览器加载、依赖许可与漏洞扫描待补。
+- [x] 生成规范化 manifest、文件 hash、Ed25519 签名和 agentcard ZIP。
+- [ ] 已实现对象存储接口、内存 adapter、短期下载元数据及不可变 CardVersion 幂等发布；真实 S3 adapter 待补。
 
 ### Task 5：桌面端生成与端到端验收
 
