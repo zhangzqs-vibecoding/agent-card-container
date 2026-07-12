@@ -17,10 +17,33 @@ type Service struct {
 	repository Repository
 	newID      func() string
 	now        func() time.Time
+	jobQueue   JobQueue
 }
 
-func NewService(repository Repository, newID func() string, now func() time.Time) *Service {
-	return &Service{repository: repository, newID: newID, now: now}
+type JobQueue interface {
+	EnqueueGeneration(context.Context, string, time.Time) error
+	CancelGeneration(context.Context, string, time.Time) error
+}
+
+type ServiceOption func(*Service)
+
+func WithJobQueue(queue JobQueue) ServiceOption {
+	return func(service *Service) {
+		service.jobQueue = queue
+	}
+}
+
+func NewService(
+	repository Repository,
+	newID func() string,
+	now func() time.Time,
+	options ...ServiceOption,
+) *Service {
+	service := &Service{repository: repository, newID: newID, now: now}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 func (service *Service) Create(ctx context.Context, userID string, request CreateRequest) (*Session, error) {
@@ -74,7 +97,7 @@ func (service *Service) AddMessage(ctx context.Context, userID, sessionID, conte
 }
 
 func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (*Session, error) {
-	return service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
+	session, err := service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
 		if session.Status != StatusAwaitingConfirmation {
 			return ErrConflict
 		}
@@ -86,10 +109,20 @@ func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (
 		})
 		return err
 	})
+	if err != nil {
+		return nil, err
+	}
+	if service.jobQueue != nil {
+		if err := service.jobQueue.EnqueueGeneration(ctx, sessionID, service.now()); err != nil {
+			_, _ = service.MarkFailed(ctx, sessionID, "JOB_ENQUEUE_FAILED")
+			return nil, err
+		}
+	}
+	return session, nil
 }
 
 func (service *Service) Cancel(ctx context.Context, userID, sessionID string) (*Session, error) {
-	return service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
+	session, err := service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
 		if session.Status == StatusCancelled {
 			return nil
 		}
@@ -99,6 +132,15 @@ func (service *Service) Cancel(ctx context.Context, userID, sessionID string) (*
 		_, err := session.Cancel(service.now())
 		return err
 	})
+	if err != nil {
+		return nil, err
+	}
+	if service.jobQueue != nil {
+		if err := service.jobQueue.CancelGeneration(ctx, sessionID, service.now()); err != nil {
+			return nil, err
+		}
+	}
+	return session, nil
 }
 
 func (service *Service) EventsAfter(ctx context.Context, userID, sessionID string, eventID int64) ([]Event, error) {

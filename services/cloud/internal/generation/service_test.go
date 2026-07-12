@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
+	"github.com/zzq/agent-card-container/services/cloud/internal/jobs"
 )
 
 func TestServiceCreatesConfirmsAndReplaysGeneration(t *testing.T) {
@@ -115,5 +116,45 @@ func TestServiceCancelsQueuedSessionIdempotently(t *testing.T) {
 	}
 	if cancelled.Status != generation.StatusCancelled || repeated.Status != generation.StatusCancelled {
 		t.Fatalf("statuses = %q, %q", cancelled.Status, repeated.Status)
+	}
+}
+
+func TestServiceConfirmEnqueuesAndCancelStopsJob(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	store := jobs.NewMemoryStore(func() string { return "job_01" })
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_01" },
+		func() time.Time { return now },
+		generation.WithJobQueue(jobs.NewGenerationQueue(store)),
+	)
+	session, err := service.Create(context.Background(), "user", generation.CreateRequest{
+		Prompt: "生成卡片",
+		Target: generation.TargetAuto,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(context.Background(), "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	job, err := store.Claim(context.Background(), "worker", now, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim() error = %v", err)
+	}
+	if job.SessionID != session.ID {
+		t.Fatalf("job session = %q", job.SessionID)
+	}
+	if _, err := service.Cancel(context.Background(), "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := store.Get(context.Background(), job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Status != jobs.StatusCancelled {
+		t.Fatalf("job status = %q", cancelled.Status)
 	}
 }
