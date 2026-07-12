@@ -8,6 +8,11 @@ import 'package:agent_card_desktop/src/capabilities/capability.dart';
 import 'package:agent_card_desktop/src/capabilities/capability_broker.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_api_client.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_connection_settings.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_settings_controller.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_settings_repository.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_settings_service.dart';
+import 'package:agent_card_desktop/src/cloud/secret_store.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
 import 'package:agent_card_desktop/src/runtime/runtime_session.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
@@ -73,6 +78,50 @@ void main() {
       find.textContaining('/safe/diagnostics/diagnostic.json'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('configures cloud service and marks restart required', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final secrets = _AppTestSecretStore();
+    final settings = _AppTestSettingsStore();
+    final controller = CloudSettingsController(
+      CloudSettingsService(
+        environment: const {},
+        repository: settings,
+        secretStore: secrets,
+        connectionTester: (_, _) async {},
+      ),
+    );
+    await controller.initialize();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(AgentCardApp(cloudSettingsController: controller));
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pump();
+
+    expect(find.text('云端服务'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('cloud-base-url')),
+      'http://127.0.0.1:8080',
+    );
+    await tester.enterText(
+      find.byKey(const Key('cloud-access-token')),
+      'ui-secret',
+    );
+    await tester.tap(find.byKey(const Key('cloud-allow-insecure')));
+    await tester.tap(find.byKey(const Key('cloud-test-connection')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('连接正常'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('cloud-save')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('重启应用后生效'), findsOneWidget);
+    expect(secrets.value, 'ui-secret');
   });
 
   testWidgets('matches the desktop workspace visual baseline', (tester) async {
@@ -463,6 +512,40 @@ void main() {
     expect(find.text('已暂停：卡片不可见或超过活动上限'), findsOneWidget);
     expect(find.text('当前平台无法满足 CodeCard 的安全隔离要求'), findsNothing);
   });
+}
+
+class _AppTestSecretStore implements SecretStore {
+  String? value;
+
+  @override
+  Future<String?> readAccessToken() async => value;
+
+  @override
+  Future<void> writeAccessToken(String value) async {
+    this.value = value;
+  }
+
+  @override
+  Future<void> deleteAccessToken() async {
+    value = null;
+  }
+}
+
+class _AppTestSettingsStore implements CloudSettingsStore {
+  CloudUserConfig? value;
+
+  @override
+  Future<CloudUserConfig?> read() async => value;
+
+  @override
+  Future<void> save(CloudUserConfig config) async {
+    value = config;
+  }
+
+  @override
+  Future<void> clear() async {
+    value = null;
+  }
 }
 
 class _CatalogFixture implements CloudCatalogPort {

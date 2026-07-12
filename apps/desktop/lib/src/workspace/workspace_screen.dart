@@ -6,6 +6,8 @@ import '../adapters/in_app_webview_port.dart';
 import '../agent_studio/agent_studio_controller.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
+import '../cloud/cloud_settings_controller.dart';
+import '../cloud/cloud_settings_section.dart';
 import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
@@ -28,6 +30,7 @@ class WorkspaceScreen extends StatefulWidget {
     this.agentStudioController,
     this.workspaceController,
     this.cardCatalogController,
+    this.cloudSettingsController,
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
@@ -41,6 +44,7 @@ class WorkspaceScreen extends StatefulWidget {
   final AgentStudioController? agentStudioController;
   final WorkspaceController? workspaceController;
   final CardCatalogController? cardCatalogController;
+  final CloudSettingsController? cloudSettingsController;
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
@@ -129,7 +133,10 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
       return _VersionHistory(controller: widget.cardCatalogController);
     }
     if (_selectedDestination == 3) {
-      return _SettingsPage(onExportDiagnostics: widget.onExportDiagnostics);
+      return _SettingsPage(
+        cloudSettingsController: widget.cloudSettingsController,
+        onExportDiagnostics: widget.onExportDiagnostics,
+      );
     }
     return AnimatedBuilder(
       animation: widget.workspaceController ?? _NoopListenable.instance,
@@ -561,8 +568,12 @@ class _NavigationStrip extends StatelessWidget {
 }
 
 class _SettingsPage extends StatefulWidget {
-  const _SettingsPage({required this.onExportDiagnostics});
+  const _SettingsPage({
+    required this.cloudSettingsController,
+    required this.onExportDiagnostics,
+  });
 
+  final CloudSettingsController? cloudSettingsController;
   final Future<String> Function()? onExportDiagnostics;
 
   @override
@@ -593,7 +604,7 @@ class _SettingsPageState extends State<_SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Align(
         alignment: Alignment.topLeft,
@@ -602,6 +613,12 @@ class _SettingsPageState extends State<_SettingsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.cloudSettingsController case final controller?) ...[
+                CloudSettingsSection(controller: controller),
+                const SizedBox(height: 36),
+                const Divider(),
+                const SizedBox(height: 28),
+              ],
               Text('诊断与支持', style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 12),
               Text(

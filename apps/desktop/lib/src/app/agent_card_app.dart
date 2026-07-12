@@ -2,6 +2,7 @@ import 'package:agent_card_desktop/src/agent_studio/agent_studio_controller.dart
 import 'package:agent_card_desktop/src/capabilities/permission_prompt_host.dart';
 import 'package:agent_card_desktop/src/capabilities/permission_request_controller.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
+import 'package:agent_card_desktop/src/cloud/cloud_settings_controller.dart';
 import 'package:agent_card_desktop/src/runtime/runtime_visibility.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_screen.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
@@ -18,6 +19,7 @@ class AgentCardApp extends StatelessWidget {
     this.agentStudioController,
     this.workspaceController,
     this.cardCatalogController,
+    this.cloudSettingsController,
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
@@ -31,6 +33,7 @@ class AgentCardApp extends StatelessWidget {
   final AgentStudioController? agentStudioController;
   final WorkspaceController? workspaceController;
   final CardCatalogController? cardCatalogController;
+  final CloudSettingsController? cloudSettingsController;
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
@@ -60,6 +63,7 @@ class AgentCardApp extends StatelessWidget {
       agentStudioController: agentStudioController,
       workspaceController: workspaceController,
       cardCatalogController: cardCatalogController,
+      cloudSettingsController: cloudSettingsController,
       onNativeCardStateChanged: onNativeCardStateChanged,
       onDetachCard: onDetachCard,
       onMoveCardToOverlay: onMoveCardToOverlay,
