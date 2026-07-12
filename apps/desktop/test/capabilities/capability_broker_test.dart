@@ -244,6 +244,22 @@ void main() {
       expect(result, {'instanceId': 'instance-1', 'surface': 'workspace'});
     });
 
+    test('automatically grants storage and self-window management', () async {
+      final broker = CapabilityBroker()
+        ..register('storage.get', (_, _) async => {'value': null})
+        ..register('window.getState', (_, _) async => {'surface': 'workspace'});
+      final context = _context(
+        declared: const {'storage', 'window.manageSelf'},
+      );
+
+      expect(await broker.invoke(context, 'storage.get', const {}), {
+        'value': null,
+      });
+      expect(await broker.invoke(context, 'window.getState', const {}), {
+        'surface': 'workspace',
+      });
+    });
+
     test('requests and persists a narrowly scoped first-use grant', () async {
       final persisted = <PermissionGrant>[];
       final broker = CapabilityBroker(

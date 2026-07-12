@@ -16,6 +16,7 @@ import '../capabilities/capability_broker.dart';
 import '../capabilities/secure_network_fetcher.dart';
 import '../capabilities/host_capability_handlers.dart';
 import '../capabilities/permission_request_controller.dart';
+import '../capabilities/window_capability_handlers.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
@@ -122,6 +123,8 @@ abstract final class DesktopBootstrap {
       };
       final cards = <WorkspaceCard>[];
       final errors = <RecoveryError>[];
+      late SurfaceCoordinator surfaceCoordinator;
+      late WindowCapabilityHandlers windowCapabilities;
       final workspaceCardFactory = InstalledWorkspaceCardFactory(
         runtimeServer: runtimeServer,
         database: database,
@@ -142,6 +145,30 @@ abstract final class DesktopBootstrap {
                 ..register(
                   'system.metrics.get',
                   hostCapabilities.systemMetricsGet,
+                )
+                ..register(
+                  'window.getState',
+                  (context, params) =>
+                      windowCapabilities.getState(context, params),
+                )
+                ..register(
+                  'window.detach',
+                  (context, params) =>
+                      windowCapabilities.detach(context, params),
+                )
+                ..register(
+                  'window.dock',
+                  (context, params) => windowCapabilities.dock(context, params),
+                )
+                ..register(
+                  'window.setAlwaysOnTop',
+                  (context, params) =>
+                      windowCapabilities.setAlwaysOnTop(context, params),
+                )
+                ..register(
+                  'window.requestAttention',
+                  (context, params) =>
+                      windowCapabilities.requestAttention(context, params),
                 )
                 ..replaceGrants(
                   database.grantsForInstance(instance.instanceId),
@@ -203,7 +230,6 @@ abstract final class DesktopBootstrap {
         cards: () => workspaceController.cards,
         readState: database.readState,
       );
-      late SurfaceCoordinator surfaceCoordinator;
       final windowBackend = MultiWindowBackend(
         DesktopMultiWindowDriver(),
         snapshotProvider: snapshotProvider.call,
@@ -257,6 +283,7 @@ abstract final class DesktopBootstrap {
           }
         },
       );
+      windowCapabilities = WindowCapabilityHandlers(surfaceCoordinator);
       final displayMonitor = ScreenRetrieverDisplayMonitor(surfaceCoordinator);
       final cloud = _cloudConfiguration(
         processEnvironment,

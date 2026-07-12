@@ -32,6 +32,10 @@ abstract interface class MultiWindowDriver {
 
   Future<void> setOverlayEditing(String windowId, bool editing);
 
+  Future<void> setAlwaysOnTop(String windowId, bool value);
+
+  Future<void> requestAttention(String windowId);
+
   Future<void> close(String windowId);
 }
 
@@ -111,6 +115,24 @@ class MultiWindowBackend implements WindowBackend, OverlaySurfaceModePort {
     if (windowId != null) {
       _bindings.removeWindow(windowId);
     }
+  }
+
+  @override
+  Future<void> setSurfaceAlwaysOnTop(String surfaceId, bool value) async {
+    final windowId = _surfaceWindows[surfaceId];
+    if (windowId == null) {
+      throw StateError('surface window is not registered');
+    }
+    await driver.setAlwaysOnTop(windowId, value);
+  }
+
+  @override
+  Future<void> requestSurfaceAttention(String surfaceId) async {
+    final windowId = _surfaceWindows[surfaceId];
+    if (windowId == null) {
+      throw StateError('surface window is not registered');
+    }
+    await driver.requestAttention(windowId);
   }
 
   @override

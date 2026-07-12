@@ -43,6 +43,16 @@ abstract final class SurfaceWindowLauncher {
             forward: true,
           );
           return null;
+        case 'surface.setAlwaysOnTop':
+          if (call.arguments is! bool) {
+            throw const FormatException('invalid always-on-top command');
+          }
+          await windowManager.setAlwaysOnTop(call.arguments! as bool);
+          return null;
+        case 'surface.requestAttention':
+          await windowManager.show();
+          await windowManager.focus();
+          return null;
         default:
           throw MissingPluginException('unknown surface window method');
       }

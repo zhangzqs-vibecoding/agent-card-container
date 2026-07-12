@@ -50,6 +50,13 @@ class CapabilityBroker {
     final requestedDomain = _validatedRequestedDomain(context, method, params);
 
     var grant = _matchingGrant(context, capability);
+    if (grant == null && _isAutomaticallyGranted(capability)) {
+      grant = PermissionGrant(
+        instanceId: context.instanceId,
+        versionId: context.versionId,
+        capability: capability,
+      );
+    }
     final requiresPerUseConfirmation = capability == 'clipboard.read';
     final requiresDomainGrant =
         requestedDomain != null &&
@@ -194,6 +201,10 @@ class CapabilityBroker {
       return 'system.metrics.read';
     }
     return method;
+  }
+
+  bool _isAutomaticallyGranted(String capability) {
+    return capability == 'storage' || capability == 'window.manageSelf';
   }
 
   bool _isLocalHost(String host) {

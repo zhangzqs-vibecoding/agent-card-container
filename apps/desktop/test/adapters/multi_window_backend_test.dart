@@ -110,6 +110,28 @@ void main() {
 
     expect(driver.overlayModes, [(windowId: 'window-1', editing: false)]);
   });
+
+  test(
+    'routes self-window commands only to the owning surface window',
+    () async {
+      final driver = _FakeMultiWindowDriver();
+      final backend = MultiWindowBackend(driver, snapshotProvider: _snapshot);
+      await backend.ensureSurface(
+        const CardSurface(id: 'detached-1', type: SurfaceType.detached),
+        ['instance-1'],
+      );
+
+      await backend.setSurfaceAlwaysOnTop('detached-1', true);
+      await backend.requestSurfaceAttention('detached-1');
+
+      expect(driver.alwaysOnTop, [(windowId: 'window-1', value: true)]);
+      expect(driver.attention, ['window-1']);
+      await expectLater(
+        () => backend.requestSurfaceAttention('workspace-main'),
+        throwsStateError,
+      );
+    },
+  );
 }
 
 class _FakeMultiWindowDriver implements MultiWindowDriver {
@@ -118,6 +140,8 @@ class _FakeMultiWindowDriver implements MultiWindowDriver {
   final updates = <({String windowId, List<SurfaceCardSnapshot> cards})>[];
   final closed = <String>[];
   final overlayModes = <({String windowId, bool editing})>[];
+  final alwaysOnTop = <({String windowId, bool value})>[];
+  final attention = <String>[];
   Future<Object?> Function(Map<String, Object?>)? bridgeHandler;
 
   Future<Object?> sendBridge(Map<String, Object?> message) {
@@ -162,6 +186,16 @@ class _FakeMultiWindowDriver implements MultiWindowDriver {
   @override
   Future<void> setOverlayEditing(String windowId, bool editing) async {
     overlayModes.add((windowId: windowId, editing: editing));
+  }
+
+  @override
+  Future<void> setAlwaysOnTop(String windowId, bool value) async {
+    alwaysOnTop.add((windowId: windowId, value: value));
+  }
+
+  @override
+  Future<void> requestAttention(String windowId) async {
+    attention.add(windowId);
   }
 }
 

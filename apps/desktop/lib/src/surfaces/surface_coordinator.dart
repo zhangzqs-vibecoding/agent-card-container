@@ -16,6 +16,10 @@ abstract interface class WindowBackend {
   Future<void> closeSurface(String surfaceId);
 
   void releaseSurface(String surfaceId);
+
+  Future<void> setSurfaceAlwaysOnTop(String surfaceId, bool value);
+
+  Future<void> requestSurfaceAttention(String surfaceId);
 }
 
 class SurfaceCoordinator {
@@ -228,6 +232,50 @@ class SurfaceCoordinator {
     _moveToWorkspace(instanceId);
   }
 
+  Map<String, Object?> getState(String instanceId) {
+    final instance = _requireInstance(instanceId);
+    final surface = _requireSurface(instance.surfaceId);
+    return {
+      'surfaceId': surface.id,
+      'surfaceType': surface.type.name,
+      'alwaysOnTop': surface.alwaysOnTop,
+      'placement': {
+        'x': instance.placement.x,
+        'y': instance.placement.y,
+        'width': instance.placement.width,
+        'height': instance.placement.height,
+      },
+    };
+  }
+
+  Future<void> setAlwaysOnTop(String instanceId, bool value) async {
+    final instance = _requireInstance(instanceId);
+    final surface = _requireSurface(instance.surfaceId);
+    if (surface.type == SurfaceType.workspace) {
+      throw StateError('workspace cards cannot manage the shared main window');
+    }
+    await windows.setSurfaceAlwaysOnTop(surface.id, value);
+    database.upsertSurface(
+      CardSurface(
+        id: surface.id,
+        type: surface.type,
+        monitorId: surface.monitorId,
+        bounds: surface.bounds,
+        alwaysOnTop: value,
+        lastFocusedAt: surface.lastFocusedAt,
+      ),
+    );
+  }
+
+  Future<void> requestAttention(String instanceId) async {
+    final instance = _requireInstance(instanceId);
+    final surface = _requireSurface(instance.surfaceId);
+    if (surface.type == SurfaceType.workspace) {
+      throw StateError('workspace cards cannot manage the shared main window');
+    }
+    await windows.requestSurfaceAttention(surface.id);
+  }
+
   void _moveToWorkspace(String instanceId) {
     database.moveInstanceToSurface(
       surface: const CardSurface(
@@ -254,6 +302,15 @@ class SurfaceCoordinator {
       }
     }
     throw StateError('card instance does not exist');
+  }
+
+  CardSurface _requireSurface(String surfaceId) {
+    for (final surface in database.listSurfaces()) {
+      if (surface.id == surfaceId) {
+        return surface;
+      }
+    }
+    throw StateError('card surface does not exist');
   }
 }
 

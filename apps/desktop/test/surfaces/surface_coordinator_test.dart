@@ -343,4 +343,10 @@ class _FakeWindowBackend implements WindowBackend {
   void releaseSurface(String surfaceId) {
     released.add(surfaceId);
   }
+
+  @override
+  Future<void> setSurfaceAlwaysOnTop(String surfaceId, bool value) async {}
+
+  @override
+  Future<void> requestSurfaceAttention(String surfaceId) async {}
 }

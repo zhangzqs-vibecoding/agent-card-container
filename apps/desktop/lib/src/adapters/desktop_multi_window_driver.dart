@@ -60,6 +60,18 @@ class DesktopMultiWindowDriver implements MultiWindowDriver {
   }
 
   @override
+  Future<void> setAlwaysOnTop(String windowId, bool value) async {
+    await _controller(
+      windowId,
+    ).invokeMethod<void>('surface.setAlwaysOnTop', value);
+  }
+
+  @override
+  Future<void> requestAttention(String windowId) async {
+    await _controller(windowId).invokeMethod<void>('surface.requestAttention');
+  }
+
+  @override
   Future<void> close(String windowId) async {
     final controller = _windows.remove(windowId);
     await controller?.invokeMethod<void>('surface.close');
