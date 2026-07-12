@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
   }
   desktopRuntime = await DesktopBootstrap.start();
   desktopLifecycle = AppLifecycleListener(
+    onResume: () => unawaited(desktopRuntime.environmentMonitor.refresh()),
     onExitRequested: () async {
       await desktopRuntime.close();
       return AppExitResponse.exit;

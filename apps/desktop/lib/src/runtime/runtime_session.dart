@@ -79,11 +79,24 @@ class RuntimeSession {
     required this.versionId,
     required Map<String, RuntimeResource> resources,
     Set<String> declaredCapabilities = const {},
+    String locale = 'en-US',
+    String theme = 'system',
+    String surface = 'workspace',
+    bool online = true,
     RuntimeRateLimit rateLimit = const RuntimeRateLimit(),
     RuntimeStorage? storage,
     this.rpcHandler,
   }) : resources = Map.unmodifiable(resources),
        declaredCapabilities = Set.unmodifiable(declaredCapabilities),
+       context = RuntimeCardContext(
+         instanceId: instanceId,
+         cardId: cardId,
+         versionId: versionId,
+         locale: locale,
+         theme: theme,
+         surface: surface,
+         online: online,
+       ),
        storage = storage ?? MemoryRuntimeStorage(),
        _rateLimiter = _TokenBucket(rateLimit);
 
@@ -95,6 +108,7 @@ class RuntimeSession {
   final String versionId;
   final Map<String, RuntimeResource> resources;
   final Set<String> declaredCapabilities;
+  RuntimeCardContext context;
   final RuntimeRpcHandler? rpcHandler;
   final RuntimeStorage storage;
   final _TokenBucket _rateLimiter;
@@ -144,6 +158,53 @@ class RuntimeSession {
     }
     _eventSockets.clear();
   }
+}
+
+class RuntimeCardContext {
+  const RuntimeCardContext({
+    required this.instanceId,
+    required this.cardId,
+    required this.versionId,
+    required this.locale,
+    required this.theme,
+    required this.surface,
+    required this.online,
+  });
+
+  final String instanceId;
+  final String cardId;
+  final String versionId;
+  final String locale;
+  final String theme;
+  final String surface;
+  final bool online;
+
+  RuntimeCardContext copyWith({
+    String? locale,
+    String? theme,
+    String? surface,
+    bool? online,
+  }) {
+    return RuntimeCardContext(
+      instanceId: instanceId,
+      cardId: cardId,
+      versionId: versionId,
+      locale: locale ?? this.locale,
+      theme: theme ?? this.theme,
+      surface: surface ?? this.surface,
+      online: online ?? this.online,
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'instanceId': instanceId,
+    'cardId': cardId,
+    'versionId': versionId,
+    'locale': locale,
+    'theme': theme,
+    'surface': surface,
+    'online': online,
+  };
 }
 
 class RuntimeRateLimit {

@@ -22,6 +22,7 @@ import '../cloud/card_catalog_controller.dart';
 import '../cloud/cloud_api_client.dart';
 import '../diagnostics/diagnostic_bundle.dart';
 import '../runtime/local_runtime_server.dart';
+import '../runtime/runtime_environment_monitor.dart';
 import '../recovery/startup_recovery.dart';
 import '../storage/local_database.dart';
 import '../surfaces/surface_coordinator.dart';
@@ -52,6 +53,7 @@ class DesktopRuntime {
     required this.displayMonitor,
     required this.permissionRequests,
     required this.startupRecovery,
+    required this.environmentMonitor,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -68,6 +70,7 @@ class DesktopRuntime {
   final ScreenRetrieverDisplayMonitor displayMonitor;
   final PermissionRequestController permissionRequests;
   final StartupRecovery startupRecovery;
+  final RuntimeEnvironmentMonitor environmentMonitor;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -120,6 +123,7 @@ class DesktopRuntime {
     workspaceController.dispose();
     cloudClient?.close();
     displayMonitor.dispose();
+    environmentMonitor.dispose();
     await overlayModeController.dispose();
     await runtimeServer.close();
     database.close();
@@ -140,8 +144,20 @@ abstract final class DesktopBootstrap {
     );
     final database = LocalDatabase.open(_join(root.path, 'agent-card.sqlite3'));
     LocalRuntimeServer? runtimeServer;
+    RuntimeEnvironmentMonitor? environmentMonitor;
     try {
-      runtimeServer = await LocalRuntimeServer.start();
+      final initialOnline = await hasUsableNetworkInterface();
+      runtimeServer = await LocalRuntimeServer.start(
+        initialLocale: normalizeRuntimeLocale(Platform.localeName),
+        initialTheme: 'dark',
+        initialOnline: initialOnline,
+      );
+      environmentMonitor = RuntimeEnvironmentMonitor(
+        runtimeServer: runtimeServer,
+        onlineProbe: hasUsableNetworkInterface,
+        localeProvider: () => normalizeRuntimeLocale(Platform.localeName),
+        themeProvider: () => 'dark',
+      );
       final hostCapabilities = HostCapabilityHandlers(
         clipboard: FlutterClipboardCapabilityPort(),
         externalUrls: UrlLauncherExternalUrlPort(),
@@ -301,10 +317,17 @@ abstract final class DesktopBootstrap {
             surfaceId: instance.surfaceId,
             placement: instance.placement,
           );
-          runtimeServer!.publishEventForInstance(
+          final surface = database
+              .listSurfaces()
+              .where((candidate) => candidate.id == instance.surfaceId)
+              .firstOrNull;
+          if (surface == null) {
+            return;
+          }
+          runtimeServer!.updateInstanceSurface(
             instance.instanceId,
-            'surface.changed',
-            {
+            surface.type.name,
+            payload: {
               'surfaceId': instance.surfaceId,
               'placement': {
                 'x': instance.placement.x,
@@ -357,6 +380,7 @@ abstract final class DesktopBootstrap {
         workspaceController,
         workspaceCardFactory,
       );
+      await environmentMonitor.start();
       return DesktopRuntime(
         database: database,
         runtimeServer: runtimeServer,
@@ -369,11 +393,13 @@ abstract final class DesktopBootstrap {
         displayMonitor: displayMonitor,
         permissionRequests: permissionRequests,
         startupRecovery: startupRecovery,
+        environmentMonitor: environmentMonitor,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,
       );
     } catch (_) {
+      environmentMonitor?.dispose();
       await runtimeServer?.close();
       database.close();
       startupRecovery.markClean();

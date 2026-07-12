@@ -54,6 +54,13 @@ class InstalledWorkspaceCardFactory {
       );
     }
     final prefix = '/bundle/${artifact.contentHash}';
+    final surface = database
+        .listSurfaces()
+        .where((candidate) => candidate.id == instance.surfaceId)
+        .firstOrNull;
+    if (surface == null) {
+      throw const FormatException('card instance surface is unavailable');
+    }
     final resources = <String, RuntimeResource>{};
     for (final entry in artifact.definition.files) {
       final file = _file(artifact, entry.path);
@@ -68,6 +75,7 @@ class InstalledWorkspaceCardFactory {
       versionId: instance.versionId,
       resources: resources,
       declaredCapabilities: artifact.definition.capabilities.toSet(),
+      surface: surface.type.name,
       storage: DatabaseRuntimeStorage(database, instance.stateNamespace),
       rpcHandler: capabilityRuntime == null
           ? null

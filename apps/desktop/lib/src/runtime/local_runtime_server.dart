@@ -9,6 +9,24 @@ export 'runtime_session.dart';
 
 import 'runtime_session.dart';
 
+void _requireLocale(String locale) {
+  if (locale.isEmpty) {
+    throw ArgumentError.value(locale, 'locale', 'must not be empty');
+  }
+}
+
+void _requireTheme(String theme) {
+  if (!const {'light', 'dark', 'system'}.contains(theme)) {
+    throw ArgumentError.value(theme, 'theme', 'is invalid');
+  }
+}
+
+void _requireSurface(String surface) {
+  if (!const {'workspace', 'overlay', 'detached'}.contains(surface)) {
+    throw ArgumentError.value(surface, 'surface', 'is invalid');
+  }
+}
+
 class LocalRuntimeServer {
   LocalRuntimeServer._(
     this._server,
@@ -16,6 +34,9 @@ class LocalRuntimeServer {
     this._invocationTimeout,
     this._maxResponseBytes,
     this._minimumMetricsInterval,
+    this._locale,
+    this._theme,
+    this._online,
   ) {
     _subscription = _server.listen(_handleRequest);
   }
@@ -25,7 +46,12 @@ class LocalRuntimeServer {
     Duration invocationTimeout = const Duration(seconds: 10),
     int maxResponseBytes = 1024 * 1024,
     Duration minimumMetricsInterval = const Duration(seconds: 1),
+    String initialLocale = 'en-US',
+    String initialTheme = 'system',
+    bool initialOnline = true,
   }) async {
+    _requireLocale(initialLocale);
+    _requireTheme(initialTheme);
     final server = await HttpServer.bind(
       InternetAddress.loopbackIPv4,
       0,
@@ -37,6 +63,9 @@ class LocalRuntimeServer {
       invocationTimeout,
       maxResponseBytes,
       minimumMetricsInterval,
+      initialLocale,
+      initialTheme,
+      initialOnline,
     );
   }
 
@@ -59,6 +88,9 @@ class LocalRuntimeServer {
   final Duration _invocationTimeout;
   final int _maxResponseBytes;
   final Duration _minimumMetricsInterval;
+  String _locale;
+  String _theme;
+  bool _online;
   final _sessionsByAuthority = <String, RuntimeSession>{};
   final _metricsSubscriptions = <String, _MetricsSubscription>{};
   late final StreamSubscription<HttpRequest> _subscription;
@@ -73,9 +105,16 @@ class LocalRuntimeServer {
     required String versionId,
     required Map<String, RuntimeResource> resources,
     Set<String> declaredCapabilities = const {},
+    String? locale,
+    String? theme,
+    String surface = 'workspace',
+    bool? online,
     RuntimeStorage? storage,
     RuntimeRpcHandler? rpcHandler,
   }) {
+    _requireLocale(locale ?? _locale);
+    _requireTheme(theme ?? _theme);
+    _requireSurface(surface);
     final id = _randomHex(16);
     final authority = '$id.localhost:$port';
     final session = RuntimeSession(
@@ -87,6 +126,10 @@ class LocalRuntimeServer {
       versionId: versionId,
       resources: resources,
       declaredCapabilities: declaredCapabilities,
+      locale: locale ?? _locale,
+      theme: theme ?? _theme,
+      surface: surface,
+      online: online ?? _online,
       storage: storage,
       rateLimit: _rateLimit,
       rpcHandler: rpcHandler,
@@ -131,6 +174,60 @@ class LocalRuntimeServer {
       }
     }
     return published;
+  }
+
+  int updateEnvironment({String? locale, String? theme, bool? online}) {
+    if (locale != null) _requireLocale(locale);
+    if (theme != null) _requireTheme(theme);
+    _locale = locale ?? _locale;
+    _theme = theme ?? _theme;
+    _online = online ?? _online;
+    var changedSessions = 0;
+    for (final session in _sessionsByAuthority.values) {
+      final previous = session.context;
+      final next = previous.copyWith(
+        locale: _locale,
+        theme: _theme,
+        online: _online,
+      );
+      if (next.locale == previous.locale &&
+          next.theme == previous.theme &&
+          next.online == previous.online) {
+        continue;
+      }
+      session.context = next;
+      if (next.theme != previous.theme) {
+        session.publishEvent('theme.changed', {'theme': next.theme});
+      }
+      if (next.online != previous.online) {
+        session.publishEvent('online.changed', {'online': next.online});
+      }
+      session.publishEvent('context.changed', next.toJson());
+      changedSessions++;
+    }
+    return changedSessions;
+  }
+
+  int updateInstanceSurface(
+    String instanceId,
+    String surface, {
+    Map<String, Object?> payload = const {},
+  }) {
+    _requireSurface(surface);
+    var changedSessions = 0;
+    for (final session in _sessionsByAuthority.values) {
+      if (session.instanceId != instanceId) continue;
+      final contextChanged = session.context.surface != surface;
+      if (contextChanged) {
+        session.context = session.context.copyWith(surface: surface);
+      }
+      session.publishEvent('surface.changed', {...payload, 'surface': surface});
+      if (contextChanged) {
+        session.publishEvent('context.changed', session.context.toJson());
+      }
+      changedSessions++;
+    }
+    return changedSessions;
   }
 
   void _validateEvent(String event) {
@@ -375,12 +472,7 @@ class LocalRuntimeServer {
     }
     switch (method) {
       case 'runtime.getContext':
-        return {
-          'instanceId': session.instanceId,
-          'cardId': session.cardId,
-          'versionId': session.versionId,
-          'online': true,
-        };
+        return session.context.toJson();
       case 'storage.get':
         final key = _storageKey(params);
         return {'value': session.storage.get(key)};

@@ -44,7 +44,7 @@ void main() {
       instanceId: 'instance-1',
       cardId: 'card_local_canvas',
       versionId: 'ver_local_canvas_1',
-      surfaceId: 'workspace-main',
+      surfaceId: 'detached-1',
       placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
       stateNamespace: 'state-1',
       status: CardInstanceStatus.active,
@@ -62,10 +62,7 @@ void main() {
         definition: definition,
         keyId: 'key-1',
       ),
-      surface: const CardSurface(
-        id: 'workspace-main',
-        type: SurfaceType.workspace,
-      ),
+      surface: const CardSurface(id: 'detached-1', type: SurfaceType.detached),
       instance: instance,
     );
     final factory = InstalledWorkspaceCardFactory(
@@ -95,6 +92,7 @@ void main() {
       '/bundle/content-hash/payload/web/index.html',
     );
     final session = card.codeCard!.session;
+    expect(session.context.surface, 'detached');
     final response = await _get(session, card.codeCard!.entrypoint);
     expect(response.statusCode, HttpStatus.ok);
     expect(await utf8.decoder.bind(response).join(), contains('Offline'));

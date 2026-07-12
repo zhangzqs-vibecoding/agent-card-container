@@ -147,6 +147,10 @@ void main() {
         versionId: 'version-one',
         resources: const {},
         declaredCapabilities: const {'storage'},
+        locale: 'zh-CN',
+        theme: 'dark',
+        surface: 'workspace',
+        online: false,
       );
 
       final context = await _rpc(
@@ -156,10 +160,15 @@ void main() {
         method: 'runtime.getContext',
       );
       expect(context['error'], isNull);
-      expect(
-        (context['result'] as Map<String, Object?>)['instanceId'],
-        'instance-1',
-      );
+      expect(context['result'], {
+        'instanceId': 'instance-1',
+        'cardId': 'card-one',
+        'versionId': 'version-one',
+        'locale': 'zh-CN',
+        'theme': 'dark',
+        'surface': 'workspace',
+        'online': false,
+      });
 
       final setResult = await _rpc(
         server,
@@ -392,6 +401,91 @@ void main() {
         server.publishEventForInstance('native-only', 'surface.changed', {}),
         0,
       );
+    });
+
+    test('updates runtime context and emits scoped change events', () async {
+      final session = server.createSession(
+        instanceId: 'instance-1',
+        cardId: 'card-one',
+        versionId: 'version-one',
+        resources: const {},
+      );
+      final socket = await WebSocket.connect(
+        'ws://127.0.0.1:${server.port}/v1/events',
+        headers: {
+          HttpHeaders.hostHeader: session.authority,
+          'Origin': session.origin,
+        },
+      );
+      addTearDown(socket.close);
+      final messages = StreamIterator<dynamic>(socket);
+      socket.add(jsonEncode({'type': 'authenticate', 'token': session.token}));
+      expect(await messages.moveNext(), isTrue);
+
+      expect(
+        server.updateEnvironment(locale: 'zh-CN', theme: 'dark', online: false),
+        1,
+      );
+      expect(await messages.moveNext(), isTrue);
+      expect(jsonDecode(messages.current as String)['event'], 'theme.changed');
+      expect(await messages.moveNext(), isTrue);
+      expect(jsonDecode(messages.current as String)['event'], 'online.changed');
+      expect(await messages.moveNext(), isTrue);
+      expect(
+        jsonDecode(messages.current as String)['event'],
+        'context.changed',
+      );
+      final laterSession = server.createSession(
+        instanceId: 'instance-later',
+        cardId: 'card-later',
+        versionId: 'version-later',
+        resources: const {},
+      );
+      expect(laterSession.context.theme, 'dark');
+      expect(laterSession.context.locale, 'zh-CN');
+      expect(laterSession.context.online, isFalse);
+
+      expect(
+        server.updateInstanceSurface(
+          'instance-1',
+          'detached',
+          payload: const {'surfaceId': 'detached-1'},
+        ),
+        1,
+      );
+      expect(await messages.moveNext(), isTrue);
+      expect(
+        jsonDecode(messages.current as String),
+        containsPair('event', 'surface.changed'),
+      );
+      expect(await messages.moveNext(), isTrue);
+      expect(
+        jsonDecode(messages.current as String),
+        containsPair('event', 'context.changed'),
+      );
+
+      final context = await _rpc(
+        server,
+        session,
+        id: 1,
+        method: 'runtime.getContext',
+      );
+      expect(context['result'], containsPair('surface', 'detached'));
+      expect(context['result'], containsPair('online', false));
+      expect(
+        server.updateInstanceSurface(
+          'instance-1',
+          'detached',
+          payload: const {'surfaceId': 'detached-1', 'x': 24},
+        ),
+        1,
+      );
+      expect(await messages.moveNext(), isTrue);
+      expect(
+        jsonDecode(messages.current as String),
+        containsPair('event', 'surface.changed'),
+      );
+      await messages.cancel();
     });
 
     test('subscribes and unsubscribes bounded system metrics events', () async {
