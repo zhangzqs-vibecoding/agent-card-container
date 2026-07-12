@@ -35,6 +35,7 @@ type CodingAgent struct {
 	selector   Selector
 	webBuilder WebBuilder
 	logger     *slog.Logger
+	modelName  string
 }
 
 type WebBuilder interface {
@@ -52,6 +53,12 @@ func WithWebBuilder(builder WebBuilder) Option {
 func WithLogger(logger *slog.Logger) Option {
 	return func(codingAgent *CodingAgent) {
 		codingAgent.logger = logger
+	}
+}
+
+func WithModelName(modelName string) Option {
+	return func(codingAgent *CodingAgent) {
+		codingAgent.modelName = modelName
 	}
 }
 
@@ -83,6 +90,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 	for attempt := 1; attempt <= 3; attempt++ {
 		startedAt := time.Now()
 		codingAgent.logger.InfoContext(ctx, "model_request_started",
+			"model", codingAgent.modelName,
 			"sessionId", request.SessionID,
 			"runtime", decision.Runtime,
 			"attempt", attempt,
@@ -97,6 +105,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 		})
 		if providerErr != nil {
 			codingAgent.logger.WarnContext(ctx, "model_request_failed",
+				"model", codingAgent.modelName,
 				"sessionId", request.SessionID,
 				"runtime", decision.Runtime,
 				"attempt", attempt,
@@ -106,6 +115,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 			return Result{}, fmt.Errorf("model provider: %w", providerErr)
 		}
 		codingAgent.logger.InfoContext(ctx, "model_request_completed",
+			"model", codingAgent.modelName,
 			"sessionId", request.SessionID,
 			"runtime", decision.Runtime,
 			"attempt", attempt,
@@ -137,6 +147,7 @@ func (codingAgent *CodingAgent) generateWeb(
 	for attempt := 1; attempt <= 3; attempt++ {
 		modelStartedAt := time.Now()
 		codingAgent.logger.InfoContext(ctx, "model_request_started",
+			"model", codingAgent.modelName,
 			"sessionId", request.SessionID,
 			"runtime", decision.Runtime,
 			"attempt", attempt,
@@ -151,6 +162,7 @@ func (codingAgent *CodingAgent) generateWeb(
 		})
 		if err != nil {
 			codingAgent.logger.WarnContext(ctx, "model_request_failed",
+				"model", codingAgent.modelName,
 				"sessionId", request.SessionID,
 				"runtime", decision.Runtime,
 				"attempt", attempt,
@@ -160,6 +172,7 @@ func (codingAgent *CodingAgent) generateWeb(
 			return Result{}, fmt.Errorf("model provider: %w", err)
 		}
 		codingAgent.logger.InfoContext(ctx, "model_request_completed",
+			"model", codingAgent.modelName,
 			"sessionId", request.SessionID,
 			"runtime", decision.Runtime,
 			"attempt", attempt,

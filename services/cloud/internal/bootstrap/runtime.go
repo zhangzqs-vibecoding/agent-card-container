@@ -102,7 +102,10 @@ func NewFromEnvironmentWithLogger(environment map[string]string, logger *slog.Lo
 	codingAgent := agent.NewCodingAgent(
 		provider,
 		agent.NewNativeValidator(),
-		append(agentOptions, agent.WithLogger(logger))...,
+		append(agentOptions,
+			agent.WithLogger(logger),
+			agent.WithModelName(environment["AGENTCARD_MODEL"]),
+		)...,
 	)
 	workerRuntime := worker.New(worker.Config{
 		WorkerID:     randomID("worker_"),

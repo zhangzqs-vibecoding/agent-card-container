@@ -19,6 +19,7 @@ func TestCodingAgentLogsModelLifecycleWithoutContent(t *testing.T) {
 		loggingProvider{content: `{"schemaVersion":1,"initialState":{"text":"ok"},"root":{"id":"root","type":"Text","props":{"text":{"path":"state.text"}}}}`},
 		agent.NewNativeValidator(),
 		agent.WithLogger(observability.NewJSONLogger(&output)),
+		agent.WithModelName("deepseek-v4-flash"),
 	)
 
 	_, err := codingAgent.Generate(context.Background(), agent.Request{
@@ -32,6 +33,11 @@ func TestCodingAgentLogsModelLifecycleWithoutContent(t *testing.T) {
 
 	events := loggedEvents(t, output.String())
 	assertEventSequence(t, events, "model_request_started", "model_request_completed")
+	for _, event := range events {
+		if event["model"] != "deepseek-v4-flash" {
+			t.Fatalf("model = %#v", event["model"])
+		}
+	}
 	if strings.Contains(output.String(), "prompt-secret-value") || strings.Contains(output.String(), `initialState`) {
 		t.Fatalf("model content leaked: %s", output.String())
 	}
