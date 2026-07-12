@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/zzq/agent-card-container/services/cloud/internal/observability"
 	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 )
 
@@ -82,13 +83,17 @@ func (api *cardAPI) authorize(
 	writer http.ResponseWriter,
 	request *http.Request,
 ) (string, string, bool) {
-	requestID := api.newRequestID()
+	requestID := observability.RequestSnapshot(request.Context()).RequestID
+	if requestID == "" {
+		requestID = api.newRequestID()
+	}
 	writer.Header().Set("X-Request-ID", requestID)
 	userID, err := api.authenticator.Authenticate(request)
 	if err != nil {
 		writeAPIError(writer, requestID, http.StatusUnauthorized, "UNAUTHENTICATED", "请先登录")
 		return "", requestID, false
 	}
+	observability.SetAuthenticatedUser(request.Context(), userID)
 	return userID, requestID, true
 }
 

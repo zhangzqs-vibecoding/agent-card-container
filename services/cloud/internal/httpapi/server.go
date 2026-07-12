@@ -2,7 +2,9 @@ package httpapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
@@ -33,6 +35,8 @@ type CloudHandlerConfig struct {
 	Publisher     *publish.Publisher
 	Authenticator Authenticator
 	NewRequestID  func() string
+	Logger        *slog.Logger
+	Now           func() time.Time
 }
 
 func NewCloudHandler(config CloudHandlerConfig) http.Handler {
@@ -53,5 +57,9 @@ func NewCloudHandler(config CloudHandlerConfig) http.Handler {
 	root.Handle("/v1/generations/", generations)
 	root.Handle("/v1/cards", cards)
 	root.Handle("/v1/cards/", cards)
-	return root
+	return AccessLogMiddleware(AccessLogConfig{
+		Logger:       config.Logger,
+		NewRequestID: config.NewRequestID,
+		Now:          config.Now,
+	})(root)
 }
