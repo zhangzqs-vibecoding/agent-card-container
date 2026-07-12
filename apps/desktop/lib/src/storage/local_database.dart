@@ -210,6 +210,21 @@ class LocalDatabase {
     );
   }
 
+  void moveInstanceToSurface({
+    required CardSurface surface,
+    required String instanceId,
+    required CardPlacement placement,
+  }) {
+    _connection.transaction(() {
+      upsertSurface(surface);
+      moveInstance(
+        instanceId: instanceId,
+        surfaceId: surface.id,
+        placement: placement,
+      );
+    });
+  }
+
   void switchInstanceVersion(String instanceId, String versionId) {
     _connection.execute(
       'UPDATE card_instances SET version_id = ? WHERE instance_id = ?',

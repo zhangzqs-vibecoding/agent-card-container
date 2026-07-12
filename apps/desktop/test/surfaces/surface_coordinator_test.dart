@@ -1,0 +1,169 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:agent_card_desktop/src/cards/card_instance.dart';
+import 'package:agent_card_desktop/src/contracts/card_definition.dart';
+import 'package:agent_card_desktop/src/storage/local_database.dart';
+import 'package:agent_card_desktop/src/surfaces/surface.dart';
+import 'package:agent_card_desktop/src/surfaces/surface_coordinator.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  late Directory root;
+  late LocalDatabase database;
+  late _FakeWindowBackend backend;
+  late SurfaceCoordinator coordinator;
+
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('surface-coordinator-');
+    database = LocalDatabase.open('${root.path}/state.sqlite3');
+    final definition = CardDefinition.fromJson(
+      jsonDecode(
+            File(
+              '../../contracts/card/fixtures/native-card.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, Object?>,
+    );
+    database.registerInstallation(
+      StoredInstallation(
+        installation: CardInstallation(
+          cardId: definition.cardId,
+          versionId: definition.versionId,
+          contentHash: 'content-hash',
+          runtime: definition.runtime,
+          installedAt: DateTime.utc(2026, 7, 12),
+          verified: true,
+        ),
+        definition: definition,
+        keyId: 'test-key',
+      ),
+    );
+    database.upsertSurface(
+      const CardSurface(id: 'workspace-main', type: SurfaceType.workspace),
+    );
+    database.upsertInstance(_instance);
+    backend = _FakeWindowBackend();
+    coordinator = SurfaceCoordinator(
+      database: database,
+      windows: backend,
+      newDetachedSurfaceId: () => 'detached-1',
+    );
+  });
+
+  tearDown(() {
+    database.close();
+    root.deleteSync(recursive: true);
+  });
+
+  test(
+    'detaches and docks an instance without changing its state identity',
+    () async {
+      await coordinator.detach(
+        'instance-1',
+        const CardPlacement(x: 100, y: 80, width: 480, height: 320),
+      );
+
+      var instance = database.listInstances().single;
+      expect(instance.surfaceId, 'detached-1');
+      expect(instance.versionId, 'ver_pomodoro_1');
+      expect(instance.stateNamespace, 'state-1');
+      expect(backend.opened.single.surface.id, 'detached-1');
+      expect(backend.opened.single.instanceIds, ['instance-1']);
+
+      await coordinator.dock('instance-1');
+
+      instance = database.listInstances().single;
+      expect(instance.surfaceId, 'workspace-main');
+      expect(backend.closed, ['detached-1']);
+    },
+  );
+
+  test('shares one overlay host per monitor', () async {
+    await coordinator.moveToOverlay(
+      'instance-1',
+      monitorId: 'monitor-a',
+      placement: const CardPlacement(x: 20, y: 30, width: 360, height: 240),
+    );
+    database.upsertInstance(
+      const CardInstance(
+        instanceId: 'instance-2',
+        cardId: 'card_pomodoro',
+        versionId: 'ver_pomodoro_1',
+        surfaceId: 'workspace-main',
+        placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+        stateNamespace: 'state-2',
+        status: CardInstanceStatus.active,
+      ),
+    );
+    await coordinator.moveToOverlay(
+      'instance-2',
+      monitorId: 'monitor-a',
+      placement: const CardPlacement(x: 400, y: 30, width: 360, height: 240),
+    );
+
+    expect(backend.opened, hasLength(2));
+    expect(backend.opened.map((entry) => entry.surface.id).toSet(), {
+      'overlay-monitor-a',
+    });
+    expect(database.listInstances().map((item) => item.surfaceId).toSet(), {
+      'overlay-monitor-a',
+    });
+  });
+
+  test(
+    'does not move persistent state when the platform window fails',
+    () async {
+      backend.failOpening = true;
+
+      await expectLater(
+        coordinator.detach(
+          'instance-1',
+          const CardPlacement(x: 0, y: 0, width: 480, height: 320),
+        ),
+        throwsStateError,
+      );
+
+      expect(database.listInstances().single.surfaceId, 'workspace-main');
+    },
+  );
+}
+
+const _instance = CardInstance(
+  instanceId: 'instance-1',
+  cardId: 'card_pomodoro',
+  versionId: 'ver_pomodoro_1',
+  surfaceId: 'workspace-main',
+  placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+  stateNamespace: 'state-1',
+  status: CardInstanceStatus.active,
+);
+
+class _OpenedSurface {
+  const _OpenedSurface(this.surface, this.instanceIds);
+
+  final CardSurface surface;
+  final List<String> instanceIds;
+}
+
+class _FakeWindowBackend implements WindowBackend {
+  final opened = <_OpenedSurface>[];
+  final closed = <String>[];
+  var failOpening = false;
+
+  @override
+  Future<void> ensureSurface(
+    CardSurface surface,
+    List<String> instanceIds,
+  ) async {
+    if (failOpening) {
+      throw StateError('platform failure');
+    }
+    opened.add(_OpenedSurface(surface, List.of(instanceIds)));
+  }
+
+  @override
+  Future<void> closeSurface(String surfaceId) async {
+    closed.add(surfaceId);
+  }
+}
