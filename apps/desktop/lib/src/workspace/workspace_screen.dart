@@ -4,6 +4,7 @@ import '../agent_studio/agent_studio_controller.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import 'workspace_card.dart';
+import 'workspace_controller.dart';
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
@@ -11,11 +12,13 @@ class WorkspaceScreen extends StatefulWidget {
     this.runtimePort,
     this.workspaceCards = const [],
     this.agentStudioController,
+    this.workspaceController,
   });
 
   final int? runtimePort;
   final List<WorkspaceCard> workspaceCards;
   final AgentStudioController? agentStudioController;
+  final WorkspaceController? workspaceController;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -52,12 +55,19 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                     ),
                     VerticalDivider(width: 1, color: colors.outlineVariant),
                     Expanded(
-                      child: _WorkspaceCanvas(
-                        cards: widget.workspaceCards,
-                        agentPanelOpen: _agentPanelOpen,
-                        onOpenAgentPanel: () {
-                          setState(() => _agentPanelOpen = true);
-                        },
+                      child: AnimatedBuilder(
+                        animation:
+                            widget.workspaceController ??
+                            _NoopListenable.instance,
+                        builder: (context, _) => _WorkspaceCanvas(
+                          cards:
+                              widget.workspaceController?.cards ??
+                              widget.workspaceCards,
+                          agentPanelOpen: _agentPanelOpen,
+                          onOpenAgentPanel: () {
+                            setState(() => _agentPanelOpen = true);
+                          },
+                        ),
                       ),
                     ),
                     AnimatedContainer(

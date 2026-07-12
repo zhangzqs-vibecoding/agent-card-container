@@ -80,6 +80,18 @@ class LocalDatabase {
     );
   }
 
+  void registerInstalledInstance({
+    required StoredInstallation installation,
+    required CardSurface surface,
+    required CardInstance instance,
+  }) {
+    _connection.transaction(() {
+      registerInstallation(installation);
+      upsertSurface(surface);
+      upsertInstance(instance);
+    });
+  }
+
   StoredInstallation? installation(String versionId) {
     final rows = _connection.query(
       '''

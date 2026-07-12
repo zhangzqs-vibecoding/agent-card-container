@@ -83,10 +83,12 @@ class AgentStudioController extends ChangeNotifier {
   AgentStudioController({
     required this.port,
     this.retryDelay = const Duration(seconds: 1),
+    this.onReady,
   });
 
   final GenerationPort port;
   final Duration retryDelay;
+  final Future<void> Function(GenerationSession session)? onReady;
 
   AgentStudioPhase _phase = AgentStudioPhase.idle;
   GenerationSession? _session;
@@ -94,6 +96,7 @@ class AgentStudioController extends ChangeNotifier {
   String _errorMessage = '';
   bool _disposed = false;
   int _lastEventId = 0;
+  String? _handledReadyVersion;
 
   AgentStudioPhase get phase => _phase;
   GenerationSession? get session => _session;
@@ -180,6 +183,13 @@ class AgentStudioController extends ChangeNotifier {
         _session = await port.get(sessionId);
         _phase = _phaseForStatus(_session!.status);
         notifyListeners();
+        final readyVersion = _session!.versionId;
+        if (_session!.status == GenerationStatus.ready &&
+            readyVersion != null &&
+            readyVersion != _handledReadyVersion) {
+          await onReady?.call(_session!);
+          _handledReadyVersion = readyVersion;
+        }
         if (_terminal(_session!.status)) {
           return;
         }
@@ -199,6 +209,7 @@ class AgentStudioController extends ChangeNotifier {
     _session = null;
     _events.clear();
     _lastEventId = 0;
+    _handledReadyVersion = null;
     _errorMessage = '';
     _setPhase(AgentStudioPhase.idle);
   }

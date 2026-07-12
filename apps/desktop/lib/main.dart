@@ -11,6 +11,7 @@ Future<void> main() async {
     AgentCardApp(
       runtimePort: desktopRuntime.runtimeServer.port,
       workspaceCards: desktopRuntime.workspaceCards,
+      workspaceController: desktopRuntime.workspaceController,
       agentStudioController: desktopRuntime.agentStudioController,
     ),
   );

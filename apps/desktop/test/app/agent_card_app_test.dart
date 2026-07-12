@@ -6,6 +6,7 @@ import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
+import 'package:agent_card_desktop/src/workspace/workspace_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -89,5 +90,41 @@ void main() {
     expect(find.text('专注时间'), findsOneWidget);
     expect(find.text('和 Agent 对话，生成你的第一张卡片'), findsNothing);
     expect(find.textContaining('1 个实例'), findsOneWidget);
+  });
+
+  testWidgets('adds an installed card to the live workspace', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final workspace = WorkspaceController();
+    addTearDown(workspace.dispose);
+    await tester.pumpWidget(AgentCardApp(workspaceController: workspace));
+    expect(find.text('和 Agent 对话，生成你的第一张卡片'), findsOneWidget);
+
+    final spec = NativeCardSpec.fromJson(
+      jsonDecode(
+            File(
+              '../../contracts/card/fixtures/pomodoro-native.json',
+            ).readAsStringSync(),
+          )
+          as Map<String, Object?>,
+    );
+    workspace.add(
+      WorkspaceCard(
+        instance: const CardInstance(
+          instanceId: 'installed-1',
+          cardId: 'card-1',
+          versionId: 'version-1',
+          surfaceId: 'workspace-main',
+          placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+          stateNamespace: 'state-installed',
+          status: CardInstanceStatus.active,
+        ),
+        spec: spec,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('专注时间'), findsOneWidget);
+    expect(find.text('和 Agent 对话，生成你的第一张卡片'), findsNothing);
   });
 }

@@ -38,4 +38,22 @@ void main() {
     controller.reset();
     expect(controller.phase, AgentStudioPhase.idle);
   });
+
+  test('invokes ready installation callback once per version', () async {
+    var installs = 0;
+    final controller = AgentStudioController(
+      port: FakeGenerationPort(),
+      onReady: (session) async {
+        expect(session.versionId, 'ver_01');
+        installs++;
+      },
+    );
+    addTearDown(controller.dispose);
+
+    await controller.submit('离线卡片');
+    await controller.confirm();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(installs, 1);
+  });
 }

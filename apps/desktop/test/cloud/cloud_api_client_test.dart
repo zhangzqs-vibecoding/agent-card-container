@@ -15,6 +15,62 @@ void main() {
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
         requests.add(request);
+        if (request.uri.path == '/artifact.agentcard') {
+          expect(
+            request.headers.value(HttpHeaders.authorizationHeader),
+            isNull,
+          );
+          request.response
+            ..statusCode = HttpStatus.ok
+            ..add([1, 2, 3, 4]);
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path == '/v1/cards') {
+          request.response
+            ..headers.contentType = ContentType.json
+            ..statusCode = HttpStatus.ok
+            ..write(
+              jsonEncode({
+                'cards': [
+                  {
+                    'cardId': 'card_01',
+                    'title': '番茄钟',
+                    'description': '离线',
+                    'latestVersion': {
+                      'versionId': 'ver_01',
+                      'cardId': 'card_01',
+                      'runtime': 'native',
+                      'displayVersion': '1.0.0',
+                      'title': '番茄钟',
+                      'description': '离线',
+                      'artifactSha256': List.filled(64, 'a').join(),
+                      'keyId': 'key-1',
+                      'preview': {},
+                      'createdAt': '2026-07-12T13:00:00Z',
+                    },
+                  },
+                ],
+              }),
+            );
+          await request.response.close();
+          return;
+        }
+        if (request.uri.path.endsWith('/artifact')) {
+          request.response
+            ..headers.contentType = ContentType.json
+            ..statusCode = HttpStatus.ok
+            ..write(
+              jsonEncode({
+                'url': 'http://127.0.0.1:${server.port}/artifact.agentcard',
+                'sha256': List.filled(64, 'a').join(),
+                'keyId': 'key-1',
+                'expiresAt': '2026-07-12T14:00:00Z',
+              }),
+            );
+          await request.response.close();
+          return;
+        }
         if (request.uri.path.endsWith('/events')) {
           request.response
             ..statusCode = HttpStatus.ok
@@ -122,5 +178,18 @@ void main() {
       expect(events.single.stage, 'generating');
       expect(requests.single.headers.value('Last-Event-ID'), '1');
     });
+
+    test(
+      'lists cards and downloads artifact without forwarding bearer',
+      () async {
+        final cards = await client.listCards();
+        final download = await client.artifactDownload('card_01', 'ver_01');
+        final bytes = await client.downloadArtifact(download.url);
+
+        expect(cards.single.latestVersion.versionId, 'ver_01');
+        expect(download.keyId, 'key-1');
+        expect(bytes, [1, 2, 3, 4]);
+      },
+    );
   });
 }

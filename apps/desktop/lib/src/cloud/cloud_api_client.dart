@@ -116,6 +116,93 @@ class GenerationEvent {
   final DateTime timestamp;
 }
 
+class CloudCardVersion {
+  const CloudCardVersion({
+    required this.versionId,
+    required this.cardId,
+    required this.runtime,
+    required this.displayVersion,
+    required this.title,
+    required this.description,
+    required this.artifactSha256,
+    required this.keyId,
+    required this.preview,
+    required this.createdAt,
+  });
+
+  factory CloudCardVersion.fromJson(Map<String, Object?> json) {
+    return CloudCardVersion(
+      versionId: _string(json, 'versionId'),
+      cardId: _string(json, 'cardId'),
+      runtime: _string(json, 'runtime'),
+      displayVersion: _string(json, 'displayVersion'),
+      title: _string(json, 'title'),
+      description: _string(json, 'description'),
+      artifactSha256: _string(json, 'artifactSha256'),
+      keyId: _string(json, 'keyId'),
+      preview: _map(json, 'preview'),
+      createdAt: DateTime.parse(_string(json, 'createdAt')).toUtc(),
+    );
+  }
+
+  final String versionId;
+  final String cardId;
+  final String runtime;
+  final String displayVersion;
+  final String title;
+  final String description;
+  final String artifactSha256;
+  final String keyId;
+  final Map<String, Object?> preview;
+  final DateTime createdAt;
+}
+
+class CloudCardSummary {
+  const CloudCardSummary({
+    required this.cardId,
+    required this.title,
+    required this.description,
+    required this.latestVersion,
+  });
+
+  factory CloudCardSummary.fromJson(Map<String, Object?> json) {
+    return CloudCardSummary(
+      cardId: _string(json, 'cardId'),
+      title: _string(json, 'title'),
+      description: _string(json, 'description'),
+      latestVersion: CloudCardVersion.fromJson(_map(json, 'latestVersion')),
+    );
+  }
+
+  final String cardId;
+  final String title;
+  final String description;
+  final CloudCardVersion latestVersion;
+}
+
+class ArtifactDownload {
+  const ArtifactDownload({
+    required this.url,
+    required this.sha256,
+    required this.keyId,
+    required this.expiresAt,
+  });
+
+  factory ArtifactDownload.fromJson(Map<String, Object?> json) {
+    return ArtifactDownload(
+      url: Uri.parse(_string(json, 'url')),
+      sha256: _string(json, 'sha256'),
+      keyId: _string(json, 'keyId'),
+      expiresAt: DateTime.parse(_string(json, 'expiresAt')).toUtc(),
+    );
+  }
+
+  final Uri url;
+  final String sha256;
+  final String keyId;
+  final DateTime expiresAt;
+}
+
 class CloudApiException implements Exception {
   const CloudApiException({
     required this.statusCode,
@@ -199,6 +286,67 @@ class CloudApiClient {
     return GenerationSession.fromJson(
       await _json('GET', '/v1/generations/${Uri.encodeComponent(sessionId)}'),
     );
+  }
+
+  Future<List<CloudCardSummary>> listCards() async {
+    final response = await _json('GET', '/v1/cards');
+    final cards = response['cards'];
+    if (cards is! List) {
+      throw const FormatException('cards must be an array');
+    }
+    return cards
+        .map((card) {
+          if (card is! Map<String, Object?>) {
+            throw const FormatException('card summary must be an object');
+          }
+          return CloudCardSummary.fromJson(card);
+        })
+        .toList(growable: false);
+  }
+
+  Future<ArtifactDownload> artifactDownload(
+    String cardId,
+    String versionId,
+  ) async {
+    final response = await _json(
+      'GET',
+      '/v1/cards/${Uri.encodeComponent(cardId)}'
+          '/versions/${Uri.encodeComponent(versionId)}/artifact',
+    );
+    return ArtifactDownload.fromJson(response);
+  }
+
+  Future<List<int>> downloadArtifact(Uri uri) async {
+    final secure = uri.scheme == 'https';
+    final developmentLoopback =
+        allowInsecureForDevelopment &&
+        uri.scheme == 'http' &&
+        (uri.host == '127.0.0.1' ||
+            uri.host == '::1' ||
+            uri.host == 'localhost');
+    if (!uri.hasAuthority || (!secure && !developmentLoopback)) {
+      throw ArgumentError.value(uri, 'uri', 'artifact download must use HTTPS');
+    }
+    final request = await _httpClient.getUrl(uri);
+    request
+      ..followRedirects = false
+      ..headers.set(HttpHeaders.acceptHeader, 'application/octet-stream');
+    final response = await request.close();
+    if (response.isRedirect) {
+      throw const CloudApiException(
+        statusCode: 0,
+        code: 'REDIRECT_REJECTED',
+        message: '制品下载禁止重定向',
+      );
+    }
+    if (response.statusCode != HttpStatus.ok) {
+      throw CloudApiException(
+        statusCode: response.statusCode,
+        code: 'ARTIFACT_DOWNLOAD_FAILED',
+        message: '制品下载失败',
+      );
+    }
+    return _readBounded(response, 8 * 1024 * 1024);
   }
 
   Stream<GenerationEvent> connectGenerationEvents(

@@ -1,13 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
 
 import '../agent_studio/agent_studio_controller.dart';
+import '../artifacts/artifact_crypto.dart';
+import '../artifacts/artifact_installer.dart';
+import '../cloud/card_install_coordinator.dart';
 import '../cloud/cloud_api_client.dart';
 import '../contracts/card_definition.dart';
 import '../native_card/native_card_spec.dart';
 import '../runtime/local_runtime_server.dart';
 import '../storage/local_database.dart';
 import '../workspace/workspace_card.dart';
+import '../workspace/workspace_controller.dart';
 import 'app_data_locator.dart';
 
 class RecoveryError {
@@ -23,6 +29,7 @@ class DesktopRuntime {
     required this.runtimeServer,
     required this.workspaceCards,
     required this.recoveryErrors,
+    required this.workspaceController,
     this.cloudClient,
     this.agentStudioController,
   });
@@ -31,6 +38,7 @@ class DesktopRuntime {
   final LocalRuntimeServer runtimeServer;
   final List<WorkspaceCard> workspaceCards;
   final List<RecoveryError> recoveryErrors;
+  final WorkspaceController workspaceController;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   var _closed = false;
@@ -41,6 +49,7 @@ class DesktopRuntime {
     }
     _closed = true;
     agentStudioController?.dispose();
+    workspaceController.dispose();
     cloudClient?.close();
     await runtimeServer.close();
     database.close();
@@ -106,13 +115,20 @@ abstract final class DesktopBootstrap {
           );
         }
       }
-      final cloud = _cloudConfiguration(processEnvironment);
+      final workspaceController = WorkspaceController(cards);
+      final cloud = _cloudConfiguration(
+        processEnvironment,
+        root,
+        database,
+        workspaceController,
+      );
       final runtimeServer = await LocalRuntimeServer.start();
       return DesktopRuntime(
         database: database,
         runtimeServer: runtimeServer,
         workspaceCards: List.unmodifiable(cards),
         recoveryErrors: List.unmodifiable(errors),
+        workspaceController: workspaceController,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
       );
@@ -124,7 +140,12 @@ abstract final class DesktopBootstrap {
 }
 
 ({CloudApiClient client, AgentStudioController controller})?
-_cloudConfiguration(Map<String, String> environment) {
+_cloudConfiguration(
+  Map<String, String> environment,
+  Directory root,
+  LocalDatabase database,
+  WorkspaceController workspace,
+) {
   final url = environment['AGENTCARD_CLOUD_URL'];
   final token = environment['AGENTCARD_ACCESS_TOKEN'];
   if (url == null || url.isEmpty || token == null || token.isEmpty) {
@@ -136,10 +157,68 @@ _cloudConfiguration(Map<String, String> environment) {
     allowInsecureForDevelopment:
         environment['AGENTCARD_ALLOW_INSECURE_CLOUD'] == 'true',
   );
+  final trustedKeys = _trustedKeys(environment['AGENTCARD_TRUSTED_KEYS_JSON']);
+  CardInstallCoordinator? coordinator;
+  if (trustedKeys.isNotEmpty) {
+    coordinator = CardInstallCoordinator(
+      client: client,
+      installer: ArtifactInstaller(
+        root: root,
+        crypto: ArtifactCrypto.native(),
+        trustedKeys: trustedKeys,
+      ),
+      database: database,
+      newInstanceId: () => _randomID('instance_'),
+      newStateNamespace: () => _randomID('state_'),
+      now: DateTime.now,
+    );
+  }
   return (
     client: client,
-    controller: AgentStudioController(port: CloudGenerationPort(client)),
+    controller: AgentStudioController(
+      port: CloudGenerationPort(client),
+      onReady: coordinator == null
+          ? null
+          : (session) async {
+              final result = await coordinator!.installVersion(
+                session.versionId!,
+              );
+              final card = result.workspaceCard;
+              if (card != null) {
+                workspace.add(card);
+              }
+            },
+    ),
   );
+}
+
+Map<String, Uint8List> _trustedKeys(String? source) {
+  if (source == null || source.isEmpty) {
+    return const {};
+  }
+  final decoded = jsonDecode(source);
+  if (decoded is! Map<String, Object?>) {
+    throw const FormatException('trusted keys must be a JSON object');
+  }
+  return {
+    for (final entry in decoded.entries)
+      entry.key: Uint8List.fromList(
+        base64Url.decode(_padded(entry.value as String)),
+      ),
+  };
+}
+
+String _padded(String value) {
+  return value + '=' * ((4 - value.length % 4) % 4);
+}
+
+String _randomID(String prefix) {
+  final random = Random.secure();
+  final value = List.generate(
+    16,
+    (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+  ).join();
+  return '$prefix$value';
 }
 
 String _artifactPath(Directory root, String contentHash, String entrypoint) {
