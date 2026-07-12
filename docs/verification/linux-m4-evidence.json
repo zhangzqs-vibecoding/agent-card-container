@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "commit": "1d4c0a86eff3cc29f088c52bb182fb3b0a50d926",
+  "platform": "linux",
+  "host": {
+    "os": "Linux 5.15.167.4-microsoft-standard-WSL2 x86_64 GNU/Linux",
+    "cpuLogicalCores": 16,
+    "memoryGiB": 27.31,
+    "gpu": "not exposed by isolated build gate",
+    "displayScalePercent": 100
+  },
+  "runtime": {
+    "flutter": {  "frameworkVersion": "3.32.8",  "channel": "stable",  "repositoryUrl": "https://github.com/flutter/flutter.git",  "frameworkRevision": "edada7c56edf4a183c1735310e123c7f923584f1",  "frameworkCommitDate": "2025-07-25 14:08:03 +0000",  "engineRevision": "ef0cd000916d64fa0c5d09cc809fa7ad244a5767",  "engineCommitDate": "2025-07-24 12:23:50 -0700",  "dartSdkVersion": "3.8.1",  "devToolsVersion": "2.45.1",  "flutterVersion": "3.32.8",  "flutterRoot": "/flutter"}
+  },
+  "durationSeconds": 60,
+  "artifacts": {
+    "linuxBundleSha256": "d4fbc028c0c24c7e0b7ff9f597c4b44e9736786b752fc2293f661481a1a0962a"
+  },
+  "scenarios": {
+    "ordinaryWindowBuild": "PASS",
+    "unitAndWidgetTests": "PASS",
+    "waylandOverlay": "OUT_OF_SCOPE"
+  }
+}

@@ -45,7 +45,7 @@ commit.
 | Signed Windows bundle/installer | NOT RUN | Run `packaging/windows/verify-release.ps1` and the release workflow on Windows with protected signing credentials |
 | WebView2 missing-runtime user flow | NOT RUN | Exercise installer on a clean Windows device |
 | macOS signing/notarization technical gate | NOT RUN | Run `sh tooling/device-gates/macos-m4.sh` on macOS |
-| Linux ordinary-window native build | NOT RUN | Host lacks GTK3 development headers; `flutter build linux` fails during CMake prerequisite discovery |
+| Linux ordinary-window native build | PASS | Ubuntu 24.04 x64 isolated gate passed analyze, 191 tests and `flutter build linux --debug`; validated evidence includes the bundle SHA-256 for commit `1d4c0a86eff3cc29f088c52bb182fb3b0a50d926` |
 
 ## Design section 18.5 — Windows end-to-end matrix
 

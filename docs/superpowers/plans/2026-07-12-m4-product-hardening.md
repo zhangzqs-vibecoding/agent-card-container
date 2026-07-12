@@ -273,7 +273,7 @@ Windows must exercise WebView2 random localhost hostnames, storage isolation, Ch
 
 Each script writes JSON containing commit SHA, OS/build, CPU, memory, GPU, display scale, runtime versions, scenario result, duration and artifact hashes. Missing or skipped mandatory Windows/macOS scenarios must produce a non-zero exit.
 
-- [ ] **Step 3: Run the Linux gate**
+- [x] **Step 3: Run the Linux gate**
 
 Run: `sh tooling/device-gates/linux-m4.sh`
 

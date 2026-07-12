@@ -34,12 +34,14 @@ Go：1.26.3
 
 ## Linux native build 环境
 
-Flutter Dart 层可分析并执行测试；当前主机没有 Ninja 和 GTK3 development package，且当前用户没有免密 sudo，因此 flutter build linux 无法生成原生 runner。失败发生在 CMake 配置阶段，信息为：
+宿主机仍未安装 GTK3 development package，且当前用户没有免密
+sudo。为不污染宿主环境，Linux M4 门禁在一次性 Ubuntu 24.04 x64
+容器中提供 GTK3、Ninja、Clang 和 libsodium 原生依赖后执行。
 
-~~~text
-CMake was unable to find a build program corresponding to "Ninja".
-Package gtk+-3.0 was not found in the pkg-config search path.
-~~~
+`sh tooling/device-gates/linux-m4.sh` 的单次完整执行通过了 Flutter
+analyze、191 个测试和 `flutter build linux --debug`，生成 x64 ELF
+bundle。机器可读证据见 `docs/verification/linux-m4-evidence.json`。Wayland
+overlay 依设计范围记录为 `OUT_OF_SCOPE`，没有被误报为通过。
 
-这属于主机构建依赖缺失，不作为 Windows M0 通过或失败的证据。
-
+该证据只证明 Linux 普通窗口可构建，不作为 Windows M0 或者
+Windows/macOS 平台行为的替代证据。
