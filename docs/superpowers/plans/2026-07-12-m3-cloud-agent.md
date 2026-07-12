@@ -29,7 +29,7 @@
 ### Task 4：CodeCard OCI 沙箱与签名发布
 
 - [x] 定义 sandbox 接口与 Docker OCI adapter：无网络、非 root、只读根、2 CPU、2 GiB、5 分钟、白名单输出。
-- [ ] 固定 TypeScript、Preact、Vite 模板并接通类型检查、测试、构建和静态 bundle policy；隔离浏览器加载、依赖许可与漏洞扫描待补。
+- [ ] 固定 pnpm lockfile、TypeScript、Preact、Vite 模板，接通类型检查、测试、构建、静态 bundle policy、许可白名单与高危漏洞审计；隔离浏览器加载仍待 Windows 门禁。
 - [x] 生成规范化 manifest、文件 hash、Ed25519 签名和 agentcard ZIP。
 - [x] 实现内存与 S3 兼容对象存储 adapter、条件写入、短期签名下载及不可变 CardVersion 幂等发布。
 
@@ -38,4 +38,4 @@
 - [ ] 桌面端已接入生成创建、确认、持续 SSE、取消、卡片库、不可变版本历史、制品下载验签和 NativeCard 自动/指定版本安装；独立预览待补。
 - [ ] NativeCard 与 CodeCard 均经过签名安装链路动态进入 workspace；CodeCard 已创建独立 RuntimeSession 并接入 WebView2 adapter，仍待 Windows 实机门禁。
 - [ ] 运行 Go test、race、vet、Flutter 全量测试、沙箱与篡改回归。
-- [ ] 已用 PostgreSQL 17 与 MinIO 实容器验证独立 API/worker 共享 session、job、catalog 和制品；真实模型、Docker CodeCard 与 Windows E2E 门禁待记录。
+- [ ] 已用 PostgreSQL 17、MinIO 与无网络/只读/非 root Docker 沙箱验证生产链路；真实模型与 Windows E2E 门禁待记录。

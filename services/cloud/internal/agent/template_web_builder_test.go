@@ -47,6 +47,41 @@ func TestTemplateWebBuilderCopiesFixedTemplateAndGeneratedWhitelist(t *testing.T
 	}
 }
 
+func TestTemplateWebBuilderRunsInLockedDockerSandbox(t *testing.T) {
+	image := os.Getenv("AGENTCARD_SANDBOX_TEST_IMAGE")
+	if image == "" {
+		t.Skip("AGENTCARD_SANDBOX_TEST_IMAGE is not configured")
+	}
+	template, err := filepath.Abs(filepath.Join("..", "..", "..", "..", "tooling", "codecard-template"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	builder := sandbox.NewDockerBuilder(
+		sandbox.DockerConfig{Image: image},
+		sandbox.ExecRunner{},
+	)
+	webBuilder := agent.NewTemplateWebBuilder(template, builder)
+
+	output, err := webBuilder.Build(context.Background(), map[string]string{
+		"src/card.tsx": `export function Card(){return <section>离线画板</section>}`,
+		"src/card.css": `section{color:CanvasText}`,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(output["index.html"]) == 0 || len(output["dependency-policy.json"]) == 0 {
+		t.Fatalf("sandbox output files = %v", mapKeys(output))
+	}
+}
+
+func mapKeys(values map[string][]byte) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
 type captureSandboxBuilder struct {
 	workspace     string
 	cardSource    []byte

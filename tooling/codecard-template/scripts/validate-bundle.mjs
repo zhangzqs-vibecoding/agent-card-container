@@ -1,6 +1,8 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 
+import { containsRemoteLoad } from './bundle-policy.mjs';
+
 const root = join(process.cwd(), 'dist');
 const files = [];
 
@@ -37,7 +39,8 @@ for (const absolute of files) {
   }
   if (/\.(html|js|css)$/.test(path)) {
     const source = await readFile(absolute, 'utf8');
-    if (/https?:\/\//i.test(source)) {
+    const extension = path.split('.').at(-1);
+    if (containsRemoteLoad(extension, source)) {
       throw new Error('Remote resources are forbidden');
     }
     if (/serviceWorker|navigator\.serviceWorker/.test(source)) {

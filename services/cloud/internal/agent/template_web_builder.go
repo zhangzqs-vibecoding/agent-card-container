@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/sandbox"
 )
@@ -67,19 +68,26 @@ func copyTemplate(sourceRoot, destinationRoot string) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("CodeCard template contains symbolic link")
-		}
 		relative, err := filepath.Rel(sourceRoot, source)
 		if err != nil {
 			return err
 		}
 		if relative == "." {
 			return nil
+		}
+		first := strings.Split(filepath.ToSlash(relative), "/")[0]
+		if first == "node_modules" || first == "dist" || first == ".git" {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("CodeCard template contains symbolic link")
 		}
 		destination := filepath.Join(destinationRoot, relative)
 		if entry.IsDir() {

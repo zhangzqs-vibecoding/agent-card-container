@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "auditedAt": "2026-07-12T00:00:00Z",
+  "packageManager": "pnpm@10.33.0",
+  "productionDependencies": [
+    {
+      "name": "preact",
+      "version": "10.26.4",
+      "license": "MIT"
+    }
+  ],
+  "allowedLicenses": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC"],
+  "audit": {
+    "command": "pnpm audit --prod --audit-level high",
+    "highOrCriticalVulnerabilities": 0
+  }
+}

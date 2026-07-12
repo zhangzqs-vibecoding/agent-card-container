@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,8 +31,17 @@ func (ExecRunner) Run(ctx context.Context, command Command) error {
 	if len(command.Environment) > 0 {
 		process.Env = append(os.Environ(), command.Environment...)
 	}
-	if err := process.Run(); err != nil {
-		return fmt.Errorf("sandbox process failed: %w", err)
+	output, err := process.CombinedOutput()
+	if err != nil {
+		const diagnosticLimit = 4 * 1024
+		if len(output) > diagnosticLimit {
+			output = output[len(output)-diagnosticLimit:]
+		}
+		diagnostic := strings.TrimSpace(string(output))
+		if diagnostic == "" {
+			return fmt.Errorf("sandbox process failed: %w", err)
+		}
+		return fmt.Errorf("sandbox process failed: %w: %s", err, diagnostic)
 	}
 	return nil
 }
@@ -39,6 +50,7 @@ type DockerConfig struct {
 	Binary  string
 	Image   string
 	Timeout time.Duration
+	User    string
 }
 
 type BuildRequest struct {
@@ -61,6 +73,18 @@ func NewDockerBuilder(config DockerConfig, runner CommandRunner) *DockerBuilder 
 	if config.Timeout <= 0 || config.Timeout > 5*time.Minute {
 		config.Timeout = 5 * time.Minute
 	}
+	if config.User == "" {
+		uid := os.Getuid()
+		gid := os.Getgid()
+		if uid > 0 && gid >= 0 {
+			config.User = strconv.Itoa(uid) + ":" + strconv.Itoa(gid)
+		} else {
+			config.User = "65532:65532"
+		}
+	}
+	if !containerUserPattern.MatchString(config.User) || strings.HasPrefix(config.User, "0:") {
+		config.User = "65532:65532"
+	}
 	return &DockerBuilder{config: config, runner: runner}
 }
 
@@ -73,7 +97,7 @@ func (builder *DockerBuilder) Build(ctx context.Context, request BuildRequest) (
 	if err != nil || !info.IsDir() {
 		return BuildOutput{}, fmt.Errorf("sandbox workspace is unavailable")
 	}
-	if !strings.Contains(builder.config.Image, "@sha256:") {
+	if !pinnedImagePattern.MatchString(builder.config.Image) {
 		return BuildOutput{}, fmt.Errorf("sandbox image must be pinned by digest")
 	}
 	runContext, cancel := context.WithTimeout(ctx, builder.config.Timeout)
@@ -87,15 +111,16 @@ func (builder *DockerBuilder) Build(ctx context.Context, request BuildRequest) (
 			"--cpus", "2",
 			"--memory", "2g",
 			"--pids-limit", "256",
-			"--user", "65532:65532",
+			"--user", builder.config.User,
 			"--cap-drop", "ALL",
 			"--security-opt", "no-new-privileges",
 			"--tmpfs", "/tmp:rw,noexec,nosuid,size=268435456",
-			"--mount", "type=bind,src=" + workspace + ",dst=/workspace,rw",
+			"--tmpfs", "/opt/codecard-template/node_modules/.vite-temp:rw,noexec,nosuid,size=16777216",
+			"--mount", "type=bind,src=" + workspace + ",dst=/workspace",
 			"--workdir", "/workspace",
 			builder.config.Image,
 			"/bin/sh", "-lc",
-			"ln -s /opt/codecard-template/node_modules /workspace/node_modules && pnpm run typecheck && pnpm test -- --run && pnpm run build && pnpm run validate:bundle",
+			"ln -s /opt/codecard-template/node_modules /workspace/node_modules && pnpm run verify && cp /opt/codecard-template/dependency-policy.json /workspace/dist/dependency-policy.json",
 		},
 		Directory: workspace,
 	}
@@ -104,6 +129,9 @@ func (builder *DockerBuilder) Build(ctx context.Context, request BuildRequest) (
 	}
 	return collectOutput(filepath.Join(workspace, "dist"))
 }
+
+var pinnedImagePattern = regexp.MustCompile(`^(?:sha256:|[^\s]+@sha256:)[a-f0-9]{64}$`)
+var containerUserPattern = regexp.MustCompile(`^[0-9]+:[0-9]+$`)
 
 func collectOutput(root string) (BuildOutput, error) {
 	files := make(map[string][]byte)
