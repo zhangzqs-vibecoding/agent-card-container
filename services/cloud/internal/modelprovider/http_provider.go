@@ -126,7 +126,6 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 		} `json:"usage"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(responseBytes))
-	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&decoded); err != nil {
 		return Response{}, fmt.Errorf("decode model response: %w", err)
 	}

@@ -26,7 +26,7 @@ func TestHTTPProviderCallsConfiguredModelWithoutExposingCredentials(t *testing.T
 		}
 		gotModel = body.Model
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`{"choices":[{"message":{"content":"{\"schemaVersion\":1}"}}],"usage":{"prompt_tokens":12,"completion_tokens":8}}`))
+		_, _ = writer.Write([]byte(`{"id":"response-1","object":"chat.completion","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"{\"schemaVersion\":1}"}}],"usage":{"prompt_tokens":12,"completion_tokens":8,"total_tokens":20}}`))
 	}))
 	defer server.Close()
 
