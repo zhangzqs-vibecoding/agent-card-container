@@ -33,6 +33,10 @@ type JobQueue interface {
 	CancelGeneration(context.Context, string, time.Time) error
 }
 
+type externalEventPollingRepository interface {
+	RequiresExternalEventPolling() bool
+}
+
 type ServiceOption func(*Service)
 
 func WithJobQueue(queue JobQueue) ServiceOption {
@@ -206,6 +210,7 @@ func (service *Service) SubscribeEvents(
 	}
 	service.streams[sessionID][stream] = struct{}{}
 	var once sync.Once
+	done := make(chan struct{})
 	cancel := func() {
 		once.Do(func() {
 			service.streamMu.Lock()
@@ -215,6 +220,7 @@ func (service *Service) SubscribeEvents(
 				delete(service.streams, sessionID)
 			}
 			close(stream.events)
+			close(done)
 		})
 	}
 	if ctx.Done() != nil {
@@ -223,7 +229,39 @@ func (service *Service) SubscribeEvents(
 			cancel()
 		}()
 	}
+	if polling, ok := service.repository.(externalEventPollingRepository); ok && polling.RequiresExternalEventPolling() {
+		go service.pollExternalEvents(ctx, done, userID, sessionID, stream)
+	}
 	return stream.events, cancel, nil
+}
+
+func (service *Service) pollExternalEvents(
+	ctx context.Context,
+	done <-chan struct{},
+	userID string,
+	sessionID string,
+	stream *eventStream,
+) {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			session, err := service.repository.Get(ctx, userID, sessionID)
+			if err != nil {
+				continue
+			}
+			service.streamMu.Lock()
+			if _, subscribed := service.streams[sessionID][stream]; subscribed {
+				service.publishStreamLocked(stream, session.Events)
+			}
+			service.streamMu.Unlock()
+		}
+	}
 }
 
 func (service *Service) StartGenerating(ctx context.Context, sessionID string) (*Session, error) {
@@ -296,11 +334,15 @@ func (service *Service) publishLocked(session *Session, err error) {
 		return
 	}
 	for stream := range service.streams[session.ID] {
-		for _, event := range session.Events {
-			if event.EventID > stream.cursor {
-				stream.events <- event
-				stream.cursor = event.EventID
-			}
+		service.publishStreamLocked(stream, session.Events)
+	}
+}
+
+func (service *Service) publishStreamLocked(stream *eventStream, events []Event) {
+	for _, event := range events {
+		if event.EventID > stream.cursor {
+			stream.events <- event
+			stream.cursor = event.EventID
 		}
 	}
 }

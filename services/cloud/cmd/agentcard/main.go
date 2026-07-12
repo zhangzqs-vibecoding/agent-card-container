@@ -20,6 +20,7 @@ func main() {
 	if err != nil {
 		log.Fatal("invalid service configuration")
 	}
+	defer func() { _ = runtime.Close() }()
 	mode := environment["AGENTCARD_MODE"]
 	if mode == "" {
 		mode = "all"

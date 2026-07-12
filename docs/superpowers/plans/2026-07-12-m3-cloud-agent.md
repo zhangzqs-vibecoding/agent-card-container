@@ -14,7 +14,7 @@
 
 ### Task 2：Repository、任务租约与 API/SSE
 
-- [ ] 已提供确定性的事务内存实现、PostgreSQL schema 和 SKIP LOCKED 查询；database/sql repository 与 pgx driver 待网络恢复后接入。
+- [x] 实现事务内存与 PostgreSQL repository，使用 pgx driver 持久化 session/message/event、租约 job 和不可变 CardVersion，并由嵌入式 migration 管理 schema。
 - [x] 实现 SKIP LOCKED 领取语义、租约超时重排、幂等发布和取消，并通过并发 race 测试。
 - [x] 实现设计中的全部 REST 端点、统一错误、OIDC RS256/JWKS Bearer 鉴权边界。
 - [x] SSE 支持历史补发、持续事件推送和 Last-Event-ID 重连，断线只释放订阅、不取消任务。
@@ -31,11 +31,11 @@
 - [x] 定义 sandbox 接口与 Docker OCI adapter：无网络、非 root、只读根、2 CPU、2 GiB、5 分钟、白名单输出。
 - [ ] 固定 TypeScript、Preact、Vite 模板并接通类型检查、测试、构建和静态 bundle policy；隔离浏览器加载、依赖许可与漏洞扫描待补。
 - [x] 生成规范化 manifest、文件 hash、Ed25519 签名和 agentcard ZIP。
-- [ ] 已实现对象存储接口、内存 adapter、短期下载元数据及不可变 CardVersion 幂等发布；真实 S3 adapter 待补。
+- [x] 实现内存与 S3 兼容对象存储 adapter、条件写入、短期签名下载及不可变 CardVersion 幂等发布。
 
 ### Task 5：桌面端生成与端到端验收
 
 - [ ] 桌面端已接入生成创建、确认、持续 SSE、取消、卡片库、不可变版本历史、制品下载验签和 NativeCard 自动/指定版本安装；独立预览待补。
-- [ ] NativeCard 已经过签名安装链路动态进入 workspace；CodeCard 已能验签和持久化，但仍待 Windows WebView2 adapter 挂载后进入 workspace。
+- [ ] NativeCard 与 CodeCard 均经过签名安装链路动态进入 workspace；CodeCard 已创建独立 RuntimeSession 并接入 WebView2 adapter，仍待 Windows 实机门禁。
 - [ ] 运行 Go test、race、vet、Flutter 全量测试、沙箱与篡改回归。
-- [ ] 记录真实模型、PostgreSQL、S3、Docker 和 Windows E2E 环境门禁。
+- [ ] 已用 PostgreSQL 17 与 MinIO 实容器验证独立 API/worker 共享 session、job、catalog 和制品；真实模型、Docker CodeCard 与 Windows E2E 门禁待记录。

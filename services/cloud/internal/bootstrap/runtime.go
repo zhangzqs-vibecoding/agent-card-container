@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/zzq/agent-card-container/services/cloud/internal/agent"
 	"github.com/zzq/agent-card-container/services/cloud/internal/artifact"
 	"github.com/zzq/agent-card-container/services/cloud/internal/auth"
@@ -20,11 +23,13 @@ import (
 	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 	"github.com/zzq/agent-card-container/services/cloud/internal/sandbox"
 	"github.com/zzq/agent-card-container/services/cloud/internal/worker"
+	"github.com/zzq/agent-card-container/services/cloud/migrations"
 )
 
 type Runtime struct {
-	handler http.Handler
-	worker  *worker.Worker
+	handler  http.Handler
+	worker   *worker.Worker
+	database *sql.DB
 }
 
 func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
@@ -45,18 +50,27 @@ func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
 		return nil, fmt.Errorf("AGENTCARD_SIGNING_KEY_ID is required")
 	}
 
-	jobStore := jobs.NewMemoryStore(func() string { return randomID("job_") })
+	repositories, err := buildRepositories(environment)
+	if err != nil {
+		return nil, err
+	}
+	composed := false
+	defer func() {
+		if !composed && repositories.database != nil {
+			_ = repositories.database.Close()
+		}
+	}()
+	jobStore := repositories.jobs
 	generations := generation.NewService(
-		generation.NewMemoryRepository(),
+		repositories.generations,
 		func() string { return randomID("gen_") },
 		time.Now,
 		generation.WithJobQueue(jobs.NewGenerationQueue(jobStore)),
 	)
-	versions := publish.NewMemoryVersionRepository()
 	publisher := publish.NewPublisher(
 		artifact.NewBuilder(keyID, privateKey),
-		publish.NewMemoryObjectStore(),
-		versions,
+		repositories.objects,
+		repositories.versions,
 	)
 	agentOptions := make([]agent.Option, 0, 1)
 	if image := environment["AGENTCARD_SANDBOX_IMAGE"]; image != "" {
@@ -95,7 +109,12 @@ func NewFromEnvironment(environment map[string]string) (*Runtime, error) {
 		Authenticator: authenticator,
 		NewRequestID:  func() string { return randomID("req_") },
 	})
-	return &Runtime{handler: handler, worker: workerRuntime}, nil
+	composed = true
+	return &Runtime{
+		handler:  handler,
+		worker:   workerRuntime,
+		database: repositories.database,
+	}, nil
 }
 
 func (runtime *Runtime) Handler() http.Handler {
@@ -104,6 +123,72 @@ func (runtime *Runtime) Handler() http.Handler {
 
 func (runtime *Runtime) RunWorkerOnce(ctx context.Context) (worker.Outcome, error) {
 	return runtime.worker.RunOnce(ctx)
+}
+
+func (runtime *Runtime) Close() error {
+	if runtime.database != nil {
+		return runtime.database.Close()
+	}
+	return nil
+}
+
+type repositorySet struct {
+	generations generation.Repository
+	jobs        jobs.Store
+	versions    publish.VersionRepository
+	objects     publish.ObjectStore
+	database    *sql.DB
+}
+
+func buildRepositories(environment map[string]string) (repositorySet, error) {
+	databaseURL := strings.TrimSpace(environment["AGENTCARD_DATABASE_URL"])
+	s3Endpoint := strings.TrimSpace(environment["AGENTCARD_S3_ENDPOINT"])
+	if databaseURL == "" && s3Endpoint == "" {
+		return repositorySet{
+			generations: generation.NewMemoryRepository(),
+			jobs:        jobs.NewMemoryStore(func() string { return randomID("job_") }),
+			versions:    publish.NewMemoryVersionRepository(),
+			objects:     publish.NewMemoryObjectStore(),
+		}, nil
+	}
+	if databaseURL == "" || s3Endpoint == "" {
+		return repositorySet{}, fmt.Errorf("AGENTCARD_DATABASE_URL and AGENTCARD_S3_ENDPOINT must be configured together")
+	}
+	database, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		return repositorySet{}, err
+	}
+	cleanup := func(err error) (repositorySet, error) {
+		_ = database.Close()
+		return repositorySet{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := database.PingContext(ctx); err != nil {
+		return cleanup(fmt.Errorf("connect PostgreSQL: %w", err))
+	}
+	if err := migrations.Apply(ctx, database); err != nil {
+		return cleanup(err)
+	}
+	objects, err := publish.NewS3ObjectStore(ctx, publish.S3Config{
+		Endpoint:  s3Endpoint,
+		AccessKey: environment["AGENTCARD_S3_ACCESS_KEY"],
+		SecretKey: environment["AGENTCARD_S3_SECRET_KEY"],
+		Bucket:    environment["AGENTCARD_S3_BUCKET"],
+		Region:    environment["AGENTCARD_S3_REGION"],
+		Secure:    environment["AGENTCARD_S3_SECURE"] != "false",
+	})
+	if err != nil {
+		return cleanup(fmt.Errorf("connect S3 object store: %w", err))
+	}
+	jobStore := jobs.NewPostgresStore(database, func() string { return randomID("job_") })
+	return repositorySet{
+		generations: generation.NewPostgresRepository(database),
+		jobs:        jobStore,
+		versions:    publish.NewPostgresVersionRepository(database),
+		objects:     objects,
+		database:    database,
+	}, nil
 }
 
 func buildAuthenticator(environment map[string]string) (httpapi.Authenticator, error) {
