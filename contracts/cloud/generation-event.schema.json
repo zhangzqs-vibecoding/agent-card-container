@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentcard.dev/contracts/cloud/generation-event.schema.json",
+  "title": "Generation Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "eventId",
+    "sessionId",
+    "type",
+    "stage",
+    "message",
+    "progress",
+    "timestamp"
+  ],
+  "properties": {
+    "eventId": {"type": "integer", "minimum": 1},
+    "sessionId": {"type": "string", "pattern": "^gen_[A-Za-z0-9_-]+$"},
+    "type": {"enum": ["status.changed", "message.added"]},
+    "stage": {
+      "enum": [
+        "requirements",
+        "awaiting_confirmation",
+        "queued",
+        "generating",
+        "validating",
+        "ready",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "message": {"type": "string", "maxLength": 500},
+    "progress": {"type": "number", "minimum": 0, "maximum": 1},
+    "versionId": {"type": "string"},
+    "errorCode": {"type": "string"},
+    "timestamp": {"type": "string", "format": "date-time"}
+  }
+}

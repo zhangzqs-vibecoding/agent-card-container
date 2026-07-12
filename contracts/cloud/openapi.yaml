@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: Agent Card Cloud API
+  version: 1.0.0
+servers:
+  - url: https://api.agentcard.example
+security:
+  - oidcBearer: []
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        "200":
+          description: Service health
+  /v1/generations:
+    post:
+      operationId: createGeneration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [prompt]
+              properties:
+                prompt: {type: string, minLength: 1}
+                target: {enum: [auto, native, web], default: auto}
+                locale: {type: string, default: zh-CN}
+      responses:
+        "201": {description: Generation awaiting confirmation}
+        "400": {$ref: "#/components/responses/Error"}
+        "401": {$ref: "#/components/responses/Error"}
+  /v1/generations/{id}:
+    get:
+      operationId: getGeneration
+      parameters:
+        - $ref: "#/components/parameters/GenerationID"
+      responses:
+        "200": {description: Generation snapshot}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/generations/{id}/messages:
+    post:
+      operationId: addGenerationMessage
+      parameters:
+        - $ref: "#/components/parameters/GenerationID"
+      responses:
+        "200": {description: Updated generation}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/generations/{id}/confirm:
+    post:
+      operationId: confirmGeneration
+      parameters:
+        - $ref: "#/components/parameters/GenerationID"
+      responses:
+        "200": {description: Queued generation}
+        "409": {$ref: "#/components/responses/Error"}
+  /v1/generations/{id}/cancel:
+    post:
+      operationId: cancelGeneration
+      parameters:
+        - $ref: "#/components/parameters/GenerationID"
+      responses:
+        "200": {description: Cancelled generation}
+  /v1/generations/{id}/events:
+    get:
+      operationId: streamGenerationEvents
+      parameters:
+        - $ref: "#/components/parameters/GenerationID"
+        - in: header
+          name: Last-Event-ID
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200":
+          description: SSE stream using generation-event.schema.json
+          content:
+            text/event-stream: {}
+  /v1/cards:
+    get:
+      operationId: listCards
+      responses:
+        "200": {description: User card list}
+  /v1/cards/{cardId}:
+    get:
+      operationId: getCard
+      parameters:
+        - in: path
+          name: cardId
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Card and immutable versions}
+        "404": {$ref: "#/components/responses/Error"}
+  /v1/cards/{cardId}/versions/{versionId}/artifact:
+    get:
+      operationId: getArtifactDownload
+      parameters:
+        - in: path
+          name: cardId
+          required: true
+          schema: {type: string}
+        - in: path
+          name: versionId
+          required: true
+          schema: {type: string}
+      responses:
+        "200": {description: Short-lived artifact URL and signature metadata}
+        "404": {$ref: "#/components/responses/Error"}
+components:
+  securitySchemes:
+    oidcBearer:
+      type: openIdConnect
+      openIdConnectUrl: https://issuer.example/.well-known/openid-configuration
+  parameters:
+    GenerationID:
+      in: path
+      name: id
+      required: true
+      schema: {type: string, pattern: "^gen_[A-Za-z0-9_-]+$"}
+  responses:
+    Error:
+      description: Stable error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [error]
+            properties:
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message, requestId]
+                properties:
+                  code: {type: string}
+                  message: {type: string}
+                  requestId: {type: string}

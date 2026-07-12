@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"sort"
 	"sync"
 	"time"
 
@@ -24,6 +25,8 @@ type CardVersion struct {
 	UserID         string         `json:"-"`
 	Runtime        string         `json:"runtime"`
 	DisplayVersion string         `json:"displayVersion"`
+	Title          string         `json:"title"`
+	Description    string         `json:"description"`
 	ArtifactKey    string         `json:"-"`
 	ArtifactSHA256 string         `json:"artifactSha256"`
 	KeyID          string         `json:"keyId"`
@@ -46,6 +49,20 @@ type Download struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+type CardSummary struct {
+	CardID        string      `json:"cardId"`
+	Title         string      `json:"title"`
+	Description   string      `json:"description"`
+	LatestVersion CardVersion `json:"latestVersion"`
+}
+
+type CardDetail struct {
+	CardID      string        `json:"cardId"`
+	Title       string        `json:"title"`
+	Description string        `json:"description"`
+	Versions    []CardVersion `json:"versions"`
+}
+
 type ObjectStore interface {
 	PutIfAbsent(context.Context, string, []byte) error
 	SignedURL(context.Context, string, time.Duration) (string, time.Time, error)
@@ -54,6 +71,8 @@ type ObjectStore interface {
 type VersionRepository interface {
 	Create(context.Context, CardVersion) (CardVersion, error)
 	Find(context.Context, string, string, string) (CardVersion, error)
+	ListByUser(context.Context, string) ([]CardVersion, error)
+	ListByCard(context.Context, string, string) ([]CardVersion, error)
 }
 
 type Publisher struct {
@@ -91,12 +110,63 @@ func (publisher *Publisher) Publish(ctx context.Context, input Input) (CardVersi
 		UserID:         input.UserID,
 		Runtime:        string(input.Definition.Runtime),
 		DisplayVersion: input.Definition.DisplayVersion,
+		Title:          input.Definition.Title,
+		Description:    input.Definition.Description,
 		ArtifactKey:    objectKey,
 		ArtifactSHA256: built.SHA256,
 		KeyID:          built.KeyID,
 		Preview:        cloneMap(input.Preview),
 		CreatedAt:      input.CreatedAt.UTC(),
 	})
+}
+
+func (publisher *Publisher) ListCards(ctx context.Context, userID string) ([]CardSummary, error) {
+	versions, err := publisher.versions.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	latest := make(map[string]CardVersion)
+	for _, version := range versions {
+		current, exists := latest[version.CardID]
+		if !exists || version.CreatedAt.After(current.CreatedAt) {
+			latest[version.CardID] = version
+		}
+	}
+	cardIDs := make([]string, 0, len(latest))
+	for cardID := range latest {
+		cardIDs = append(cardIDs, cardID)
+	}
+	sort.Strings(cardIDs)
+	cards := make([]CardSummary, 0, len(cardIDs))
+	for _, cardID := range cardIDs {
+		version := latest[cardID]
+		cards = append(cards, CardSummary{
+			CardID:        cardID,
+			Title:         version.Title,
+			Description:   version.Description,
+			LatestVersion: version,
+		})
+	}
+	return cards, nil
+}
+
+func (publisher *Publisher) Card(ctx context.Context, userID, cardID string) (CardDetail, error) {
+	versions, err := publisher.versions.ListByCard(ctx, userID, cardID)
+	if err != nil {
+		return CardDetail{}, err
+	}
+	if len(versions) == 0 {
+		return CardDetail{}, ErrNotFound
+	}
+	sort.Slice(versions, func(left, right int) bool {
+		return versions[left].CreatedAt.After(versions[right].CreatedAt)
+	})
+	return CardDetail{
+		CardID:      cardID,
+		Title:       versions[0].Title,
+		Description: versions[0].Description,
+		Versions:    versions,
+	}, nil
 }
 
 func (publisher *Publisher) Download(
@@ -214,6 +284,42 @@ func (repository *MemoryVersionRepository) Find(
 		return CardVersion{}, ErrNotFound
 	}
 	return cloneVersion(version), nil
+}
+
+func (repository *MemoryVersionRepository) ListByUser(
+	ctx context.Context,
+	userID string,
+) ([]CardVersion, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	repository.mu.RLock()
+	defer repository.mu.RUnlock()
+	result := make([]CardVersion, 0)
+	for _, version := range repository.versions {
+		if version.UserID == userID {
+			result = append(result, cloneVersion(version))
+		}
+	}
+	return result, nil
+}
+
+func (repository *MemoryVersionRepository) ListByCard(
+	ctx context.Context,
+	userID string,
+	cardID string,
+) ([]CardVersion, error) {
+	versions, err := repository.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]CardVersion, 0)
+	for _, version := range versions {
+		if version.CardID == cardID {
+			result = append(result, version)
+		}
+	}
+	return result, nil
 }
 
 func cloneVersion(version CardVersion) CardVersion {

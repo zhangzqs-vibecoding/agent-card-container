@@ -3,6 +3,9 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
+	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 )
 
 type healthResponse struct {
@@ -22,4 +25,33 @@ func NewHandler(serviceName string) http.Handler {
 		})
 	})
 	return mux
+}
+
+type CloudHandlerConfig struct {
+	ServiceName   string
+	Generations   *generation.Service
+	Publisher     *publish.Publisher
+	Authenticator Authenticator
+	NewRequestID  func() string
+}
+
+func NewCloudHandler(config CloudHandlerConfig) http.Handler {
+	root := http.NewServeMux()
+	root.Handle("GET /healthz", NewHandler(config.ServiceName))
+	generations := NewGenerationHandler(GenerationHandlerConfig{
+		ServiceName:   config.ServiceName,
+		Service:       config.Generations,
+		Authenticator: config.Authenticator,
+		NewRequestID:  config.NewRequestID,
+	})
+	cards := NewCardHandler(CardHandlerConfig{
+		Publisher:     config.Publisher,
+		Authenticator: config.Authenticator,
+		NewRequestID:  config.NewRequestID,
+	})
+	root.Handle("/v1/generations", generations)
+	root.Handle("/v1/generations/", generations)
+	root.Handle("/v1/cards", cards)
+	root.Handle("/v1/cards/", cards)
+	return root
 }

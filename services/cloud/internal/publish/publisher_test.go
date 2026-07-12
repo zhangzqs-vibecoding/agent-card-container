@@ -82,6 +82,47 @@ func TestPublisherRejectsVersionMutationAndCrossUserRead(t *testing.T) {
 	}
 }
 
+func TestPublisherListsUserCardsAndVersionHistory(t *testing.T) {
+	t.Parallel()
+
+	seed := sha256.Sum256([]byte("publisher-key"))
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("release-key", ed25519.NewKeyFromSeed(seed[:])),
+		publish.NewMemoryObjectStore(),
+		publish.NewMemoryVersionRepository(),
+	)
+	for index, versionID := range []string{"ver_01", "ver_02"} {
+		card := definition(versionID)
+		card.DisplayVersion = []string{"1.0.0", "1.1.0"}[index]
+		if _, err := publisher.Publish(context.Background(), publish.Input{
+			UserID:     "owner",
+			Definition: card,
+			Files: map[string][]byte{
+				"payload/native.json":     []byte(`{"schemaVersion":1,"initialState":{},"root":{"id":"root","type":"Text"}}`),
+				"reports/validation.json": []byte(`{"status":"passed"}`),
+			},
+			CreatedAt: time.Date(2026, 7, 12, 12+index, 0, 0, 0, time.UTC),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cards, err := publisher.ListCards(context.Background(), "owner")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].LatestVersion.VersionID != "ver_02" {
+		t.Fatalf("cards = %#v", cards)
+	}
+	detail, err := publisher.Card(context.Background(), "owner", "card_01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Versions) != 2 || detail.Versions[0].VersionID != "ver_02" {
+		t.Fatalf("detail = %#v", detail)
+	}
+}
+
 func definition(versionID string) contracts.CardDefinition {
 	return contracts.CardDefinition{
 		FormatVersion:      1,

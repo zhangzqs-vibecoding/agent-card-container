@@ -1,0 +1,9 @@
+{
+  "eventId": 3,
+  "sessionId": "gen_01",
+  "type": "status.changed",
+  "stage": "generating",
+  "message": "编码 Agent 正在生成卡片",
+  "progress": 0.35,
+  "timestamp": "2026-07-12T13:00:00Z"
+}
