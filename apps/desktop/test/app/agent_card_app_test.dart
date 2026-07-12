@@ -340,6 +340,14 @@ void main() {
     expect(find.text('版本历史'), findsOneWidget);
     expect(find.text('1.0.0'), findsOneWidget);
 
+    await tester.tap(find.byKey(const Key('preview-ver_01')));
+    await tester.pumpAndSettle();
+    expect(find.text('版本预览'), findsOneWidget);
+    expect(find.text('自动选择 NativeCard：只需声明式状态与计时器'), findsOneWidget);
+    expect(find.text('预览不会下载或执行制品代码'), findsOneWidget);
+    await tester.tap(find.text('关闭'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('安装此版本'));
     await tester.pumpAndSettle();
     expect(installed, ['card_01/ver_01']);
@@ -456,6 +464,10 @@ final _catalogVersion = CloudCardVersion(
   description: '无需网络即可计时',
   artifactSha256: List.filled(64, 'a').join(),
   keyId: 'key-1',
-  preview: const {},
+  preview: const {
+    'title': '离线番茄钟',
+    'runtime': 'native',
+    'reason': '自动选择 NativeCard：只需声明式状态与计时器',
+  },
   createdAt: DateTime.utc(2026, 7, 12),
 );

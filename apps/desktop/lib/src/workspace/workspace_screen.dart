@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../adapters/in_app_webview_port.dart';
 import '../agent_studio/agent_studio_controller.dart';
 import '../cloud/card_catalog_controller.dart';
+import '../cloud/cloud_api_client.dart';
 import '../code_card/code_card_host.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
@@ -237,13 +238,24 @@ class _VersionHistory extends StatelessWidget {
                           '${version.runtime} · ${version.createdAt.toLocal()}\n签名密钥 ${version.keyId}',
                         ),
                         isThreeLine: true,
-                        trailing: FilledButton(
-                          onPressed:
-                              catalog.installationAvailable &&
-                                  catalog.installingVersionId == null
-                              ? () => catalog.install(version.versionId)
-                              : null,
-                          child: Text(installing ? '安装中…' : '安装此版本'),
+                        trailing: Wrap(
+                          spacing: 8,
+                          children: [
+                            FilledButton.tonal(
+                              key: Key('preview-${version.versionId}'),
+                              onPressed: () =>
+                                  _showVersionPreview(context, version),
+                              child: const Text('预览'),
+                            ),
+                            FilledButton(
+                              onPressed:
+                                  catalog.installationAvailable &&
+                                      catalog.installingVersionId == null
+                                  ? () => catalog.install(version.versionId)
+                                  : null,
+                              child: Text(installing ? '安装中…' : '安装此版本'),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -253,6 +265,53 @@ class _VersionHistory extends StatelessWidget {
       },
     );
   }
+}
+
+Future<void> _showVersionPreview(
+  BuildContext context,
+  CloudCardVersion version,
+) {
+  final preview = version.preview;
+  final title = _boundedPreviewText(preview['title'], version.title);
+  final runtime = _boundedPreviewText(preview['runtime'], version.runtime);
+  final reason = _boundedPreviewText(preview['reason'], version.description);
+  return showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('版本预览'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 10),
+            Chip(label: Text(runtime)),
+            const SizedBox(height: 10),
+            Text(reason),
+            const SizedBox(height: 18),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text('预览不会下载或执行制品代码'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    ),
+  );
+}
+
+String _boundedPreviewText(Object? value, String fallback) {
+  final text = value is String && value.trim().isNotEmpty
+      ? value.trim()
+      : fallback;
+  return text.length <= 500 ? text : '${text.substring(0, 500)}…';
 }
 
 class _CatalogPage extends StatelessWidget {
