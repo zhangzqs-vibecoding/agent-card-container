@@ -334,6 +334,42 @@ void main() {
     expect(find.text('当前平台无法安全挂载 CodeCard'), findsOneWidget);
   });
 
+  testWidgets('suspends child-engine CodeCards while its window is hidden', (
+    tester,
+  ) async {
+    addTearDown(() async {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    });
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'detached-1',
+        'surfaceType': 'detached',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': false,
+        'instanceIds': ['instance-1'],
+        'cards': [
+          {
+            'instanceId': 'instance-1',
+            'runtime': 'code',
+            'sessionId': 'session-1',
+            'origin': 'http://127.0.0.1:43125',
+            'entrypoint': '/bundle/hash/index.html',
+          },
+        ],
+      }),
+    )!;
+    final model = SurfaceWindowModel(arguments);
+    addTearDown(model.dispose);
+
+    await tester.pumpWidget(SurfaceWindowApp(model: model));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+
+    expect(find.text('已暂停：卡片不可见或超过活动上限'), findsOneWidget);
+    expect(find.text('当前平台无法安全挂载 CodeCard'), findsNothing);
+  });
+
   test('builds a close request scoped to the child window and instance', () {
     final arguments = SurfaceWindowArguments.tryParse(
       jsonEncode({

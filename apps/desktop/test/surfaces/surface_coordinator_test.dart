@@ -16,6 +16,7 @@ void main() {
   late SurfaceCoordinator coordinator;
   late List<CardInstance> moved;
   late int displayModeRequests;
+  late List<String> runtimeEvents;
   late List<({String instanceId, String method, Map<String, Object?> params})>
   capabilityInvocations;
 
@@ -51,6 +52,7 @@ void main() {
     backend = _FakeWindowBackend();
     moved = [];
     displayModeRequests = 0;
+    runtimeEvents = [];
     capabilityInvocations = [];
     coordinator = SurfaceCoordinator(
       database: database,
@@ -67,6 +69,9 @@ void main() {
           params: params,
         ));
         return {'opened': true};
+      },
+      onRuntimeEvent: (instanceId, event) {
+        runtimeEvents.add('$instanceId:$event');
       },
       now: () => DateTime.utc(2026, 7, 12, 10),
     );
@@ -260,6 +265,27 @@ void main() {
         CardInstanceStatus.quarantined,
       );
       expect(moved.last.status, CardInstanceStatus.quarantined);
+    },
+  );
+
+  test(
+    'forwards child CodeCard lifecycle events to the runtime host',
+    () async {
+      for (final event in const ['runtimeSuspended', 'runtimeResumed']) {
+        await coordinator.handleBridgeMessage(
+          SurfaceBridgeMessage.fromJson({
+            'type': 'hostEvent',
+            'windowId': 'window-1',
+            'instanceId': 'instance-1',
+            'payload': {'event': event},
+          }),
+        );
+      }
+
+      expect(runtimeEvents, [
+        'instance-1:runtime.suspend',
+        'instance-1:runtime.resume',
+      ]);
     },
   );
 

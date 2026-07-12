@@ -9,6 +9,7 @@ import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import '../native_card/native_card_spec.dart';
 import '../runtime/runtime_activity_budget.dart';
+import '../runtime/runtime_visibility.dart';
 import 'surface_bridge.dart';
 
 enum SurfaceCardRuntime { native, code }
@@ -295,6 +296,7 @@ class SurfaceWindowApp extends StatelessWidget {
     this.onCapabilityInvocation,
     this.onStateChanged,
     this.onCodeCardLaunch,
+    this.onRuntimeVisibilityChanged,
     super.key,
   });
 
@@ -310,70 +312,82 @@ class SurfaceWindowApp extends StatelessWidget {
   onStateChanged;
   final Future<void> Function(String instanceId, bool succeeded)?
   onCodeCardLaunch;
+  final Future<void> Function(String instanceId, bool visible)?
+  onRuntimeVisibilityChanged;
 
   @override
   Widget build(BuildContext context) {
-    final activeIndexes = RuntimeActivityBudget.activeIndexes(
-      model.cards.map(
-        (card) => card.runtime == SurfaceCardRuntime.code
-            ? CardRuntimeKind.code
-            : CardRuntimeKind.native,
-      ),
-    );
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(useMaterial3: true),
-      home: AnimatedBuilder(
-        animation: model,
-        builder: (context, _) => Scaffold(
-          backgroundColor: model.arguments.surfaceType == 'overlay'
-              ? Colors.transparent
-              : const Color(0xFF0B0E0F),
-          floatingActionButton:
-              model.arguments.surfaceType == 'overlay' &&
-                  onEnterOverlayDisplayMode != null
-              ? FloatingActionButton.small(
-                  key: const Key('enter-overlay-display-mode'),
-                  tooltip: '进入展示模式（Ctrl+Shift+F12 恢复编辑）',
-                  onPressed: onEnterOverlayDisplayMode,
-                  child: const Icon(Icons.touch_app_outlined),
-                )
-              : null,
-          body: SafeArea(
-            child: Center(
-              child: Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final (index, card) in model.cards.indexed)
-                    SizedBox(
-                      width: 420,
-                      height: 280,
-                      child: Card(
-                        child: _SurfaceCardView(
-                          key: ValueKey(card.instanceId),
-                          snapshot: card,
-                          active: activeIndexes.contains(index),
-                          capabilityInvocation: onCapabilityInvocation,
-                          onStateChanged: onStateChanged,
-                          onCodeCardLaunch: onCodeCardLaunch,
+    return RuntimeVisibilityBuilder(
+      builder: (context, runtimeVisible) {
+        final activeIndexes = RuntimeActivityBudget.activeIndexes(
+          model.cards.map(
+            (card) => card.runtime == SurfaceCardRuntime.code
+                ? CardRuntimeKind.code
+                : CardRuntimeKind.native,
+          ),
+          eligible: model.cards.map(
+            (card) =>
+                card.runtime == SurfaceCardRuntime.native || runtimeVisible,
+          ),
+        );
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData.dark(useMaterial3: true),
+          home: AnimatedBuilder(
+            animation: model,
+            builder: (context, _) => Scaffold(
+              backgroundColor: model.arguments.surfaceType == 'overlay'
+                  ? Colors.transparent
+                  : const Color(0xFF0B0E0F),
+              floatingActionButton:
+                  model.arguments.surfaceType == 'overlay' &&
+                      onEnterOverlayDisplayMode != null
+                  ? FloatingActionButton.small(
+                      key: const Key('enter-overlay-display-mode'),
+                      tooltip: '进入展示模式（Ctrl+Shift+F12 恢复编辑）',
+                      onPressed: onEnterOverlayDisplayMode,
+                      child: const Icon(Icons.touch_app_outlined),
+                    )
+                  : null,
+              body: SafeArea(
+                child: Center(
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      for (final (index, card) in model.cards.indexed)
+                        SizedBox(
+                          width: 420,
+                          height: 280,
+                          child: Card(
+                            child: _SurfaceCardView(
+                              key: ValueKey(card.instanceId),
+                              snapshot: card,
+                              active: activeIndexes.contains(index),
+                              capabilityInvocation: onCapabilityInvocation,
+                              onStateChanged: onStateChanged,
+                              onCodeCardLaunch: onCodeCardLaunch,
+                              onRuntimeVisibilityChanged:
+                                  onRuntimeVisibilityChanged,
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  if (model.cards.isEmpty)
-                    for (final instanceId in model.instanceIds)
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text('正在挂载 $instanceId'),
-                        ),
-                      ),
-                ],
+                      if (model.cards.isEmpty)
+                        for (final instanceId in model.instanceIds)
+                          Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Text('正在挂载 $instanceId'),
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -385,6 +399,7 @@ class _SurfaceCardView extends StatefulWidget {
     this.capabilityInvocation,
     this.onStateChanged,
     this.onCodeCardLaunch,
+    this.onRuntimeVisibilityChanged,
     super.key,
   });
 
@@ -400,6 +415,8 @@ class _SurfaceCardView extends StatefulWidget {
   onStateChanged;
   final Future<void> Function(String instanceId, bool succeeded)?
   onCodeCardLaunch;
+  final Future<void> Function(String instanceId, bool visible)?
+  onRuntimeVisibilityChanged;
 
   @override
   State<_SurfaceCardView> createState() => _SurfaceCardViewState();
@@ -410,6 +427,7 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
   InAppWebViewPort? _webView;
   Object? _codeCardError;
   var _codeCardMounted = false;
+  var _codeCardSuspended = false;
   Future<void> _statePublishTail = Future.value();
 
   @override
@@ -427,9 +445,18 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
     if (oldWidget.active == widget.active) {
       return;
     }
-    _disposeRuntime();
-    if (widget.active) {
-      _createRuntime();
+    if (widget.snapshot.runtime == SurfaceCardRuntime.native) {
+      _disposeRuntime();
+      if (widget.active) _createRuntime();
+      return;
+    }
+    final webView = _webView;
+    if (webView == null) {
+      if (widget.active) _createRuntime();
+    } else if (widget.active && _codeCardSuspended) {
+      unawaited(_resumeCodeCard(webView));
+    } else if (!widget.active && _codeCardMounted) {
+      unawaited(_suspendCodeCard(webView));
     }
   }
 
@@ -461,6 +488,7 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
     final webView = _webView;
     _webView = null;
     _codeCardMounted = false;
+    _codeCardSuspended = false;
     _codeCardError = null;
     if (webView != null) {
       unawaited(webView.dispose());
@@ -513,6 +541,14 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
       if (!mounted || !identical(port, _webView)) {
         return;
       }
+      if (!widget.active) {
+        await port.suspend();
+        _codeCardSuspended = true;
+        await widget.onRuntimeVisibilityChanged?.call(
+          widget.snapshot.instanceId,
+          false,
+        );
+      }
       setState(() => _codeCardMounted = true);
       await widget.onCodeCardLaunch?.call(snapshot.instanceId, true);
     } catch (error) {
@@ -521,6 +557,43 @@ class _SurfaceCardViewState extends State<_SurfaceCardView> {
       }
       await widget.onCodeCardLaunch?.call(snapshot.instanceId, false);
       setState(() => _codeCardError = error);
+    }
+  }
+
+  Future<void> _suspendCodeCard(InAppWebViewPort webView) async {
+    try {
+      await webView.suspend();
+      if (mounted && identical(webView, _webView)) {
+        _codeCardSuspended = true;
+      }
+      await widget.onRuntimeVisibilityChanged?.call(
+        widget.snapshot.instanceId,
+        false,
+      );
+    } catch (error) {
+      if (mounted && identical(webView, _webView)) {
+        setState(() => _codeCardError = error);
+      }
+    }
+  }
+
+  Future<void> _resumeCodeCard(InAppWebViewPort webView) async {
+    try {
+      await webView.resume();
+      if (mounted && identical(webView, _webView)) {
+        setState(() {
+          _codeCardSuspended = false;
+          _codeCardError = null;
+        });
+      }
+      await widget.onRuntimeVisibilityChanged?.call(
+        widget.snapshot.instanceId,
+        true,
+      );
+    } catch (error) {
+      if (mounted && identical(webView, _webView)) {
+        setState(() => _codeCardError = error);
+      }
     }
   }
 

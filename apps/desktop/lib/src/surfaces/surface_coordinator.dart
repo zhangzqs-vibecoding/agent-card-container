@@ -33,6 +33,7 @@ class SurfaceCoordinator {
     this.onOverlayDisplayRequested,
     this.onCapabilityInvocation,
     this.onStateChanged,
+    this.onRuntimeEvent,
     DateTime Function()? now,
   }) : now = now ?? DateTime.now;
 
@@ -44,6 +45,7 @@ class SurfaceCoordinator {
   final SurfaceCapabilityInvocation? onCapabilityInvocation;
   final void Function(String instanceId, Map<String, Object?> state)?
   onStateChanged;
+  final void Function(String instanceId, String event)? onRuntimeEvent;
   final DateTime Function() now;
 
   Future<Object?> handleBridgeMessage(SurfaceBridgeMessage message) async {
@@ -135,6 +137,18 @@ class SurfaceCoordinator {
         _notifyMoved(instance.instanceId);
       }
       return {'failureCount': failures, 'quarantined': quarantined};
+    }
+    final runtimeEvent = switch (message.payload['event']) {
+      'runtimeSuspended' => 'runtime.suspend',
+      'runtimeResumed' => 'runtime.resume',
+      _ => null,
+    };
+    if (runtimeEvent != null) {
+      if (message.payload.keys.length != 1) {
+        throw const FormatException('invalid CodeCard runtime event');
+      }
+      onRuntimeEvent?.call(instance.instanceId, runtimeEvent);
+      return {'event': runtimeEvent};
     }
     if (message.payload['event'] != 'windowCloseRequested') {
       throw const FormatException('unsupported surface host event');

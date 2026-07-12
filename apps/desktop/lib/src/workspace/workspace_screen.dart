@@ -30,6 +30,7 @@ class WorkspaceScreen extends StatefulWidget {
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
+    this.runtimeVisible = true,
   });
 
   final int? runtimePort;
@@ -40,6 +41,7 @@ class WorkspaceScreen extends StatefulWidget {
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
+  final bool runtimeVisible;
 
   @override
   State<WorkspaceScreen> createState() => _WorkspaceScreenState();
@@ -124,6 +126,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     return AnimatedBuilder(
       animation: widget.workspaceController ?? _NoopListenable.instance,
       builder: (context, _) => _WorkspaceCanvas(
+        runtimeVisible: widget.runtimeVisible,
         cards:
             widget.workspaceController?.workspaceCards ??
             widget.workspaceCards
@@ -537,6 +540,7 @@ class _NavItem extends StatelessWidget {
 class _WorkspaceCanvas extends StatelessWidget {
   const _WorkspaceCanvas({
     required this.cards,
+    required this.runtimeVisible,
     required this.agentPanelOpen,
     required this.onOpenAgentPanel,
     this.onNativeCardStateChanged,
@@ -545,6 +549,7 @@ class _WorkspaceCanvas extends StatelessWidget {
   });
 
   final List<WorkspaceCard> cards;
+  final bool runtimeVisible;
   final bool agentPanelOpen;
   final VoidCallback onOpenAgentPanel;
   final NativeCardStateChanged? onNativeCardStateChanged;
@@ -566,6 +571,7 @@ class _WorkspaceCanvas extends StatelessWidget {
           ),
           eligible: cards.map((card) {
             if (card.nativeSpec != null) return true;
+            if (!runtimeVisible) return false;
             final placement = card.instance.placement;
             return Rect.fromLTWH(
               28 + placement.x * columnWidth,

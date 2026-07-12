@@ -141,6 +141,20 @@ abstract final class SurfaceWindowLauncher {
             ).toJson(),
           );
         },
+        onRuntimeVisibilityChanged: (instanceId, visible) async {
+          final owner = WindowController.fromWindowId(arguments.ownerWindowId);
+          await owner.invokeMethod<Object?>(
+            'surface.bridge',
+            SurfaceBridgeMessage(
+              type: SurfaceBridgeMessageType.hostEvent,
+              windowId: controller.windowId,
+              instanceId: instanceId,
+              payload: {
+                'event': visible ? 'runtimeResumed' : 'runtimeSuspended',
+              },
+            ).toJson(),
+          );
+        },
         onEnterOverlayDisplayMode: arguments.surfaceType == 'overlay'
             ? () async {
                 final owner = WindowController.fromWindowId(

@@ -2,6 +2,7 @@ import 'package:agent_card_desktop/src/agent_studio/agent_studio_controller.dart
 import 'package:agent_card_desktop/src/capabilities/permission_prompt_host.dart';
 import 'package:agent_card_desktop/src/capabilities/permission_request_controller.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
+import 'package:agent_card_desktop/src/runtime/runtime_visibility.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_screen.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_controller.dart';
@@ -33,18 +34,21 @@ class AgentCardApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Agent Card',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.dark,
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
-      home: _home(),
+    return RuntimeVisibilityBuilder(
+      builder: (context, runtimeVisible) => MaterialApp(
+        title: 'Agent Card',
+        debugShowCheckedModeBanner: false,
+        themeMode: ThemeMode.dark,
+        theme: _theme(Brightness.light),
+        darkTheme: _theme(Brightness.dark),
+        home: _home(runtimeVisible),
+      ),
     );
   }
 
-  Widget _home() {
+  Widget _home(bool runtimeVisible) {
     final workspace = WorkspaceScreen(
+      runtimeVisible: runtimeVisible,
       runtimePort: runtimePort,
       workspaceCards: workspaceCards,
       agentStudioController: agentStudioController,
