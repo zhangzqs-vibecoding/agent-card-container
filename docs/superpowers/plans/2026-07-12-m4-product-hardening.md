@@ -203,7 +203,7 @@ Run: `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.d
 
 Expected: PASS. Windows device measurements remain pending until run on the reference class of device.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/desktop tooling/performance docs/verification
@@ -248,7 +248,7 @@ Run on Windows: `pwsh packaging/windows/verify-release.ps1 -Bundle apps/desktop/
 
 Expected: Linux static checks pass; Windows release verification must pass before this task is checked complete.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packaging .github/workflows/windows-release-gate.yml
@@ -285,7 +285,7 @@ Run: `pwsh tooling/device-gates/windows-m0.ps1` and `sh tooling/device-gates/mac
 
 Expected: all mandatory scenarios pass and evidence files contain the tested commit SHA. These steps cannot be completed on a Linux-only host.
 
-- [ ] **Step 5: Commit platform evidence tooling**
+- [x] **Step 5: Commit platform evidence tooling**
 
 ```bash
 git add tooling/device-gates docs/verification
@@ -298,7 +298,7 @@ git commit -m "test: add desktop platform device gates"
 - Create: `docs/verification/m4-acceptance.md`
 - Modify: `docs/superpowers/plans/2026-07-12-m4-product-hardening.md`
 
-- [ ] **Step 1: Run all automated gates**
+- [x] **Step 1: Run all automated gates**
 
 ```bash
 (cd apps/desktop && flutter analyze && flutter test)
@@ -307,21 +307,21 @@ sh tooling/security/run-security-gate.sh
 git diff --check
 ```
 
-- [ ] **Step 2: Build the requirement-to-evidence table**
+- [x] **Step 2: Build the requirement-to-evidence table**
 
 For every M4 bullet and every design section 18.5/18.6 item, record an exact command, evidence artifact, commit SHA and status of PASS, FAIL or NOT RUN. NOT RUN is never treated as PASS.
 
-- [ ] **Step 3: Verify repository hygiene**
+- [x] **Step 3: Verify repository hygiene**
 
 Run: `git status --short && git ls-files | rg '(\.env|\.db$|private|secret|token|build/)'`
 
 Expected: no generated bundle, runtime database, credential, private key or local environment file is tracked.
 
-- [ ] **Step 4: Check off only proven plan items**
+- [x] **Step 4: Check off only proven plan items**
 
 Windows and macOS device-only boxes remain unchecked until their evidence files exist for the current commit. Automated Linux-hosted boxes may be checked from current command output.
 
-- [ ] **Step 5: Commit the acceptance record**
+- [x] **Step 5: Commit the acceptance record**
 
 ```bash
 git add docs/verification docs/superpowers/plans/2026-07-12-m4-product-hardening.md
