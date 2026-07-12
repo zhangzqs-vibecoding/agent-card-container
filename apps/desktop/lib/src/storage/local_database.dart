@@ -128,8 +128,9 @@ class LocalDatabase {
     _connection.execute(
       '''
       INSERT INTO surfaces (
-        surface_id, type, monitor_id, x, y, width, height, always_on_top
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        surface_id, type, monitor_id, x, y, width, height, always_on_top,
+        last_focused_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(surface_id) DO UPDATE SET
         type = excluded.type,
         monitor_id = excluded.monitor_id,
@@ -137,7 +138,8 @@ class LocalDatabase {
         y = excluded.y,
         width = excluded.width,
         height = excluded.height,
-        always_on_top = excluded.always_on_top
+        always_on_top = excluded.always_on_top,
+        last_focused_at = excluded.last_focused_at
       ''',
       [
         surface.id,
@@ -148,6 +150,7 @@ class LocalDatabase {
         bounds?.width,
         bounds?.height,
         surface.alwaysOnTop,
+        surface.lastFocusedAt?.toUtc().toIso8601String(),
       ],
     );
   }
@@ -173,9 +176,41 @@ class LocalDatabase {
                     height: height.toDouble(),
                   ),
             alwaysOnTop: (row['always_on_top']! as int) != 0,
+            lastFocusedAt: row['last_focused_at'] == null
+                ? null
+                : DateTime.parse(row['last_focused_at']! as String).toUtc(),
           );
         })
         .toList(growable: false);
+  }
+
+  void updateSurfaceWindowState(
+    String surfaceId, {
+    CardPlacement? bounds,
+    DateTime? focusedAt,
+    String? monitorId,
+  }) {
+    _connection.execute(
+      '''
+      UPDATE surfaces SET
+        x = COALESCE(?, x),
+        y = COALESCE(?, y),
+        width = COALESCE(?, width),
+        height = COALESCE(?, height),
+        last_focused_at = COALESCE(?, last_focused_at),
+        monitor_id = COALESCE(?, monitor_id)
+      WHERE surface_id = ?
+      ''',
+      [
+        bounds?.x,
+        bounds?.y,
+        bounds?.width,
+        bounds?.height,
+        focusedAt?.toUtc().toIso8601String(),
+        monitorId,
+        surfaceId,
+      ],
+    );
   }
 
   void upsertInstance(CardInstance instance) {
@@ -437,6 +472,14 @@ class LocalDatabase {
           'ALTER TABLE card_installations ADD COLUMN key_id TEXT',
         );
         _connection.execute('PRAGMA user_version = 2');
+      });
+    }
+    if (schemaVersion < 3) {
+      _connection.transaction(() {
+        _connection.execute(
+          'ALTER TABLE surfaces ADD COLUMN last_focused_at TEXT',
+        );
+        _connection.execute('PRAGMA user_version = 3');
       });
     }
   }

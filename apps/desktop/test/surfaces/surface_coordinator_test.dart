@@ -57,6 +57,7 @@ void main() {
       onOverlayDisplayRequested: () async {
         displayModeRequests++;
       },
+      now: () => DateTime.utc(2026, 7, 12, 10),
     );
   });
 
@@ -199,6 +200,72 @@ void main() {
     expect(result, {'displayMode': true});
     expect(displayModeRequests, 1);
   });
+
+  test('persists detached window placement and last focus time', () async {
+    await coordinator.detach(
+      'instance-1',
+      const CardPlacement(x: 40, y: 50, width: 480, height: 320),
+    );
+
+    await coordinator.handleBridgeMessage(
+      SurfaceBridgeMessage.fromJson({
+        'type': 'placementChanged',
+        'windowId': 'window-1',
+        'instanceId': 'instance-1',
+        'payload': {
+          'x': 80,
+          'y': 90,
+          'width': 640,
+          'height': 480,
+          'monitorId': 'monitor-b',
+        },
+      }),
+    );
+    await coordinator.handleBridgeMessage(
+      SurfaceBridgeMessage.fromJson({
+        'type': 'focusChanged',
+        'windowId': 'window-1',
+        'instanceId': 'instance-1',
+        'payload': {'focused': true},
+      }),
+    );
+
+    final surface = database.listSurfaces().singleWhere(
+      (value) => value.id == 'detached-1',
+    );
+    expect(surface.bounds?.x, 80);
+    expect(surface.bounds?.width, 640);
+    expect(surface.monitorId, 'monitor-b');
+    expect(surface.lastFocusedAt, DateTime.utc(2026, 7, 12, 10));
+  });
+
+  test(
+    'moves orphaned overlay cards onto the visible primary display',
+    () async {
+      await coordinator.moveToOverlay(
+        'instance-1',
+        monitorId: 'removed-monitor',
+        placement: const CardPlacement(x: 900, y: 700, width: 500, height: 400),
+      );
+
+      await coordinator.reconcileDisplays(
+        availableMonitorIds: const {'primary-monitor'},
+        primaryMonitorId: 'primary-monitor',
+        primaryBounds: const CardPlacement(
+          x: 0,
+          y: 0,
+          width: 1024,
+          height: 768,
+        ),
+      );
+
+      final instance = database.listInstances().single;
+      expect(instance.surfaceId, 'overlay-primary-monitor');
+      expect(instance.placement.x, 524);
+      expect(instance.placement.y, 368);
+      expect(backend.closed, ['overlay-removed-monitor']);
+    },
+  );
 }
 
 const _instance = CardInstance(

@@ -250,4 +250,37 @@ void main() {
 
     expect(requested, isTrue);
   });
+
+  test('builds placement and focus messages for every mounted instance', () {
+    final arguments = SurfaceWindowArguments.tryParse(
+      jsonEncode({
+        'kind': 'surface',
+        'surfaceId': 'overlay-primary',
+        'surfaceType': 'overlay',
+        'ownerWindowId': 'main-window',
+        'alwaysOnTop': true,
+        'instanceIds': ['instance-1', 'instance-2'],
+      }),
+    )!;
+
+    final placement = buildSurfacePlacementMessages(
+      arguments,
+      'child-window',
+      const Rect.fromLTWH(20, 30, 800, 600),
+    );
+    final focus = buildSurfaceFocusMessages(
+      arguments,
+      'child-window',
+      focused: true,
+    );
+
+    expect(placement, hasLength(2));
+    expect(placement.last.type, SurfaceBridgeMessageType.placementChanged);
+    expect(placement.last.payload['width'], 800);
+    expect(focus.map((message) => message.instanceId), [
+      'instance-1',
+      'instance-2',
+    ]);
+    expect(focus.first.payload, {'focused': true});
+  });
 }

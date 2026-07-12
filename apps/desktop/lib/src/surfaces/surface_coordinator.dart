@@ -12,25 +12,46 @@ abstract interface class WindowBackend {
 }
 
 class SurfaceCoordinator {
-  const SurfaceCoordinator({
+  SurfaceCoordinator({
     required this.database,
     required this.windows,
     required this.newDetachedSurfaceId,
     this.onInstanceMoved,
     this.onOverlayDisplayRequested,
-  });
+    DateTime Function()? now,
+  }) : now = now ?? DateTime.now;
 
   final LocalDatabase database;
   final WindowBackend windows;
   final String Function() newDetachedSurfaceId;
   final void Function(CardInstance instance)? onInstanceMoved;
   final Future<void> Function()? onOverlayDisplayRequested;
+  final DateTime Function() now;
 
   Future<Object?> handleBridgeMessage(SurfaceBridgeMessage message) async {
+    final instance = _requireInstance(message.instanceId);
+    if (message.type == SurfaceBridgeMessageType.placementChanged) {
+      final placement = _placement(message.payload);
+      database.updateSurfaceWindowState(
+        instance.surfaceId,
+        bounds: placement.bounds,
+        monitorId: placement.monitorId,
+      );
+      return const {'persisted': true};
+    }
+    if (message.type == SurfaceBridgeMessageType.focusChanged) {
+      if (message.payload.keys.length != 1 ||
+          message.payload['focused'] is! bool) {
+        throw const FormatException('invalid focusChanged payload');
+      }
+      if (message.payload['focused'] == true) {
+        database.updateSurfaceWindowState(instance.surfaceId, focusedAt: now());
+      }
+      return const {'persisted': true};
+    }
     if (message.type != SurfaceBridgeMessageType.hostEvent) {
       throw const FormatException('unsupported surface host event');
     }
-    final instance = _requireInstance(message.instanceId);
     if (message.payload['event'] == 'overlayDisplayRequested') {
       if (!instance.surfaceId.startsWith('overlay-') ||
           onOverlayDisplayRequested == null) {
@@ -68,6 +89,51 @@ class SurfaceCoordinator {
       if (instanceIds.isNotEmpty) {
         await windows.ensureSurface(surface, instanceIds);
       }
+    }
+  }
+
+  Future<void> reconcileDisplays({
+    required Set<String> availableMonitorIds,
+    required String primaryMonitorId,
+    required CardPlacement primaryBounds,
+  }) async {
+    if (!availableMonitorIds.contains(primaryMonitorId)) {
+      throw StateError('primary monitor is not available');
+    }
+    final targetId = 'overlay-${_safeID(primaryMonitorId)}';
+    final targetSurface = CardSurface(
+      id: targetId,
+      type: SurfaceType.overlay,
+      monitorId: primaryMonitorId,
+      bounds: primaryBounds,
+      alwaysOnTop: true,
+    );
+    for (final surface in database.listSurfaces()) {
+      final monitorId = surface.monitorId;
+      if (surface.type != SurfaceType.overlay ||
+          monitorId == null ||
+          availableMonitorIds.contains(monitorId)) {
+        continue;
+      }
+      final allInstances = database.listInstances();
+      final orphaned = allInstances
+          .where((instance) => instance.surfaceId == surface.id)
+          .toList(growable: false);
+      final targetIds = allInstances
+          .where((instance) => instance.surfaceId == targetId)
+          .map((instance) => instance.instanceId)
+          .toList();
+      targetIds.addAll(orphaned.map((instance) => instance.instanceId));
+      await windows.ensureSurface(targetSurface, targetIds);
+      for (final instance in orphaned) {
+        database.moveInstanceToSurface(
+          surface: targetSurface,
+          instanceId: instance.instanceId,
+          placement: _constrain(instance.placement, primaryBounds),
+        );
+        _notifyMoved(instance.instanceId);
+      }
+      await windows.closeSurface(surface.id);
     }
   }
 
@@ -160,6 +226,54 @@ class SurfaceCoordinator {
     }
     throw StateError('card instance does not exist');
   }
+}
+
+({CardPlacement bounds, String? monitorId}) _placement(
+  Map<String, Object?> payload,
+) {
+  const keys = {'x', 'y', 'width', 'height', 'monitorId'};
+  if (payload.keys.toSet().difference(keys).isNotEmpty ||
+      !payload.keys.toSet().containsAll(const {'x', 'y', 'width', 'height'})) {
+    throw const FormatException('invalid placementChanged payload');
+  }
+  final x = payload['x'];
+  final y = payload['y'];
+  final width = payload['width'];
+  final height = payload['height'];
+  final monitorId = payload['monitorId'];
+  if (x is! num ||
+      y is! num ||
+      width is! num ||
+      height is! num ||
+      !x.isFinite ||
+      !y.isFinite ||
+      !width.isFinite ||
+      !height.isFinite ||
+      width <= 0 ||
+      height <= 0 ||
+      (monitorId != null && (monitorId is! String || monitorId.isEmpty))) {
+    throw const FormatException('invalid placementChanged payload');
+  }
+  return (
+    bounds: CardPlacement(
+      x: x.toDouble(),
+      y: y.toDouble(),
+      width: width.toDouble(),
+      height: height.toDouble(),
+    ),
+    monitorId: monitorId as String?,
+  );
+}
+
+CardPlacement _constrain(CardPlacement placement, CardPlacement visibleBounds) {
+  final width = placement.width.clamp(1, visibleBounds.width).toDouble();
+  final height = placement.height.clamp(1, visibleBounds.height).toDouble();
+  return CardPlacement(
+    x: placement.x.clamp(0, visibleBounds.width - width).toDouble(),
+    y: placement.y.clamp(0, visibleBounds.height - height).toDouble(),
+    width: width,
+    height: height,
+  );
 }
 
 String _safeID(String value) {

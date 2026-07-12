@@ -20,8 +20,8 @@ void main() {
       database.close();
     });
 
-    test('migrates a new database to schema version two', () {
-      expect(database.schemaVersion, 2);
+    test('migrates a new database to schema version three', () {
+      expect(database.schemaVersion, 3);
     });
 
     test('restores the immutable CardDefinition installation index', () {
@@ -53,12 +53,13 @@ void main() {
       database.upsertInstallation(_installation('version-1'));
       database.upsertSurface(_workspace());
       database.upsertSurface(
-        const CardSurface(
+        CardSurface(
           id: 'overlay-monitor-a',
           type: SurfaceType.overlay,
           monitorId: 'monitor-a',
           bounds: CardPlacement(x: 10, y: 20, width: 800, height: 600),
           alwaysOnTop: true,
+          lastFocusedAt: DateTime.utc(2026, 7, 12, 8, 30),
         ),
       );
       database.upsertInstance(_instance());
@@ -78,6 +79,27 @@ void main() {
       expect(overlay.monitorId, 'monitor-a');
       expect(overlay.bounds?.width, 800);
       expect(overlay.alwaysOnTop, isTrue);
+      expect(overlay.lastFocusedAt, DateTime.utc(2026, 7, 12, 8, 30));
+    });
+
+    test('updates window bounds and focus without replacing its identity', () {
+      database.upsertSurface(
+        const CardSurface(id: 'detached-1', type: SurfaceType.detached),
+      );
+
+      database.updateSurfaceWindowState(
+        'detached-1',
+        bounds: const CardPlacement(x: 40, y: 50, width: 640, height: 480),
+        focusedAt: DateTime.utc(2026, 7, 12, 9),
+        monitorId: 'monitor-b',
+      );
+
+      final surface = database.listSurfaces().single;
+      expect(surface.id, 'detached-1');
+      expect(surface.type, SurfaceType.detached);
+      expect(surface.bounds?.width, 640);
+      expect(surface.lastFocusedAt, DateTime.utc(2026, 7, 12, 9));
+      expect(surface.monitorId, 'monitor-b');
     });
 
     test('moves an instance and switches versions atomically', () {

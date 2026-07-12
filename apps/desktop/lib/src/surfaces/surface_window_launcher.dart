@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'surface_window.dart';
+import 'surface_bridge.dart';
 
 abstract final class SurfaceWindowLauncher {
   static Future<bool> tryLaunch() async {
@@ -45,9 +47,7 @@ abstract final class SurfaceWindowLauncher {
       }
     });
     await windowManager.ensureInitialized();
-    if (arguments.surfaceType == 'detached') {
-      windowManager.addListener(closeListener);
-    }
+    windowManager.addListener(closeListener);
     final overlay = arguments.surfaceType == 'overlay';
     final bounds = arguments.bounds;
     await windowManager.waitUntilReadyToShow(
@@ -102,8 +102,76 @@ class _SurfaceCloseListener with WindowListener {
 
   @override
   void onWindowClose() {
-    if (!_closing) {
+    if (arguments.surfaceType == 'detached' && !_closing) {
       unawaited(_requestDockAndClose());
+    }
+  }
+
+  @override
+  void onWindowFocus() {
+    unawaited(_sendFocus(focused: true));
+  }
+
+  @override
+  void onWindowBlur() {
+    unawaited(_sendFocus(focused: false));
+  }
+
+  @override
+  void onWindowMoved() {
+    unawaited(_sendPlacement());
+  }
+
+  @override
+  void onWindowResized() {
+    unawaited(_sendPlacement());
+  }
+
+  Future<void> _sendFocus({required bool focused}) async {
+    await _send(
+      buildSurfaceFocusMessages(
+        arguments,
+        controller.windowId,
+        focused: focused,
+      ),
+    );
+  }
+
+  Future<void> _sendPlacement() async {
+    final position = await windowManager.getPosition();
+    final size = await windowManager.getSize();
+    final bounds = position & size;
+    await _send(
+      buildSurfacePlacementMessages(
+        arguments,
+        controller.windowId,
+        bounds,
+        monitorId: await _monitorId(bounds),
+      ),
+    );
+  }
+
+  Future<String?> _monitorId(Rect windowBounds) async {
+    final center = windowBounds.center;
+    final displays = await screenRetriever.getAllDisplays();
+    for (final display in displays) {
+      final position = display.visiblePosition ?? Offset.zero;
+      final size = display.visibleSize ?? display.size;
+      if ((position & size).contains(center)) {
+        return display.id;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _send(Iterable<SurfaceBridgeMessage> messages) async {
+    final owner = WindowController.fromWindowId(arguments.ownerWindowId);
+    for (final message in messages) {
+      try {
+        await owner.invokeMethod<Object?>('surface.bridge', message.toJson());
+      } catch (_) {
+        // Window telemetry is best effort; the main engine remains authoritative.
+      }
     }
   }
 

@@ -21,6 +21,7 @@ class CardSurface {
     this.monitorId,
     this.bounds,
     this.alwaysOnTop = false,
+    this.lastFocusedAt,
   });
 
   final String id;
@@ -28,4 +29,5 @@ class CardSurface {
   final String? monitorId;
   final CardPlacement? bounds;
   final bool alwaysOnTop;
+  final DateTime? lastFocusedAt;
 }

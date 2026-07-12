@@ -208,6 +208,50 @@ SurfaceBridgeMessage buildOverlayDisplayRequest(
   );
 }
 
+List<SurfaceBridgeMessage> buildSurfacePlacementMessages(
+  SurfaceWindowArguments arguments,
+  String windowId,
+  Rect bounds, {
+  String? monitorId,
+}) {
+  if (bounds.width <= 0 || bounds.height <= 0) {
+    throw const FormatException('surface window bounds are invalid');
+  }
+  return List.unmodifiable(
+    arguments.instanceIds.map(
+      (instanceId) => SurfaceBridgeMessage(
+        type: SurfaceBridgeMessageType.placementChanged,
+        windowId: windowId,
+        instanceId: instanceId,
+        payload: {
+          'x': bounds.left,
+          'y': bounds.top,
+          'width': bounds.width,
+          'height': bounds.height,
+          if (monitorId != null) 'monitorId': monitorId,
+        },
+      ),
+    ),
+  );
+}
+
+List<SurfaceBridgeMessage> buildSurfaceFocusMessages(
+  SurfaceWindowArguments arguments,
+  String windowId, {
+  required bool focused,
+}) {
+  return List.unmodifiable(
+    arguments.instanceIds.map(
+      (instanceId) => SurfaceBridgeMessage(
+        type: SurfaceBridgeMessageType.focusChanged,
+        windowId: windowId,
+        instanceId: instanceId,
+        payload: {'focused': focused},
+      ),
+    ),
+  );
+}
+
 class SurfaceWindowModel extends ChangeNotifier {
   SurfaceWindowModel(this.arguments)
     : _instanceIds = List.of(arguments.instanceIds),

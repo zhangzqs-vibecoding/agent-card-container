@@ -7,6 +7,7 @@ import '../agent_studio/agent_studio_controller.dart';
 import '../adapters/desktop_multi_window_driver.dart';
 import '../adapters/hotkey_overlay_restore_shortcut.dart';
 import '../adapters/multi_window_backend.dart';
+import '../adapters/screen_retriever_display_monitor.dart';
 import '../artifacts/artifact_crypto.dart';
 import '../artifacts/artifact_installer.dart';
 import '../capabilities/capability.dart';
@@ -43,6 +44,7 @@ class DesktopRuntime {
     required this.surfaceCoordinator,
     required this.windowBackend,
     required this.overlayModeController,
+    required this.displayMonitor,
     this.cloudClient,
     this.agentStudioController,
     this.cardCatalogController,
@@ -56,6 +58,7 @@ class DesktopRuntime {
   final SurfaceCoordinator surfaceCoordinator;
   final MultiWindowBackend windowBackend;
   final OverlayModeController overlayModeController;
+  final ScreenRetrieverDisplayMonitor displayMonitor;
   final CloudApiClient? cloudClient;
   final AgentStudioController? agentStudioController;
   final CardCatalogController? cardCatalogController;
@@ -70,6 +73,7 @@ class DesktopRuntime {
     await windowBackend.initializeBridge();
     await overlayModeController.initialize();
     await surfaceCoordinator.restorePersistedSurfaces();
+    await displayMonitor.start();
   }
 
   Future<void> close() async {
@@ -81,6 +85,7 @@ class DesktopRuntime {
     cardCatalogController?.dispose();
     workspaceController.dispose();
     cloudClient?.close();
+    displayMonitor.dispose();
     await overlayModeController.dispose();
     await runtimeServer.close();
     database.close();
@@ -193,6 +198,7 @@ abstract final class DesktopBootstrap {
         },
         onOverlayDisplayRequested: overlayModeController.enterDisplayMode,
       );
+      final displayMonitor = ScreenRetrieverDisplayMonitor(surfaceCoordinator);
       final cloud = _cloudConfiguration(
         processEnvironment,
         root,
@@ -209,6 +215,7 @@ abstract final class DesktopBootstrap {
         surfaceCoordinator: surfaceCoordinator,
         windowBackend: windowBackend,
         overlayModeController: overlayModeController,
+        displayMonitor: displayMonitor,
         cloudClient: cloud?.client,
         agentStudioController: cloud?.controller,
         cardCatalogController: cloud?.catalog,
