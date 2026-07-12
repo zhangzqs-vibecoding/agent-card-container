@@ -145,7 +145,12 @@ void main() {
     final model = SurfaceWindowModel(arguments);
     addTearDown(model.dispose);
 
-    await tester.pumpWidget(SurfaceWindowApp(model: model));
+    await tester.pumpWidget(
+      SurfaceWindowApp(
+        model: model,
+        webViewPortFactory: () => InAppWebViewPort(platformSupported: false),
+      ),
+    );
 
     expect(find.text('独立窗口卡片'), findsOneWidget);
     expect(find.textContaining('正在挂载'), findsNothing);
