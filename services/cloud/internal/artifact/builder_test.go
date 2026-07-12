@@ -8,6 +8,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -78,6 +81,43 @@ func TestBuilderRejectsDefinitionAndFileSetMismatch(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("Build() accepted missing entrypoint")
+	}
+}
+
+func TestEd25519FixtureMatchesGoCanonicalSigner(t *testing.T) {
+	t.Parallel()
+
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	path := filepath.Join(
+		filepath.Dir(file),
+		"..", "..", "..", "..",
+		"contracts", "card", "fixtures", "ed25519-signature-vector.json",
+	)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vector struct {
+		Message   string `json:"message"`
+		PublicKey string `json:"publicKey"`
+		Signature string `json:"signature"`
+	}
+	if err := json.Unmarshal(data, &vector); err != nil {
+		t.Fatal(err)
+	}
+	publicKey, err := base64.RawURLEncoding.DecodeString(vector.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(vector.Signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ed25519.Verify(publicKey, []byte(vector.Message), signature) {
+		t.Fatal("shared Ed25519 fixture failed Go verification")
 	}
 }
 

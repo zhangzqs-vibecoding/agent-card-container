@@ -1,0 +1,5 @@
+{
+  "message": "{\"files\":[{\"path\":\"payload/native.json\",\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"size\":128}],\"keyId\":\"fixture-key\",\"title\":\"离线卡片\"}",
+  "publicKey": "hilOjfTuZefyGEsB-rQ-YtpVOxmSwMsKMR96XO3I45M",
+  "signature": "sRgmRPPw57yoWwXpo3GYpeUlZAV82PsONnX9a-uFqO00t7FOsnFW6zt8nBRiJ2J7IY7eDWUlpBBlyUjoA0t4Cg"
+}
