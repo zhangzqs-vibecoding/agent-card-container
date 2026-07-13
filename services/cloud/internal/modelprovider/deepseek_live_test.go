@@ -30,9 +30,14 @@ func TestDeepSeekLiveGeneratesValidNativeCard(t *testing.T) {
 
 	result, err := codingAgent.Generate(ctx, agent.Request{
 		SessionID: "gen_deepseek_live",
-		Prompt:    "生成一个完全离线的番茄钟卡片，有开始、暂停和重置按钮",
-		Target:    generation.TargetNative,
-		Locale:    "zh-CN",
+		Requirement: generation.RequirementSnapshot{
+			InitialPrompt:       "生成一个完全离线的番茄钟卡片，有开始、暂停和重置按钮",
+			AdditionalMessages:  []generation.Message{},
+			Target:              generation.TargetNative,
+			Locale:              "zh-CN",
+			AllowedCapabilities: []string{"storage"},
+			ConfirmedAt:         time.Now().UTC(),
+		},
 	})
 	if err != nil {
 		t.Fatalf("DeepSeek live generation failed: %v", err)

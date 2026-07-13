@@ -26,6 +26,52 @@ const nativeCard = decoder.decodeNativeCard(
 assert.equal(nativeCard.schemaVersion, 1);
 assert.equal(nativeCard.root.type, 'Container');
 
+const nativeCatalog = await readJson(
+  'contracts', 'card', 'native-card-catalog.v1.json',
+);
+assert.equal(nativeCatalog.limits.maxActionsPerEvent, 64);
+assert.deepEqual(decoder.nativeCatalogSemantics, nativeCatalog);
+assert.deepEqual(
+  Object.keys(decoder.nativeCatalogSemantics.components).sort(),
+  Object.keys(nativeCatalog.components).sort(),
+);
+assert.deepEqual(
+  Object.keys(decoder.nativeCatalogSemantics.actions).sort(),
+  Object.keys(nativeCatalog.actions).sort(),
+);
+assert.deepEqual(
+  Object.keys(decoder.nativeCatalogSemantics.expressions).sort(),
+  Object.keys(nativeCatalog.expressions).sort(),
+);
+for (const [type, rule] of Object.entries(nativeCatalog.components)) {
+  assert.deepEqual(
+	Object.keys(decoder.nativeCatalogSemantics.components[type].allowedProps).sort(),
+	Object.keys(rule.allowedProps).sort(),
+  );
+  assert.deepEqual(
+	[...decoder.nativeCatalogSemantics.components[type].allowedEvents].sort(),
+    [...rule.allowedEvents].sort(),
+  );
+}
+
+const action = {
+  type: 'capability.invoke',
+  method: 'notification.show',
+};
+const nativeCardWithActions = (count) => ({
+  schemaVersion: 1,
+  initialState: {},
+  root: {
+    id: 'root',
+    type: 'Button',
+    events: {
+      onPressed: Array.from({ length: count }, () => action),
+    },
+  },
+});
+assert.doesNotThrow(() => decoder.decodeNativeCard(nativeCardWithActions(64)));
+assert.throws(() => decoder.decodeNativeCard(nativeCardWithActions(65)), /actions|event|64/);
+
 const rpc = decoder.decodeLocalRpcContract(
   await readJson('contracts', 'local-rpc', 'contract.json'),
 );
@@ -40,6 +86,7 @@ assert.throws(() => decoder.decodeCardDefinition({
 }), /runtime/);
 assert.throws(() => decoder.decodeNativeCard({
   schemaVersion: 1,
+  initialState: {},
   root: { id: 'root', type: 'WebView' },
 }), /component/);
 assert.throws(() => decoder.decodeLocalRpcContract({

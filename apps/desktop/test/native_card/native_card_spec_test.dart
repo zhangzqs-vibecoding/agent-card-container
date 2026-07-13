@@ -72,6 +72,35 @@ void main() {
       expect(restored.initialState, original.initialState);
       expect(restored.root.toJson(), original.root.toJson());
     });
+
+    test('round trips value-carrying remove and startTimer actions', () {
+      final remove = NativeAction.fromJson({
+        'type': 'remove',
+        'path': 'items',
+        'value': 'done',
+      });
+      final startTimer = NativeAction.fromJson({
+        'type': 'startTimer',
+        'path': 'remaining',
+        'value': {'intervalMs': 1000, 'delta': -1, 'stopAt': 0},
+      });
+
+      expect(remove.toJson()['value'], 'done');
+      expect(startTimer.toJson()['value'], {
+        'intervalMs': 1000,
+        'delta': -1,
+        'stopAt': 0,
+      });
+    });
+
+    test('omits the optional increment value when it is absent', () {
+      final increment = NativeAction.fromJson({
+        'type': 'increment',
+        'path': 'count',
+      });
+
+      expect(increment.toJson(), {'type': 'increment', 'path': 'count'});
+    });
   });
 }
 

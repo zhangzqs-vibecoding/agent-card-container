@@ -23,9 +23,8 @@ func TestCodingAgentLogsModelLifecycleWithoutContent(t *testing.T) {
 	)
 
 	_, err := codingAgent.Generate(context.Background(), agent.Request{
-		SessionID: "session-01",
-		Prompt:    "prompt-secret-value",
-		Target:    generation.TargetNative,
+		SessionID:   "session-01",
+		Requirement: confirmedRequirement("prompt-secret-value", generation.TargetNative, "zh-CN"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -53,9 +52,8 @@ func TestCodingAgentLogsSandboxLifecycleForWebBuild(t *testing.T) {
 	)
 
 	_, err := codingAgent.Generate(context.Background(), agent.Request{
-		SessionID: "session-web",
-		Prompt:    "画一个自由画板",
-		Target:    generation.TargetWeb,
+		SessionID:   "session-web",
+		Requirement: confirmedRequirement("画一个自由画板", generation.TargetWeb, "zh-CN"),
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -15,10 +15,8 @@ import (
 )
 
 type Request struct {
-	SessionID string
-	Prompt    string
-	Target    generation.Target
-	Locale    string
+	SessionID   string
+	Requirement generation.RequirementSnapshot
 }
 
 type Result struct {
@@ -79,12 +77,13 @@ func NewCodingAgent(
 }
 
 func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (Result, error) {
-	decision, err := codingAgent.selector.Select(request.Prompt, request.Target)
+	prompt := requirementPrompt(request.Requirement)
+	decision, err := codingAgent.selector.Select(prompt, request.Requirement.Target)
 	if err != nil {
 		return Result{}, err
 	}
 	if decision.Runtime == RuntimeWeb {
-		return codingAgent.generateWeb(ctx, request, decision)
+		return codingAgent.generateWeb(ctx, request, prompt, decision)
 	}
 	var validationError string
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -97,8 +96,8 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 		)
 		response, providerErr := codingAgent.provider.Generate(ctx, modelprovider.Request{
 			SessionID:       request.SessionID,
-			Prompt:          request.Prompt,
-			Locale:          request.Locale,
+			Prompt:          prompt,
+			Locale:          request.Requirement.Locale,
 			Runtime:         string(decision.Runtime),
 			Attempt:         attempt,
 			ValidationError: validationError,
@@ -121,7 +120,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 			"attempt", attempt,
 			"durationMs", time.Since(startedAt).Milliseconds(),
 		)
-		if validateErr := codingAgent.validator.Validate(response.Content); validateErr == nil {
+		if validateErr := codingAgent.validator.Validate(response.Content, request.Requirement.AllowedCapabilities...); validateErr == nil {
 			return Result{
 				Runtime:  decision.Runtime,
 				Reason:   decision.Reason,
@@ -138,6 +137,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 func (codingAgent *CodingAgent) generateWeb(
 	ctx context.Context,
 	request Request,
+	prompt string,
 	decision Decision,
 ) (Result, error) {
 	if codingAgent.webBuilder == nil {
@@ -154,8 +154,8 @@ func (codingAgent *CodingAgent) generateWeb(
 		)
 		response, err := codingAgent.provider.Generate(ctx, modelprovider.Request{
 			SessionID:       request.SessionID,
-			Prompt:          request.Prompt,
-			Locale:          request.Locale,
+			Prompt:          prompt,
+			Locale:          request.Requirement.Locale,
 			Runtime:         string(decision.Runtime),
 			Attempt:         attempt,
 			ValidationError: validationError,
@@ -216,6 +216,34 @@ func (codingAgent *CodingAgent) generateWeb(
 		}, nil
 	}
 	return Result{}, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
+}
+
+func requirementPrompt(requirement generation.RequirementSnapshot) string {
+	parts := []string{
+		"Initial requirement:",
+		requirement.InitialPrompt,
+		"Additional requirements:",
+	}
+	if len(requirement.AdditionalMessages) == 0 {
+		parts = append(parts, "(none)")
+	} else {
+		for index, message := range requirement.AdditionalMessages {
+			parts = append(parts, fmt.Sprintf("%d. %s", index+1, message.Content))
+		}
+	}
+	parts = append(parts,
+		"Target: "+string(requirement.Target),
+		"Locale: "+requirement.Locale,
+		"Allowed capabilities:",
+	)
+	if len(requirement.AllowedCapabilities) == 0 {
+		parts = append(parts, "(none)")
+	} else {
+		for _, capability := range requirement.AllowedCapabilities {
+			parts = append(parts, "- "+capability)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func decodeWebSource(content string) (map[string]string, error) {

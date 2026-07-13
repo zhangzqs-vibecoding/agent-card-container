@@ -3,7 +3,9 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/agent"
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
@@ -48,6 +50,65 @@ func TestSelectorRejectsForbiddenAndImpossibleForcedNativeRequirements(t *testin
 	}
 }
 
+func TestCodingAgentUsesConfirmedRequirementSnapshot(t *testing.T) {
+	t.Parallel()
+
+	confirmedAt := time.Date(2026, 7, 13, 12, 34, 56, 0, time.UTC)
+	provider := &fakeProvider{outputs: []string{
+		`{"files":{"src/card.tsx":"export function Card(){return <canvas/>}"}}`,
+	}}
+	codingAgent := agent.NewCodingAgent(
+		provider,
+		agent.NewNativeValidator(),
+		agent.WithWebBuilder(&fakeWebBuilder{output: map[string][]byte{
+			"index.html": []byte("<canvas></canvas>"),
+		}}),
+	)
+
+	result, err := codingAgent.Generate(context.Background(), agent.Request{
+		SessionID: "gen_snapshot",
+		Requirement: generation.RequirementSnapshot{
+			InitialPrompt: "做一个离线文本卡片",
+			AdditionalMessages: []generation.Message{
+				{Role: "user", Content: "补充：改成自由绘制画板", CreatedAt: confirmedAt.Add(-time.Minute)},
+			},
+			Target:              generation.TargetAuto,
+			Locale:              "zh-TW",
+			AllowedCapabilities: []string{"storage"},
+			ConfirmedAt:         confirmedAt,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if result.Runtime != agent.RuntimeWeb {
+		t.Fatalf("runtime = %q, want web selected from complete requirement", result.Runtime)
+	}
+	if len(provider.requests) != 1 {
+		t.Fatalf("provider calls = %d, want 1", len(provider.requests))
+	}
+	request := provider.requests[0]
+	expectedPrompt := strings.Join([]string{
+		"Initial requirement:",
+		"做一个离线文本卡片",
+		"Additional requirements:",
+		"1. 补充：改成自由绘制画板",
+		"Target: auto",
+		"Locale: zh-TW",
+		"Allowed capabilities:",
+		"- storage",
+	}, "\n")
+	if request.Prompt != expectedPrompt {
+		t.Fatalf("provider prompt = %q, want %q", request.Prompt, expectedPrompt)
+	}
+	if request.Locale != "zh-TW" {
+		t.Fatalf("provider locale = %q, want zh-TW", request.Locale)
+	}
+	if strings.Contains(request.Prompt, confirmedAt.Format(time.RFC3339)) {
+		t.Fatalf("confirmed timestamp leaked into provider prompt: %q", request.Prompt)
+	}
+}
+
 func TestCodingAgentRepairsInvalidNativeOutputAtMostThreeTimes(t *testing.T) {
 	t.Parallel()
 
@@ -58,10 +119,8 @@ func TestCodingAgentRepairsInvalidNativeOutputAtMostThreeTimes(t *testing.T) {
 	codingAgent := agent.NewCodingAgent(provider, agent.NewNativeValidator())
 
 	result, err := codingAgent.Generate(context.Background(), agent.Request{
-		SessionID: "gen_01",
-		Prompt:    "做一个离线文本卡片",
-		Target:    generation.TargetAuto,
-		Locale:    "zh-CN",
+		SessionID:   "gen_01",
+		Requirement: confirmedRequirement("做一个离线文本卡片", generation.TargetAuto, "zh-CN"),
 	})
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
@@ -81,9 +140,8 @@ func TestCodingAgentStopsAfterThreeInvalidOutputs(t *testing.T) {
 	codingAgent := agent.NewCodingAgent(provider, agent.NewNativeValidator())
 
 	_, err := codingAgent.Generate(context.Background(), agent.Request{
-		SessionID: "gen_01",
-		Prompt:    "做一个卡片",
-		Target:    generation.TargetNative,
+		SessionID:   "gen_01",
+		Requirement: confirmedRequirement("做一个卡片", generation.TargetNative, "zh-CN"),
 	})
 
 	if !errors.Is(err, agent.ErrValidationFailed) {
@@ -91,6 +149,24 @@ func TestCodingAgentStopsAfterThreeInvalidOutputs(t *testing.T) {
 	}
 	if len(provider.requests) != 3 {
 		t.Fatalf("provider calls = %d, want 3", len(provider.requests))
+	}
+}
+
+func TestCodingAgentValidatesNativeCapabilitiesAgainstSnapshot(t *testing.T) {
+	t.Parallel()
+
+	provider := &fakeProvider{outputs: []string{
+		`{"schemaVersion":1,"initialState":{},"root":{"id":"root","type":"Button","events":{"onPressed":[{"type":"capability.invoke","method":"notification.show","params":{"body":"done"}}]}}}`,
+	}}
+	codingAgent := agent.NewCodingAgent(provider, agent.NewNativeValidator())
+	requirement := confirmedRequirement("完成后通知我", generation.TargetNative, "zh-CN")
+	requirement.AllowedCapabilities = []string{"notification.show"}
+
+	if _, err := codingAgent.Generate(context.Background(), agent.Request{
+		SessionID:   "gen_capability",
+		Requirement: requirement,
+	}); err != nil {
+		t.Fatalf("Generate() error = %v", err)
 	}
 }
 
@@ -113,10 +189,8 @@ func TestCodingAgentBuildsWebOutputOnlyThroughSandbox(t *testing.T) {
 	)
 
 	result, err := codingAgent.Generate(context.Background(), agent.Request{
-		SessionID: "gen_web",
-		Prompt:    "做一个自由绘制的离线画板",
-		Target:    generation.TargetAuto,
-		Locale:    "zh-CN",
+		SessionID:   "gen_web",
+		Requirement: confirmedRequirement("做一个自由绘制的离线画板", generation.TargetAuto, "zh-CN"),
 	})
 	if err != nil {
 		t.Fatalf("Generate() error = %v", err)
@@ -142,9 +216,8 @@ func TestCodingAgentRejectsWebSourceOutsideWhitelist(t *testing.T) {
 	)
 
 	_, err := codingAgent.Generate(context.Background(), agent.Request{
-		SessionID: "gen_web",
-		Prompt:    "做一个离线画板",
-		Target:    generation.TargetWeb,
+		SessionID:   "gen_web",
+		Requirement: confirmedRequirement("做一个离线画板", generation.TargetWeb, "zh-CN"),
 	})
 	if !errors.Is(err, agent.ErrValidationFailed) {
 		t.Fatalf("Generate() error = %v, want ErrValidationFailed", err)
@@ -173,4 +246,19 @@ func (provider *fakeProvider) Generate(_ context.Context, request modelprovider.
 		index = len(provider.outputs) - 1
 	}
 	return modelprovider.Response{Content: provider.outputs[index]}, nil
+}
+
+func confirmedRequirement(
+	prompt string,
+	target generation.Target,
+	locale string,
+) generation.RequirementSnapshot {
+	return generation.RequirementSnapshot{
+		InitialPrompt:       prompt,
+		AdditionalMessages:  []generation.Message{},
+		Target:              target,
+		Locale:              locale,
+		AllowedCapabilities: []string{"storage"},
+		ConfirmedAt:         time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC),
+	}
 }

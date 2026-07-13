@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentcard.dev/contracts/card/native-card-catalog.schema.json",
+  "title": "AgentCard NativeCard semantic catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "limits",
+    "components",
+    "actions",
+    "expressions",
+    "capabilityMethods",
+    "unsupported"
+  ],
+  "properties": {
+    "$schema": {"type": "string", "minLength": 1},
+    "version": {"const": 1},
+    "limits": {"$ref": "#/$defs/limits"},
+    "components": {
+      "type": "object",
+      "minProperties": 22,
+      "maxProperties": 22,
+      "additionalProperties": {"$ref": "#/$defs/component"}
+    },
+    "actions": {
+      "type": "object",
+      "minProperties": 8,
+      "maxProperties": 8,
+      "additionalProperties": {"$ref": "#/$defs/action"}
+    },
+    "expressions": {
+      "type": "object",
+      "minProperties": 14,
+      "maxProperties": 14,
+      "additionalProperties": {"$ref": "#/$defs/expression"}
+    },
+    "capabilityMethods": {
+      "type": "object",
+      "minProperties": 18,
+      "maxProperties": 18,
+      "additionalProperties": {"$ref": "#/$defs/capabilityMethod"}
+    },
+    "unsupported": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+	  "required": ["maxDepth", "maxNodes", "maxChildrenPerNode", "maxActionsPerEvent", "maxExpressionDepth", "maxDataDepth", "maxDataNodes", "maxContainerItems", "maxContentBytes"],
+      "properties": {
+        "maxDepth": {"type": "integer", "minimum": 1},
+        "maxNodes": {"type": "integer", "minimum": 1},
+		"maxChildrenPerNode": {"type": "integer", "minimum": 1},
+		"maxActionsPerEvent": {"type": "integer", "minimum": 1},
+		"maxExpressionDepth": {"type": "integer", "minimum": 1},
+		"maxDataDepth": {"type": "integer", "minimum": 1},
+		"maxDataNodes": {"type": "integer", "minimum": 1},
+		"maxContainerItems": {"type": "integer", "minimum": 1},
+		"maxContentBytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "valueRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["any", "string", "number", "integer", "boolean", "stringList", "numberList", "object", "timerConfiguration"]
+        },
+        "binding": {"type": "boolean"},
+		"enum": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+		  "items": {"type": "string"}
+		},
+		"minimum": {"type": "number"},
+		"maximum": {"type": "number"},
+		"minLength": {"type": "integer", "minimum": 0},
+		"pattern": {"type": "string", "minLength": 1},
+		"uniqueItems": {"type": "boolean"}
+	  }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowedProps", "requiredProps", "allowedEvents"],
+      "properties": {
+        "allowedProps": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/valueRule"}
+        },
+        "requiredProps": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "allowedEvents": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requiredFields", "optionalFields"],
+      "properties": {
+        "requiredFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["path", "value", "method", "params"]}
+        },
+        "optionalFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["path", "value", "method", "params"]}
+        },
+        "valueRule": {"$ref": "#/$defs/valueRule"}
+      }
+    },
+    "expression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minArgs", "argumentType", "resultType"],
+      "properties": {
+        "minArgs": {"type": "integer", "minimum": 0},
+        "maxArgs": {"type": "integer", "minimum": 1},
+        "argumentType": {"enum": ["any", "number", "boolean"]},
+        "resultType": {"enum": ["any", "number", "boolean", "string"]},
+		"constraint": {"enum": ["nonNegative", "nonZeroDivisor"]}
+      }
+    },
+    "capabilityMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifestCapability", "nativeSupported"],
+      "properties": {
+        "manifestCapability": {"type": ["string", "null"]},
+        "nativeSupported": {"type": "boolean"},
+        "unsupportedReason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

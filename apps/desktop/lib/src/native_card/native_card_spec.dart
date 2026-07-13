@@ -1,3 +1,5 @@
+import 'native_card_catalog_generated.dart';
+
 enum NativeComponentType {
   container,
   row,
@@ -44,17 +46,26 @@ class NativeAction {
   });
 
   factory NativeAction.fromJson(Map<String, Object?> json) {
-    _rejectUnknown(json, const {
+    final wireType = _requiredString(json, 'type');
+    final requiredFields = nativeCatalogActionRequiredFields[wireType];
+    final optionalFields = nativeCatalogActionOptionalFields[wireType];
+    if (requiredFields == null || optionalFields == null) {
+      throw FormatException('unknown native action: $wireType');
+    }
+    _rejectUnknown(json, {
       'type',
-      'path',
-      'value',
-      'method',
-      'params',
+      ...requiredFields,
+      ...optionalFields,
     }, 'action');
-    final type = _actionType(_requiredString(json, 'type'));
+    for (final field in requiredFields) {
+      if (!json.containsKey(field)) {
+        throw FormatException('$wireType action requires $field');
+      }
+    }
+    final type = _actionType(wireType);
     final path = _optionalString(json, 'path');
     final method = _optionalString(json, 'method');
-    final params = json['params'] == null
+    final params = !json.containsKey('params')
         ? const <String, Object?>{}
         : _object(json['params'], 'action.params');
 
@@ -83,10 +94,15 @@ class NativeAction {
   final Map<String, Object?> params;
 
   Map<String, Object?> toJson() {
+    final wireType = _actionWireName(type);
+    final valueRequired = nativeCatalogActionRequiredFields[wireType]!.contains(
+      'value',
+    );
     return {
-      'type': _actionWireName(type),
+      'type': wireType,
       if (path != null) 'path': path,
-      if (_actionCarriesValue(type)) 'value': value,
+      if (_actionCarriesValue(type) && (valueRequired || value != null))
+        'value': value,
       if (method != null) 'method': method,
       if (params.isNotEmpty) 'params': params,
     };
@@ -227,6 +243,24 @@ NativeNode _parseNode(
     'events',
     'children',
   }, 'node');
+  final id = _requiredString(json, 'id');
+  final wireType = _requiredString(json, 'type');
+  final type = _componentType(wireType);
+  final allowedProps = nativeCatalogComponentProps[wireType];
+  final requiredProps = nativeCatalogComponentRequiredProps[wireType];
+  final allowedEvents = nativeCatalogComponentEvents[wireType];
+  if (allowedProps == null || requiredProps == null || allowedEvents == null) {
+    throw FormatException('unknown native component: $wireType');
+  }
+  final props = json['props'] == null
+      ? const <String, Object?>{}
+      : _object(json['props'], 'node.props');
+  _rejectUnknown(props, allowedProps, '$wireType props');
+  for (final prop in requiredProps) {
+    if (!props.containsKey(prop)) {
+      throw FormatException('$wireType requires prop $prop');
+    }
+  }
   final childrenValue = json['children'];
   final childMaps = childrenValue == null
       ? const <Map<String, Object?>>[]
@@ -239,8 +273,16 @@ NativeNode _parseNode(
   final rawEvents = json['events'];
   if (rawEvents != null) {
     for (final entry in _object(rawEvents, 'node.events').entries) {
+      if (!allowedEvents.contains(entry.key)) {
+        throw FormatException('$wireType does not support event ${entry.key}');
+      }
       if (entry.value is! List) {
         throw FormatException('event ${entry.key} must be an array');
+      }
+      if ((entry.value! as List).length > nativeCatalogMaxActionsPerEvent) {
+        throw FormatException(
+          'event ${entry.key} exceeds $nativeCatalogMaxActionsPerEvent actions',
+        );
       }
       events[entry.key] = List.unmodifiable(
         (entry.value! as List).map(
@@ -251,13 +293,9 @@ NativeNode _parseNode(
   }
 
   return NativeNode(
-    id: _requiredString(json, 'id'),
-    type: _componentType(_requiredString(json, 'type')),
-    props: Map.unmodifiable(
-      json['props'] == null
-          ? const <String, Object?>{}
-          : _object(json['props'], 'node.props'),
-    ),
+    id: id,
+    type: type,
+    props: Map.unmodifiable(props),
     events: Map.unmodifiable(events),
     children: List.unmodifiable(
       childMaps.map(
@@ -365,10 +403,10 @@ bool _actionCarriesValue(NativeActionType type) {
   return switch (type) {
     NativeActionType.set ||
     NativeActionType.increment ||
-    NativeActionType.append => true,
-    NativeActionType.toggle ||
+    NativeActionType.append ||
     NativeActionType.remove ||
-    NativeActionType.startTimer ||
+    NativeActionType.startTimer => true,
+    NativeActionType.toggle ||
     NativeActionType.stopTimer ||
     NativeActionType.capabilityInvoke => false,
   };

@@ -63,11 +63,18 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
 	}
+	if session.ConfirmedRequirement == nil {
+		return Outcome{}, worker.fail(
+			ctx,
+			job,
+			"GENERATION_REQUIREMENTS_MISSING",
+			fmt.Errorf("confirmed requirement snapshot is missing"),
+		)
+	}
+	requirement := cloneRequirementSnapshot(*session.ConfirmedRequirement)
 	result, err := worker.config.Agent.Generate(ctx, agent.Request{
-		SessionID: session.ID,
-		Prompt:    session.Prompt,
-		Target:    session.Target,
-		Locale:    session.Locale,
+		SessionID:   session.ID,
+		Requirement: requirement,
 	})
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "VALIDATION_FAILED", err)
@@ -109,14 +116,14 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 		DisplayVersion:     "1.0.0",
 		Runtime:            runtime,
 		StateSchemaVersion: 1,
-		Title:              titleFromPrompt(session.Prompt),
-		Description:        session.Summary.Goal,
+		Title:              titleFromPrompt(requirement.InitialPrompt),
+		Description:        descriptionFromRequirement(requirement),
 		Entrypoint:         entrypoint,
 		CatalogVersion:     catalogVersion,
 		MinSize:            contracts.Size{Width: 240, Height: 160},
 		PreferredSize:      contracts.Size{Width: 360, Height: 240},
 		MaxSize:            contracts.Size{Width: 1200, Height: 900},
-		Capabilities:       []string{"storage", "window.manageSelf"},
+		Capabilities:       append([]string(nil), requirement.AllowedCapabilities...),
 		NetworkPolicy:      contracts.NetworkPolicy{Mode: "none", Domains: []string{}},
 		CreatedAt:          now,
 	}
@@ -183,6 +190,25 @@ func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
 		SessionID: session.ID,
 		VersionID: version.VersionID,
 	}, nil
+}
+
+func cloneRequirementSnapshot(requirement generation.RequirementSnapshot) generation.RequirementSnapshot {
+	requirement.AdditionalMessages = append([]generation.Message(nil), requirement.AdditionalMessages...)
+	requirement.AllowedCapabilities = append([]string(nil), requirement.AllowedCapabilities...)
+	return requirement
+}
+
+func descriptionFromRequirement(requirement generation.RequirementSnapshot) string {
+	parts := make([]string, 0, len(requirement.AdditionalMessages)+1)
+	if initialPrompt := strings.TrimSpace(requirement.InitialPrompt); initialPrompt != "" {
+		parts = append(parts, initialPrompt)
+	}
+	for _, message := range requirement.AdditionalMessages {
+		if content := strings.TrimSpace(message.Content); content != "" {
+			parts = append(parts, content)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func (worker *Worker) fail(ctx context.Context, job *jobs.Job, code string, cause error) error {

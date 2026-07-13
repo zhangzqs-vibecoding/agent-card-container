@@ -1,3 +1,5 @@
+import 'native_card_catalog_generated.dart';
+
 class NativeCardEvaluationException implements Exception {
   const NativeCardEvaluationException(this.message);
 
@@ -28,10 +30,27 @@ class NativeExpressionEvaluator {
       return _evaluate(expression['expr'], state, depth + 1);
     }
 
+    if (expression.length != 2 ||
+        !expression.containsKey('op') ||
+        !expression.containsKey('args')) {
+      return expression;
+    }
     final operation = expression['op'];
     final rawArguments = expression['args'];
     if (operation is! String || rawArguments is! List) {
       return expression;
+    }
+    final arity = nativeCatalogExpressionArity[operation];
+    if (arity == null) {
+      throw NativeCardEvaluationException(
+        'unknown expression operation: $operation',
+      );
+    }
+    if (rawArguments.length < arity.min ||
+        (arity.max != null && rawArguments.length > arity.max!)) {
+      throw NativeCardEvaluationException(
+        '$operation has invalid operand count',
+      );
     }
     final arguments = rawArguments
         .map((item) => _evaluate(item, state, depth + 1))

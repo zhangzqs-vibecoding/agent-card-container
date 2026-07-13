@@ -5,6 +5,16 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 OUTPUT=$(mktemp -d)
 trap 'rm -rf "$OUTPUT"' EXIT
 
+(
+  cd "$ROOT/services/cloud"
+  go run ./cmd/native-context-gen -check
+)
+
+(
+  cd "$ROOT/apps/desktop"
+  flutter test test/native_card/native_card_catalog_compatibility_test.dart
+)
+
 "$ROOT/tooling/codecard-template/node_modules/.bin/tsc" \
   --strict \
   --target ES2022 \

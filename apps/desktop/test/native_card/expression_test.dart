@@ -95,6 +95,16 @@ void main() {
       );
     });
 
+    test('treats maps with extra expression fields as ordinary values', () {
+      final value = <String, Object?>{
+        'op': 'add',
+        'args': [1],
+        'extra': true,
+      };
+
+      expect(evaluator.evaluate(value, state), same(value));
+    });
+
     test('rejects expression recursion beyond 32', () {
       Object? expression = 1;
       for (var index = 0; index < 33; index++) {
