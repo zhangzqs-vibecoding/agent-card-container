@@ -35,6 +35,7 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	model := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(writer).Encode(map[string]any{
 			"choices": []any{map[string]any{
+				"finish_reason": "stop",
 				"message": map[string]any{
 					"role":    "assistant",
 					"content": `{"schemaVersion":1,"initialState":{"title":"持久化"},"root":{"id":"root","type":"Text","props":{"text":{"path":"state.title"}}}}`,
@@ -103,6 +104,7 @@ func TestRuntimeConnectsAPIWorkerModelSigningAndCatalog(t *testing.T) {
 	model := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(writer).Encode(map[string]any{
 			"choices": []any{map[string]any{
+				"finish_reason": "stop",
 				"message": map[string]any{
 					"role":    "assistant",
 					"content": `{"schemaVersion":1,"initialState":{"title":"完成"},"root":{"id":"root","type":"Text","props":{"text":{"path":"state.title"}}}}`,

@@ -32,7 +32,10 @@ func NewHTTPProvider(config HTTPConfig) (*HTTPProvider, error) {
 	if err != nil || !baseURL.IsAbs() || baseURL.Host == "" {
 		return nil, fmt.Errorf("model base URL is invalid")
 	}
-	if baseURL.Scheme != "https" && !config.AllowInsecure {
+	if baseURL.User != nil || baseURL.RawQuery != "" || baseURL.ForceQuery || baseURL.Fragment != "" {
+		return nil, fmt.Errorf("model base URL must not contain user info, query, or fragment")
+	}
+	if baseURL.Scheme != "https" && !(config.AllowInsecure && baseURL.Scheme == "http") {
 		return nil, fmt.Errorf("model base URL must use HTTPS")
 	}
 	if strings.TrimSpace(config.APIKey) == "" {
@@ -44,12 +47,24 @@ func NewHTTPProvider(config HTTPConfig) (*HTTPProvider, error) {
 	if config.Timeout <= 0 {
 		config.Timeout = 60 * time.Second
 	}
-	baseURL.Path = strings.TrimRight(baseURL.Path, "/") + "/v1/chat/completions"
+	basePath := strings.TrimRight(baseURL.Path, "/")
+	if basePath == "" {
+		basePath = "/v1"
+	} else if basePath != "/v1" && !strings.HasSuffix(basePath, "/v1") {
+		basePath += "/v1"
+	}
+	baseURL.Path = basePath + "/chat/completions"
+	baseURL.RawPath = ""
 	return &HTTPProvider{
 		endpoint: baseURL,
 		apiKey:   config.APIKey,
 		model:    config.Model,
-		client:   &http.Client{Timeout: config.Timeout},
+		client: &http.Client{
+			Timeout: config.Timeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}, nil
 }
 
@@ -63,31 +78,36 @@ func NewHTTPProviderFromEnvironment(environment map[string]string) (*HTTPProvide
 }
 
 func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Response, error) {
+	if input.MaxTokens <= 0 {
+		return Response{}, fmt.Errorf("model max tokens must be positive")
+	}
+	responseFormat := (*chatResponseFormat)(nil)
+	if input.JSONOutput {
+		responseFormat = &chatResponseFormat{Type: "json_object"}
+	}
 	body := struct {
-		Model       string        `json:"model"`
-		Messages    []chatMessage `json:"messages"`
-		Temperature float64       `json:"temperature"`
+		Model          string              `json:"model"`
+		Messages       []chatMessage       `json:"messages"`
+		Temperature    float64             `json:"temperature"`
+		ResponseFormat *chatResponseFormat `json:"response_format,omitempty"`
+		MaxTokens      int                 `json:"max_tokens"`
+		Thinking       chatThinking        `json:"thinking"`
 	}{
 		Model: provider.model,
 		Messages: []chatMessage{
 			{
 				Role:    "system",
-				Content: "你是 AgentCard 编码智能体。只输出满足宿主合同的最终 JSON，不使用 Markdown 代码块，不请求 Shell、任意文件系统或未授权能力。",
+				Content: input.SystemPrompt,
 			},
 			{
-				Role: "user",
-				Content: fmt.Sprintf(
-					"session=%s\nruntime=%s\nlocale=%s\nattempt=%d\nrequirement=%s\npreviousValidationError=%s",
-					input.SessionID,
-					input.Runtime,
-					input.Locale,
-					input.Attempt,
-					input.Prompt,
-					input.ValidationError,
-				),
+				Role:    "user",
+				Content: input.UserPrompt,
 			},
 		},
-		Temperature: 0.2,
+		Temperature:    0.2,
+		ResponseFormat: responseFormat,
+		MaxTokens:      input.MaxTokens,
+		Thinking:       chatThinking{Type: "disabled"},
 	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
@@ -103,6 +123,9 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 
 	httpResponse, err := provider.client.Do(request)
 	if err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return Response{}, fmt.Errorf("model request cancelled: %w", contextErr)
+		}
 		return Response{}, fmt.Errorf("model request failed")
 	}
 	defer httpResponse.Body.Close()
@@ -112,14 +135,18 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 	const maxResponseBytes = 2 * 1024 * 1024
 	responseBytes, err := io.ReadAll(io.LimitReader(httpResponse.Body, maxResponseBytes+1))
 	if err != nil {
-		return Response{}, fmt.Errorf("read model response: %w", err)
+		if contextErr := ctx.Err(); contextErr != nil {
+			return Response{}, fmt.Errorf("read model response cancelled: %w", contextErr)
+		}
+		return Response{}, fmt.Errorf("read model response failed")
 	}
 	if len(responseBytes) > maxResponseBytes {
 		return Response{}, fmt.Errorf("model response exceeds size limit")
 	}
 	var decoded struct {
 		Choices []struct {
-			Message chatMessage `json:"message"`
+			FinishReason string      `json:"finish_reason"`
+			Message      chatMessage `json:"message"`
 		} `json:"choices"`
 		Usage struct {
 			PromptTokens     int `json:"prompt_tokens"`
@@ -128,13 +155,24 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 	}
 	decoder := json.NewDecoder(bytes.NewReader(responseBytes))
 	if err := decoder.Decode(&decoded); err != nil {
-		return Response{}, fmt.Errorf("decode model response: %w", err)
+		return Response{}, fmt.Errorf("decode model response failed")
 	}
-	if len(decoded.Choices) == 0 || strings.TrimSpace(decoded.Choices[0].Message.Content) == "" {
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		return Response{}, fmt.Errorf("decode model response failed")
+	}
+	if len(decoded.Choices) == 0 {
+		return Response{}, fmt.Errorf("model response has no content")
+	}
+	choice := decoded.Choices[0]
+	if choice.FinishReason != "stop" {
+		return Response{}, fmt.Errorf("model response did not complete successfully")
+	}
+	if strings.TrimSpace(choice.Message.Content) == "" {
 		return Response{}, fmt.Errorf("model response has no content")
 	}
 	return Response{
-		Content:      decoded.Choices[0].Message.Content,
+		Content:      choice.Message.Content,
 		InputTokens:  decoded.Usage.PromptTokens,
 		OutputTokens: decoded.Usage.CompletionTokens,
 	}, nil
@@ -143,4 +181,12 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 type chatMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+}
+
+type chatResponseFormat struct {
+	Type string `json:"type"`
+}
+
+type chatThinking struct {
+	Type string `json:"type"`
 }

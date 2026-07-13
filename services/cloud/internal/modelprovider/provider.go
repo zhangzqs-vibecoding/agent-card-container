@@ -3,12 +3,10 @@ package modelprovider
 import "context"
 
 type Request struct {
-	SessionID       string
-	Prompt          string
-	Locale          string
-	Runtime         string
-	Attempt         int
-	ValidationError string
+	SystemPrompt string
+	UserPrompt   string
+	JSONOutput   bool
+	MaxTokens    int
 }
 
 type Response struct {

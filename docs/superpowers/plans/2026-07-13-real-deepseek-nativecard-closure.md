@@ -297,11 +297,11 @@ Expected: all pass; changing the root catalog without regeneration fails the gat
 - Modify: `services/cloud/internal/modelprovider/http_provider.go`
 - Modify: `services/cloud/internal/modelprovider/http_provider_test.go`
 
-- [ ] **Step 1: Write failing prompt boundary tests**
+- [x] **Step 1: Write failing prompt boundary tests**
 
 Assert the Agent-created system prompt includes the generated catalog context; the user prompt includes initial/additional requirements in order, locale, target and allowed capabilities; repair attempts append only stable validation feedback. Assert provider code contains no AgentCard-specific wording.
 
-- [ ] **Step 2: Define transport-only provider input**
+- [x] **Step 2: Define transport-only provider input**
 
 Refactor the provider request to transport fields:
 
@@ -316,15 +316,15 @@ type Request struct {
 
 Session ID, runtime, locale, attempt and validation feedback remain Agent concerns and are rendered into `UserPrompt` before the provider call.
 
-- [ ] **Step 3: Build the NativeCard prompt in `agent`**
+- [x] **Step 3: Build the NativeCard prompt in `agent`**
 
 The system prompt must require one JSON object, include catalog-derived semantics, forbid undeclared capabilities and Markdown fences, and state that validation feedback supersedes the prior invalid answer. The user prompt uses stable labeled sections without exposing secrets.
 
-- [ ] **Step 4: Harden the HTTP request**
+- [x] **Step 4: Harden the HTTP request**
 
 For `JSONOutput`, send the provider-supported JSON-object response format. Set an explicit max token bound, normalize Base URL without duplicating `/v1`, reject non-stop/truncated responses using `finish_reason`, preserve the 2 MiB response cap, and never include upstream bodies or credentials in errors.
 
-- [ ] **Step 5: Run RED/GREEN provider and Agent tests**
+- [x] **Step 5: Run RED/GREEN provider and Agent tests**
 
 Run:
 

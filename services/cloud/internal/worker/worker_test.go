@@ -48,6 +48,9 @@ func TestWorkerUsesOnlyConfirmedRequirementSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	expectedPrompt := strings.Join([]string{
+		"Session ID: gen_snapshot",
+		"Runtime: native",
+		"Attempt: 1",
 		"Initial requirement:",
 		confirmed.ConfirmedRequirement.InitialPrompt,
 		"Additional requirements:",
@@ -94,14 +97,11 @@ func TestWorkerUsesOnlyConfirmedRequirementSnapshot(t *testing.T) {
 		t.Fatalf("provider calls = %d, want 1", len(provider.requests))
 	}
 	request := provider.requests[0]
-	if request.Prompt != expectedPrompt {
-		t.Fatalf("provider prompt = %q, want %q", request.Prompt, expectedPrompt)
+	if request.UserPrompt != expectedPrompt {
+		t.Fatalf("provider prompt = %q, want %q", request.UserPrompt, expectedPrompt)
 	}
-	if request.Locale != "zh-CN" {
-		t.Fatalf("provider locale = %q, want snapshot locale", request.Locale)
-	}
-	if request.Runtime != string(agent.RuntimeNative) {
-		t.Fatalf("provider runtime = %q, want snapshot target runtime", request.Runtime)
+	if !strings.Contains(request.SystemPrompt, "NativeCard") || !request.JSONOutput || request.MaxTokens != 8192 {
+		t.Fatalf("provider transport = %#v", request)
 	}
 	manifest := decodeManifest(t, objectStore.archive)
 	if manifest.Description != expectedDescription {
@@ -115,7 +115,7 @@ func TestWorkerUsesOnlyConfirmedRequirementSnapshot(t *testing.T) {
 		"legacy-locale-tampered",
 		"legacy-summary-tampered",
 	} {
-		if strings.Contains(request.Prompt, tampered) || request.Locale == tampered {
+		if strings.Contains(request.UserPrompt, tampered) {
 			t.Fatalf("provider request contains tampered legacy value %q: %#v", tampered, request)
 		}
 	}
@@ -476,9 +476,6 @@ func (provider *captureProvider) Generate(
 	request modelprovider.Request,
 ) (modelprovider.Response, error) {
 	provider.requests = append(provider.requests, request)
-	if request.Runtime == string(agent.RuntimeWeb) {
-		return modelprovider.Response{Content: `{"files":{"src/card.tsx":"export function Card(){return <canvas/>}"}}`}, nil
-	}
 	return modelprovider.Response{
 		Content: `{"schemaVersion":1,"initialState":{"text":"完成"},"root":{"id":"root","type":"Text","props":{"text":{"path":"state.text"}}}}`,
 	}, nil

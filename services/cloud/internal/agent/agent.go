@@ -83,7 +83,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 		return Result{}, err
 	}
 	if decision.Runtime == RuntimeWeb {
-		return codingAgent.generateWeb(ctx, request, prompt, decision)
+		return codingAgent.generateWeb(ctx, request, decision)
 	}
 	var validationError string
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -94,14 +94,10 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 			"runtime", decision.Runtime,
 			"attempt", attempt,
 		)
-		response, providerErr := codingAgent.provider.Generate(ctx, modelprovider.Request{
-			SessionID:       request.SessionID,
-			Prompt:          prompt,
-			Locale:          request.Requirement.Locale,
-			Runtime:         string(decision.Runtime),
-			Attempt:         attempt,
-			ValidationError: validationError,
-		})
+		response, providerErr := codingAgent.provider.Generate(
+			ctx,
+			nativeModelRequest(request, attempt, validationError),
+		)
 		if providerErr != nil {
 			codingAgent.logger.WarnContext(ctx, "model_request_failed",
 				"model", codingAgent.modelName,
@@ -137,7 +133,6 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 func (codingAgent *CodingAgent) generateWeb(
 	ctx context.Context,
 	request Request,
-	prompt string,
 	decision Decision,
 ) (Result, error) {
 	if codingAgent.webBuilder == nil {
@@ -152,14 +147,10 @@ func (codingAgent *CodingAgent) generateWeb(
 			"runtime", decision.Runtime,
 			"attempt", attempt,
 		)
-		response, err := codingAgent.provider.Generate(ctx, modelprovider.Request{
-			SessionID:       request.SessionID,
-			Prompt:          prompt,
-			Locale:          request.Requirement.Locale,
-			Runtime:         string(decision.Runtime),
-			Attempt:         attempt,
-			ValidationError: validationError,
-		})
+		response, err := codingAgent.provider.Generate(
+			ctx,
+			webModelRequest(request, attempt, validationError),
+		)
 		if err != nil {
 			codingAgent.logger.WarnContext(ctx, "model_request_failed",
 				"model", codingAgent.modelName,

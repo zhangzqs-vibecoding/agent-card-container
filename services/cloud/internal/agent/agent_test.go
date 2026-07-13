@@ -89,6 +89,9 @@ func TestCodingAgentUsesConfirmedRequirementSnapshot(t *testing.T) {
 	}
 	request := provider.requests[0]
 	expectedPrompt := strings.Join([]string{
+		"Session ID: gen_snapshot",
+		"Runtime: web",
+		"Attempt: 1",
 		"Initial requirement:",
 		"做一个离线文本卡片",
 		"Additional requirements:",
@@ -98,14 +101,14 @@ func TestCodingAgentUsesConfirmedRequirementSnapshot(t *testing.T) {
 		"Allowed capabilities:",
 		"- storage",
 	}, "\n")
-	if request.Prompt != expectedPrompt {
-		t.Fatalf("provider prompt = %q, want %q", request.Prompt, expectedPrompt)
+	if request.UserPrompt != expectedPrompt {
+		t.Fatalf("provider prompt = %q, want %q", request.UserPrompt, expectedPrompt)
 	}
-	if request.Locale != "zh-TW" {
-		t.Fatalf("provider locale = %q, want zh-TW", request.Locale)
+	if !strings.Contains(request.SystemPrompt, "CodeCard") || !request.JSONOutput || request.MaxTokens != 8192 {
+		t.Fatalf("web model request = %#v", request)
 	}
-	if strings.Contains(request.Prompt, confirmedAt.Format(time.RFC3339)) {
-		t.Fatalf("confirmed timestamp leaked into provider prompt: %q", request.Prompt)
+	if strings.Contains(request.UserPrompt, confirmedAt.Format(time.RFC3339)) {
+		t.Fatalf("confirmed timestamp leaked into provider prompt: %q", request.UserPrompt)
 	}
 }
 
@@ -128,7 +131,7 @@ func TestCodingAgentRepairsInvalidNativeOutputAtMostThreeTimes(t *testing.T) {
 	if result.Runtime != agent.RuntimeNative || result.Attempts != 2 {
 		t.Fatalf("result = %#v", result)
 	}
-	if len(provider.requests) != 2 || provider.requests[1].ValidationError == "" {
+	if len(provider.requests) != 2 || !strings.Contains(provider.requests[1].UserPrompt, "Validation feedback:") {
 		t.Fatalf("repair requests = %#v", provider.requests)
 	}
 }
