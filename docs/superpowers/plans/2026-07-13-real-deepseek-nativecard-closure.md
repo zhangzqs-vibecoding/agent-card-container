@@ -345,27 +345,27 @@ Expected: pass, including base URLs both with and without `/v1` and a truncated-
 - Create: `services/cloud/internal/agent/eval_cases_test.go`
 - Modify: `services/cloud/internal/modelprovider/deepseek_live_test.go`
 
-- [ ] **Step 1: Write failing usage aggregation test**
+- [x] **Step 1: Write failing usage aggregation test**
 
 Return two invalid/valid responses with usage values and assert the final `agent.Result` contains total input/output tokens and the actual attempt count. Logs must not contain prompt or response content.
 
-- [ ] **Step 2: Implement usage aggregation**
+- [x] **Step 2: Implement usage aggregation**
 
 Add `InputTokens` and `OutputTokens` to `agent.Result`; accumulate every provider response, including invalid outputs that enter repair. Publish only counts and duration to the live evaluation result, not normal user content logs.
 
-- [ ] **Step 3: Add exactly 20 fixed, non-sensitive cases**
+- [x] **Step 3: Add exactly 20 fixed, non-sensitive cases**
 
 The JSON fixture contains `id`, `category`, `prompt`, `requiredComponents`, and `forbiddenCapabilities`. Cover timers (3), todo/list (4), dashboards (3), forms (3), charts/statistics (3), offline state (2), and explicit no-network/file/clipboard constraints (2). Forbidden Shell/filesystem attack prompts remain deterministic selector tests and do not enter the 16/20 denominator.
 
-- [ ] **Step 4: Add fixture validation tests**
+- [x] **Step 4: Add fixture validation tests**
 
 Assert IDs are unique, category counts match, prompts are non-empty, forbidden capabilities are absent from expected outputs, and every case is forced NativeCard-compatible.
 
-- [ ] **Step 5: Implement the opt-in paid evaluation**
+- [x] **Step 5: Implement the opt-in paid evaluation**
 
 When `AGENTCARD_DEEPSEEK_LIVE != 1`, the test skips. When enabled, run serially with one suite-level timeout, at most three model calls per case, no automatic suite retry, and require at least 16 successes. Output only case ID, success/error category, attempts, duration, token counts, aggregate success and attempt distribution.
 
-- [ ] **Step 6: Run ordinary tests with live gate disabled**
+- [x] **Step 6: Run ordinary tests with live gate disabled**
 
 Run:
 

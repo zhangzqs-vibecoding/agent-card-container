@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -69,10 +70,47 @@ func TestCodingAgentLogsSandboxLifecycleForWebBuild(t *testing.T) {
 	}
 }
 
-type loggingProvider struct{ content string }
+func TestCodingAgentLogsProviderFailureWithoutSensitiveValues(t *testing.T) {
+	var output bytes.Buffer
+	providerFailure := errors.New("provider-error-sensitive-marker")
+	codingAgent := agent.NewCodingAgent(
+		loggingProvider{err: providerFailure},
+		agent.NewNativeValidator(),
+		agent.WithLogger(observability.NewJSONLogger(&output)),
+	)
+
+	_, err := codingAgent.Generate(context.Background(), agent.Request{
+		SessionID:   "session-error",
+		Requirement: confirmedRequirement("prompt-sensitive-marker", generation.TargetNative, "zh-CN"),
+	})
+	if !errors.Is(err, providerFailure) {
+		t.Fatalf("Generate() error = %v, want provider failure", err)
+	}
+
+	events := loggedEvents(t, output.String())
+	assertEventSequence(t, events, "model_request_started", "model_request_failed")
+	for _, marker := range []string{
+		"prompt-sensitive-marker",
+		"response-sensitive-marker",
+		"provider-error-sensitive-marker",
+	} {
+		if strings.Contains(output.String(), marker) {
+			t.Fatalf("sensitive marker %q leaked: %s", marker, output.String())
+		}
+	}
+}
+
+type loggingProvider struct {
+	content string
+	err     error
+}
 
 func (provider loggingProvider) Generate(context.Context, modelprovider.Request) (modelprovider.Response, error) {
-	return modelprovider.Response{Content: provider.content}, nil
+	content := provider.content
+	if content == "" {
+		content = "response-sensitive-marker"
+	}
+	return modelprovider.Response{Content: content}, provider.err
 }
 
 type loggingWebBuilder struct{}

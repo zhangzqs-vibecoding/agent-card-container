@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm_paid_test:
-        description: Confirm one paid DeepSeek live generation test
+        description: Confirm the paid 20-case DeepSeek NativeCard quality gate
         type: boolean
         required: true
         default: false
@@ -20,7 +20,7 @@ jobs:
   live:
     if: inputs.confirm_paid_test
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 40
     environment: deepseek-live
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
@@ -28,7 +28,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache-dependency-path: services/cloud/go.sum
-      - name: Generate and validate one NativeCard with DeepSeek
+      - name: Run the paid NativeCard quality gate with DeepSeek
         working-directory: services/cloud
         shell: bash
         env:
@@ -40,6 +40,7 @@ jobs:
           test -n "$AGENTCARD_MODEL"
           test -n "$AGENTCARD_MODEL_API_KEY"
           go test ./internal/modelprovider \
-            -run TestDeepSeekLiveGeneratesValidNativeCard \
+            -run '^TestDeepSeekLiveNativeCardQualityGate$' \
             -count=1 \
+            -timeout=35m \
             -v

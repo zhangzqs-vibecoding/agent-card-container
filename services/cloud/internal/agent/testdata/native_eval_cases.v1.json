@@ -1,0 +1,142 @@
+[
+  {
+    "id": "timer-pomodoro",
+    "category": "timer",
+    "prompt": "生成一个完全离线的25分钟番茄钟卡片，显示MM:SS倒计时，提供开始、暂停和重置按钮。",
+    "requiredComponents": ["Container", "Text", "Button"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "timer-short-break",
+    "category": "timer",
+    "prompt": "生成一个完全离线的5分钟休息倒计时卡片，显示剩余时间，并提供开始、暂停和重新计时按钮。",
+    "requiredComponents": ["Column", "Text", "Button"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "timer-stopwatch",
+    "category": "timer",
+    "prompt": "生成一个完全离线的秒表卡片，显示经过时间，提供开始、暂停和清零按钮。",
+    "requiredComponents": ["Container", "Text", "Button"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "todo-daily-checklist",
+    "category": "todo",
+    "prompt": "生成一个离线每日待办卡片，预置三项固定任务，每项都可以勾选完成，并显示清晰的列表标题。",
+    "requiredComponents": ["List", "Checkbox", "Text"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "todo-shopping-list",
+    "category": "todo",
+    "prompt": "生成一个离线购物清单卡片，预置四个常见商品，每个商品都可以独立勾选。",
+    "requiredComponents": ["List", "Checkbox", "Text"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "todo-priority-board",
+    "category": "todo",
+    "prompt": "生成一个离线任务优先级卡片，预置四项固定任务，每项可以勾选，并可以选择高、中、低优先级。",
+    "requiredComponents": ["List", "Checkbox", "Select"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "todo-habit-tracker",
+    "category": "todo",
+    "prompt": "生成一个离线习惯打卡卡片，预置喝水、运动和阅读三项习惯，每项可以独立勾选。",
+    "requiredComponents": ["List", "Checkbox", "Badge"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "dashboard-study-progress",
+    "category": "dashboard",
+    "prompt": "生成一个离线学习进度面板，展示本周学习时长、已完成课程数、目标完成进度和当前状态。",
+    "requiredComponents": ["KeyValue", "Progress", "Badge"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "dashboard-project-status",
+    "category": "dashboard",
+    "prompt": "生成一个离线项目状态面板，展示项目摘要、整体进度、三个固定里程碑和当前风险状态。",
+    "requiredComponents": ["KeyValue", "Progress", "List"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "dashboard-budget-summary",
+    "category": "dashboard",
+    "prompt": "生成一个离线月度预算面板，展示预算总额、已使用金额、剩余额度、使用进度和预算状态。",
+    "requiredComponents": ["KeyValue", "Progress", "Badge"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "form-contact-note",
+    "category": "form",
+    "prompt": "生成一个离线联系人备注表单，包含姓名、备注、联系人类型、是否重要和保存按钮。",
+    "requiredComponents": ["TextInput", "Select", "Checkbox", "Button"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "form-feedback",
+    "category": "form",
+    "prompt": "生成一个离线反馈表单，包含满意度滑块、文字意见、提交按钮和当前评分显示。",
+    "requiredComponents": ["Slider", "TextInput", "Button", "Text"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "form-preferences",
+    "category": "form",
+    "prompt": "生成一个离线偏好设置表单，包含主题选择、提醒开关、字号滑块和保存按钮。",
+    "requiredComponents": ["Select", "Checkbox", "Slider", "Button"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "chart-focus-week",
+    "category": "chart",
+    "prompt": "生成一个离线专注时长统计卡片，使用固定示例数据展示最近七天的柱状图、总时长和日均时长。",
+    "requiredComponents": ["Chart", "Text", "KeyValue"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "chart-habit-stats",
+    "category": "chart",
+    "prompt": "生成一个离线习惯完成统计卡片，使用固定示例数据展示三项习惯的完成次数图表、连续天数和状态。",
+    "requiredComponents": ["Chart", "KeyValue", "Badge"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "chart-budget-share",
+    "category": "chart",
+    "prompt": "生成一个离线支出分类统计卡片，使用固定示例数据展示餐饮、交通和娱乐支出图表及合计信息。",
+    "requiredComponents": ["Chart", "KeyValue", "Text"],
+    "forbiddenCapabilities": ["network.fetch"]
+  },
+  {
+    "id": "offline-quick-notes",
+    "category": "offline",
+    "prompt": "生成一个纯离线便签卡片，允许输入一段便签文字、点击保存，并显示保存状态。",
+    "requiredComponents": ["TextInput", "Button", "Text"],
+    "forbiddenCapabilities": ["network.fetch", "clipboard.read", "clipboard.write"]
+  },
+  {
+    "id": "offline-counter",
+    "category": "offline",
+    "prompt": "生成一个纯离线计数器卡片，显示当前数值，提供增加、减少和归零按钮，并显示状态徽标。",
+    "requiredComponents": ["Text", "Button", "Badge"],
+    "forbiddenCapabilities": ["network.fetch", "clipboard.read", "clipboard.write"]
+  },
+  {
+    "id": "privacy-water-counter",
+    "category": "no-network-file-clipboard",
+    "prompt": "生成一个每日喝水计数卡片，只在卡片内部运行，不访问网络，不读写本地文件，不使用剪贴板；显示杯数、进度以及增加和重置按钮。",
+    "requiredComponents": ["Text", "Progress", "Button"],
+    "forbiddenCapabilities": ["network.fetch", "clipboard.read", "clipboard.write"]
+  },
+  {
+    "id": "privacy-mood-picker",
+    "category": "no-network-file-clipboard",
+    "prompt": "生成一个心情选择卡片，只在卡片内部运行，不访问网络，不读写本地文件，不使用剪贴板；允许选择心情、确认选择并显示状态。",
+    "requiredComponents": ["Select", "Button", "Badge"],
+    "forbiddenCapabilities": ["network.fetch", "clipboard.read", "clipboard.write"]
+  }
+]

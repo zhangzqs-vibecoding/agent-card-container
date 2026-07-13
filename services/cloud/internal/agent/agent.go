@@ -20,11 +20,13 @@ type Request struct {
 }
 
 type Result struct {
-	Runtime  Runtime
-	Reason   string
-	Content  string
-	Files    map[string][]byte
-	Attempts int
+	Runtime      Runtime
+	Reason       string
+	Content      string
+	Files        map[string][]byte
+	Attempts     int
+	InputTokens  int
+	OutputTokens int
 }
 
 type CodingAgent struct {
@@ -85,8 +87,10 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 	if decision.Runtime == RuntimeWeb {
 		return codingAgent.generateWeb(ctx, request, decision)
 	}
+	result := Result{Runtime: decision.Runtime, Reason: decision.Reason}
 	var validationError string
 	for attempt := 1; attempt <= 3; attempt++ {
+		result.Attempts = attempt
 		startedAt := time.Now()
 		codingAgent.logger.InfoContext(ctx, "model_request_started",
 			"model", codingAgent.modelName,
@@ -98,6 +102,8 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 			ctx,
 			nativeModelRequest(request, attempt, validationError),
 		)
+		result.InputTokens += response.InputTokens
+		result.OutputTokens += response.OutputTokens
 		if providerErr != nil {
 			codingAgent.logger.WarnContext(ctx, "model_request_failed",
 				"model", codingAgent.modelName,
@@ -107,7 +113,7 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 				"durationMs", time.Since(startedAt).Milliseconds(),
 				"errorKind", observability.ErrorKind(providerErr),
 			)
-			return Result{}, fmt.Errorf("model provider: %w", providerErr)
+			return result, fmt.Errorf("model provider: %w", providerErr)
 		}
 		codingAgent.logger.InfoContext(ctx, "model_request_completed",
 			"model", codingAgent.modelName,
@@ -117,17 +123,13 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 			"durationMs", time.Since(startedAt).Milliseconds(),
 		)
 		if validateErr := codingAgent.validator.Validate(response.Content, request.Requirement.AllowedCapabilities...); validateErr == nil {
-			return Result{
-				Runtime:  decision.Runtime,
-				Reason:   decision.Reason,
-				Content:  response.Content,
-				Attempts: attempt,
-			}, nil
+			result.Content = response.Content
+			return result, nil
 		} else {
 			validationError = validateErr.Error()
 		}
 	}
-	return Result{}, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
+	return result, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
 }
 
 func (codingAgent *CodingAgent) generateWeb(
@@ -138,8 +140,10 @@ func (codingAgent *CodingAgent) generateWeb(
 	if codingAgent.webBuilder == nil {
 		return Result{}, fmt.Errorf("%w: CodeCard sandbox is unavailable", ErrUnsupportedRequirement)
 	}
+	result := Result{Runtime: decision.Runtime, Reason: decision.Reason}
 	var validationError string
 	for attempt := 1; attempt <= 3; attempt++ {
+		result.Attempts = attempt
 		modelStartedAt := time.Now()
 		codingAgent.logger.InfoContext(ctx, "model_request_started",
 			"model", codingAgent.modelName,
@@ -151,6 +155,8 @@ func (codingAgent *CodingAgent) generateWeb(
 			ctx,
 			webModelRequest(request, attempt, validationError),
 		)
+		result.InputTokens += response.InputTokens
+		result.OutputTokens += response.OutputTokens
 		if err != nil {
 			codingAgent.logger.WarnContext(ctx, "model_request_failed",
 				"model", codingAgent.modelName,
@@ -160,7 +166,7 @@ func (codingAgent *CodingAgent) generateWeb(
 				"durationMs", time.Since(modelStartedAt).Milliseconds(),
 				"errorKind", observability.ErrorKind(err),
 			)
-			return Result{}, fmt.Errorf("model provider: %w", err)
+			return result, fmt.Errorf("model provider: %w", err)
 		}
 		codingAgent.logger.InfoContext(ctx, "model_request_completed",
 			"model", codingAgent.modelName,
@@ -199,14 +205,10 @@ func (codingAgent *CodingAgent) generateWeb(
 			validationError = "sandbox produced no files"
 			continue
 		}
-		return Result{
-			Runtime:  decision.Runtime,
-			Reason:   decision.Reason,
-			Files:    output,
-			Attempts: attempt,
-		}, nil
+		result.Files = output
+		return result, nil
 	}
-	return Result{}, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
+	return result, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
 }
 
 func requirementPrompt(requirement generation.RequirementSnapshot) string {

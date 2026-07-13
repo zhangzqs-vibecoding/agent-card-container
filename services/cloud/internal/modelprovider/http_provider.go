@@ -161,21 +161,22 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return Response{}, fmt.Errorf("decode model response failed")
 	}
+	response := Response{
+		InputTokens:  decoded.Usage.PromptTokens,
+		OutputTokens: decoded.Usage.CompletionTokens,
+	}
 	if len(decoded.Choices) == 0 {
-		return Response{}, fmt.Errorf("model response has no content")
+		return response, fmt.Errorf("model response has no content")
 	}
 	choice := decoded.Choices[0]
 	if choice.FinishReason != "stop" {
-		return Response{}, fmt.Errorf("model response did not complete successfully")
+		return response, fmt.Errorf("model response did not complete successfully")
 	}
 	if strings.TrimSpace(choice.Message.Content) == "" {
-		return Response{}, fmt.Errorf("model response has no content")
+		return response, fmt.Errorf("model response has no content")
 	}
-	return Response{
-		Content:      choice.Message.Content,
-		InputTokens:  decoded.Usage.PromptTokens,
-		OutputTokens: decoded.Usage.CompletionTokens,
-	}, nil
+	response.Content = choice.Message.Content
+	return response, nil
 }
 
 type chatMessage struct {

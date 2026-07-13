@@ -204,24 +204,76 @@ func TestHTTPProviderRejectsEveryNonStopFinishReasonWithoutEcho(t *testing.T) {
 	}
 }
 
+func TestHTTPProviderReturnsDecodedUsageForContentErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body map[string]any
+	}{
+		{
+			name: "no choices",
+			body: map[string]any{"choices": []any{}},
+		},
+		{
+			name: "length",
+			body: completionBody("length", "truncated-sensitive-content"),
+		},
+		{
+			name: "content filter",
+			body: completionBody("content_filter", "filtered-sensitive-content"),
+		},
+		{
+			name: "empty content",
+			body: completionBody("stop", " \t\n"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			test.body["usage"] = map[string]any{
+				"prompt_tokens":     21,
+				"completion_tokens": 34,
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(writer).Encode(test.body)
+			}))
+			defer server.Close()
+
+			response, err := newTestProvider(t, server.URL).Generate(context.Background(), validRequest())
+			if err == nil {
+				t.Fatal("Generate() error = nil")
+			}
+			if response.Content != "" || response.InputTokens != 21 || response.OutputTokens != 34 {
+				t.Fatalf("error response = %#v", response)
+			}
+		})
+	}
+}
+
 func TestHTTPProviderRejectsTrailingResponseJSONWithoutEcho(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(
-			`{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}]}` +
+			`{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"ok"}}],` +
+				`"usage":{"prompt_tokens":55,"completion_tokens":89}}` +
 				`{"trailing":"sensitive-trailing-body"}`,
 		))
 	}))
 	defer server.Close()
-	_, err := newTestProvider(t, server.URL).Generate(context.Background(), modelprovider.Request{
+	response, err := newTestProvider(t, server.URL).Generate(context.Background(), modelprovider.Request{
 		SystemPrompt: "sensitive-system",
 		UserPrompt:   "sensitive-user",
 		MaxTokens:    32,
 	})
 	if err == nil {
 		t.Fatal("Generate() accepted trailing response JSON")
+	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("trailing JSON response = %#v, want zero value", response)
 	}
 	for _, secret := range []string{"sensitive-trailing-body", "sensitive-system", "sensitive-user", "test-secret"} {
 		if strings.Contains(err.Error(), secret) {
@@ -237,9 +289,30 @@ func TestHTTPProviderPreservesTwoMiBResponseLimit(t *testing.T) {
 		writeCompletion(writer, "stop", strings.Repeat("x", 2*1024*1024))
 	}))
 	defer server.Close()
-	_, err := newTestProvider(t, server.URL).Generate(context.Background(), validRequest())
+	response, err := newTestProvider(t, server.URL).Generate(context.Background(), validRequest())
 	if err == nil || !strings.Contains(err.Error(), "size limit") {
 		t.Fatalf("Generate() oversized response error = %v", err)
+	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("oversized response = %#v, want zero value", response)
+	}
+}
+
+func TestHTTPProviderReturnsZeroResponseForMalformedJSON(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write([]byte(`{"usage":{"prompt_tokens":55,"completion_tokens":89},`))
+	}))
+	defer server.Close()
+
+	response, err := newTestProvider(t, server.URL).Generate(context.Background(), validRequest())
+	if err == nil {
+		t.Fatal("Generate() accepted malformed JSON")
+	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("malformed JSON response = %#v, want zero value", response)
 	}
 }
 
@@ -248,10 +321,13 @@ func TestHTTPProviderRedactsUpstreamBodyCredentialsAndPrompts(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(http.StatusUnauthorized)
-		_, _ = writer.Write([]byte("sensitive-upstream-body test-secret sensitive-system sensitive-user"))
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"usage": map[string]any{"prompt_tokens": 55, "completion_tokens": 89},
+			"error": "sensitive-upstream-body test-secret sensitive-system sensitive-user",
+		})
 	}))
 	defer server.Close()
-	_, err := newTestProvider(t, server.URL).Generate(context.Background(), modelprovider.Request{
+	response, err := newTestProvider(t, server.URL).Generate(context.Background(), modelprovider.Request{
 		SystemPrompt: "sensitive-system",
 		UserPrompt:   "sensitive-user",
 		JSONOutput:   true,
@@ -260,10 +336,29 @@ func TestHTTPProviderRedactsUpstreamBodyCredentialsAndPrompts(t *testing.T) {
 	if err == nil {
 		t.Fatal("Generate() error = nil")
 	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("HTTP status response = %#v, want zero value", response)
+	}
 	for _, secret := range []string{"sensitive-upstream-body", "test-secret", "sensitive-system", "sensitive-user"} {
 		if strings.Contains(err.Error(), secret) {
 			t.Fatalf("error leaked %q: %v", secret, err)
 		}
+	}
+}
+
+func TestHTTPProviderReturnsZeroResponseForTransportFailure(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	provider := newTestProvider(t, server.URL)
+	server.Close()
+
+	response, err := provider.Generate(context.Background(), validRequest())
+	if err == nil {
+		t.Fatal("Generate() transport error = nil")
+	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("transport error response = %#v, want zero value", response)
 	}
 }
 
@@ -283,9 +378,12 @@ func TestHTTPProviderDoesNotFollowRedirects(t *testing.T) {
 	}))
 	defer redirect.Close()
 
-	_, err := newTestProvider(t, redirect.URL).Generate(context.Background(), validRequest())
+	response, err := newTestProvider(t, redirect.URL).Generate(context.Background(), validRequest())
 	if err == nil {
 		t.Fatal("Generate() followed a redirect")
+	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("redirect response = %#v, want zero value", response)
 	}
 	if calls := targetCalls.Load(); calls != 0 {
 		t.Fatalf("redirect target calls = %d, Authorization = %q", calls, targetAuthorization.Load())
@@ -301,13 +399,16 @@ func TestHTTPProviderPreservesContextCancellationWithoutLeakingRequest(t *testin
 	defer server.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := newTestProvider(t, server.URL).Generate(ctx, modelprovider.Request{
+	response, err := newTestProvider(t, server.URL).Generate(ctx, modelprovider.Request{
 		SystemPrompt: "sensitive-system",
 		UserPrompt:   "sensitive-user",
 		MaxTokens:    1,
 	})
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Generate() error = %v, want context.Canceled", err)
+	}
+	if response != (modelprovider.Response{}) {
+		t.Fatalf("cancelled response = %#v, want zero value", response)
 	}
 	for _, secret := range []string{"sensitive-system", "sensitive-user", "test-secret", server.URL} {
 		if strings.Contains(err.Error(), secret) {
@@ -357,7 +458,17 @@ func validRequest() modelprovider.Request {
 
 func writeCompletion(writer http.ResponseWriter, finishReason, content string) {
 	writer.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(writer).Encode(map[string]any{
+	body := completionBody(finishReason, content)
+	body["usage"] = map[string]any{
+		"prompt_tokens":     12,
+		"completion_tokens": 8,
+		"total_tokens":      20,
+	}
+	_ = json.NewEncoder(writer).Encode(body)
+}
+
+func completionBody(finishReason, content string) map[string]any {
+	return map[string]any{
 		"id":     "response-1",
 		"object": "chat.completion",
 		"choices": []any{map[string]any{
@@ -368,10 +479,5 @@ func writeCompletion(writer http.ResponseWriter, finishReason, content string) {
 				"content": content,
 			},
 		}},
-		"usage": map[string]any{
-			"prompt_tokens":     12,
-			"completion_tokens": 8,
-			"total_tokens":      20,
-		},
-	})
+	}
 }
