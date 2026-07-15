@@ -36,6 +36,70 @@ func TestNativePromptIncludesGeneratedContractContextAndJSONRules(t *testing.T) 
 	}
 }
 
+func TestNativePromptExplainsRelativeStatePathsAndExactActionShapes(t *testing.T) {
+	t.Parallel()
+
+	prompt := nativeModelRequest(promptRequest(), 1, "").SystemPrompt
+	for _, required := range []string{
+		"valuePath and action.path are relative paths",
+		"must exactly resolve in initialState",
+		`{"path":"state.form.title"}`,
+		`{"type":"set","path":"saved","value":true}`,
+		"Do not add target, payload, args, or state fields to actions",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("system prompt is missing state/action guidance %q", required)
+		}
+	}
+}
+
+func TestNativePromptIncludesMinimalRecipesForSupportedInteractiveCards(t *testing.T) {
+	t.Parallel()
+
+	prompt := nativeModelRequest(promptRequest(), 1, "").SystemPrompt
+	for _, required := range []string{
+		"Keep component types minimal",
+		"Countdown recipe",
+		"wrap the timer in a Container with a Column child",
+		`{"type":"startTimer","path":"seconds","value":{"intervalMs":1000,"delta":-1,"stopAt":0}}`,
+		"Static list recipe",
+		"List.children",
+		"Dashboard recipe",
+		"put every requested fixed milestone inside List.children",
+		"Form recipe",
+		"Slider allows only valuePath, min, and max",
+		"Chart recipe",
+		`{"values":[1,2,3]}`,
+		"For fixed example data, do not use a state path binding",
+		"Counter recipe",
+		`{"op":"concat","args":[{"path":"state.count"}]}`,
+		"represent a requested status with a Badge",
+		"Badge.label should usually be a literal status string",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("system prompt is missing supported-card recipe %q", required)
+		}
+	}
+}
+
+func TestNativePromptGivesFormListOneConsistentStateExample(t *testing.T) {
+	t.Parallel()
+
+	prompt := nativeModelRequest(promptRequest(), 1, "").SystemPrompt
+	for _, required := range []string{
+		`"initialState":{"title":"","priority":"中","done":false,"saved":false}`,
+		`"valuePath":"title"`,
+		`"valuePath":"priority"`,
+		`"valuePath":"done"`,
+		`{"type":"set","path":"saved","value":true}`,
+		"every valuePath and every action.path must use one of those existing paths",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("system prompt is missing consistent form/list state example %q", required)
+		}
+	}
+}
+
 func TestNativePromptRendersFrozenRequirementInStableOrder(t *testing.T) {
 	t.Parallel()
 

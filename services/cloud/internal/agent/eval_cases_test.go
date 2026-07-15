@@ -46,6 +46,35 @@ func TestNativeEvalFixtureHasExactlyTwentyStrictNativeCases(t *testing.T) {
 	}
 }
 
+func TestNativeEvalFixtureDoesNotScoreUnrequestedLayoutOrStatusComponents(t *testing.T) {
+	t.Parallel()
+
+	cases, err := loadNativeEvalCasesFile(nativeEvalFixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	layoutOnly := map[string]bool{
+		"Container": true,
+		"Row":       true,
+		"Column":    true,
+		"Stack":     true,
+		"Grid":      true,
+		"Scroll":    true,
+		"Divider":   true,
+	}
+	for _, evalCase := range cases {
+		for _, component := range evalCase.RequiredComponents {
+			if layoutOnly[component] {
+				t.Fatalf("case %s scores layout-only component %s", evalCase.ID, component)
+			}
+			if component == "Badge" && !strings.Contains(evalCase.Prompt, "徽标") &&
+				!strings.Contains(evalCase.Prompt, "状态") {
+				t.Fatalf("case %s requires an unrequested Badge", evalCase.ID)
+			}
+		}
+	}
+}
+
 func TestNativeEvalFixtureDecoderRejectsUnknownFieldsAndTrailingJSON(t *testing.T) {
 	t.Parallel()
 

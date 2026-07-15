@@ -3,21 +3,21 @@
     "id": "timer-pomodoro",
     "category": "timer",
     "prompt": "生成一个完全离线的25分钟番茄钟卡片，显示MM:SS倒计时，提供开始、暂停和重置按钮。",
-    "requiredComponents": ["Container", "Text", "Button"],
+    "requiredComponents": ["Text", "Button"],
     "forbiddenCapabilities": ["network.fetch"]
   },
   {
     "id": "timer-short-break",
     "category": "timer",
     "prompt": "生成一个完全离线的5分钟休息倒计时卡片，显示剩余时间，并提供开始、暂停和重新计时按钮。",
-    "requiredComponents": ["Column", "Text", "Button"],
+    "requiredComponents": ["Text", "Button"],
     "forbiddenCapabilities": ["network.fetch"]
   },
   {
     "id": "timer-stopwatch",
     "category": "timer",
     "prompt": "生成一个完全离线的秒表卡片，显示经过时间，提供开始、暂停和清零按钮。",
-    "requiredComponents": ["Container", "Text", "Button"],
+    "requiredComponents": ["Text", "Button"],
     "forbiddenCapabilities": ["network.fetch"]
   },
   {
@@ -44,7 +44,7 @@
   {
     "id": "todo-habit-tracker",
     "category": "todo",
-    "prompt": "生成一个离线习惯打卡卡片，预置喝水、运动和阅读三项习惯，每项可以独立勾选。",
+    "prompt": "生成一个离线习惯打卡卡片，预置喝水、运动和阅读三项习惯，每项可以独立勾选，并用徽标显示今日打卡状态。",
     "requiredComponents": ["List", "Checkbox", "Badge"],
     "forbiddenCapabilities": ["network.fetch"]
   },

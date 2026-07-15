@@ -263,6 +263,31 @@ func TestValidateNativeEvalOutputRejectsRequiredComponentsWithoutCaseSemantics(t
 	}
 }
 
+func TestValidateNativeEvalOutputAllowsFiveSupportingComponentTypesButRejectsSix(t *testing.T) {
+	t.Parallel()
+
+	evalCase := loadNativeEvalCasesByID(t)["dashboard-project-status"]
+	document := nativeEvalDashboardCard(evalCase)
+	root := document["root"].(map[string]any)
+	children := root["children"].([]any)
+	children = append(children,
+		nativeEvalNodeMap("status", "Badge", map[string]any{"label": "On track"}, nil, nil),
+		nativeEvalNodeMap("separator", "Divider", nil, nil, nil),
+		nativeEvalNodeMap("icon", "Icon", map[string]any{"name": "widgets"}, nil, nil),
+	)
+	root["children"] = children
+	if err := validateNativeEvalOutput(marshalNativeEvalTestCard(t, document), evalCase); err != nil {
+		t.Fatalf("validateNativeEvalOutput() rejected five supporting component types: %v", err)
+	}
+
+	root["children"] = append(children,
+		nativeEvalNodeMap("row", "Row", nil, nil, nil),
+	)
+	if err := validateNativeEvalOutput(marshalNativeEvalTestCard(t, document), evalCase); err == nil {
+		t.Fatal("validateNativeEvalOutput() accepted six supporting component types")
+	}
+}
+
 func TestCaseSpecificNativeEvalCardsSatisfyContractAndSemantics(t *testing.T) {
 	t.Parallel()
 
@@ -656,6 +681,9 @@ func TestNativeEvalRunnerRunsAllCasesSeriallyWithBoundedCallsAndSafeOutput(t *te
 	if !strings.Contains(output, "id=timer-pomodoro") || !strings.Contains(output, "summary success=16 total=20 threshold=16") {
 		t.Fatalf("evaluation output is incomplete: %s", output)
 	}
+	if !strings.Contains(output, "case_detail id=timer-pomodoro detail=validation_missing_field") {
+		t.Fatalf("evaluation output is missing safe failure detail: %s", output)
+	}
 }
 
 func TestNativeEvalRunnerCountsUnstartedCasesAfterSuiteCancellation(t *testing.T) {
@@ -867,20 +895,34 @@ func runNativeEvalSuite(
 
 		success := false
 		category := classifyNativeEvalError(ctx, err)
+		detail := classifyNativeEvalFailureDetail(err)
 		if counted.calls > 3 || result.Attempts != counted.calls {
 			category = "internal_error"
+			detail = "attempt_accounting"
 		} else if err == nil {
+			validatorErr := validator.Validate(result.Content)
+			var contractErr error
+			if validatorErr == nil {
+				contractErr = validateNativeEvalOutput(result.Content, evalCase)
+			}
 			switch {
 			case result.Runtime != agent.RuntimeNative || result.Attempts < 1 || result.Attempts > 3:
 				category = "contract_assertion_failed"
-			case validator.Validate(result.Content) != nil:
+				detail = "result_metadata"
+			case validatorErr != nil:
 				category = "contract_assertion_failed"
-			case validateNativeEvalOutput(result.Content, evalCase) != nil:
+				detail = "validator_regression"
+			case contractErr != nil:
 				category = "contract_assertion_failed"
+				detail = classifyNativeEvalContractDetail(contractErr)
 			default:
 				success = true
 				category = "ok"
+				detail = ""
 			}
+		}
+		if !success && detail != "" {
+			logf("case_detail id=%s detail=%s", evalCase.ID, detail)
 		}
 		recordNativeEvalCase(
 			&report,
@@ -980,6 +1022,71 @@ func classifyNativeEvalError(ctx context.Context, err error) string {
 	return "provider_error"
 }
 
+func classifyNativeEvalFailureDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	if modelprovider.IsRetryable(err) {
+		return "provider_retryable"
+	}
+	if !errors.Is(err, agent.ErrValidationFailed) {
+		return "provider_permanent"
+	}
+	message := err.Error()
+	switch {
+	case strings.Contains(message, " has unknown prop "):
+		return "validation_unknown_prop"
+	case strings.Contains(message, "unknown NativeCard component"):
+		return "validation_unknown_component"
+	case strings.Contains(message, "unknown NativeCard action"):
+		return "validation_unknown_action"
+	case strings.Contains(message, "action ") && strings.Contains(message, " is missing fields:"):
+		return "validation_action_missing_field"
+	case strings.Contains(message, "action ") && strings.Contains(message, " has unknown fields:"):
+		return "validation_action_unknown_field"
+	case strings.Contains(message, "action ") && strings.Contains(message, " path is invalid"):
+		return "validation_action_path"
+	case strings.Contains(message, "missing from initialState"),
+		strings.Contains(message, "no writable parent in initialState"),
+		strings.Contains(message, "incompatible initialState type"):
+		return "validation_state_path"
+	case strings.Contains(message, " is missing fields:"), strings.Contains(message, "requires prop"):
+		return "validation_missing_field"
+	case strings.Contains(message, "expression"), strings.Contains(message, "bindings"):
+		return "validation_expression"
+	case strings.Contains(message, "does not support event"),
+		strings.Contains(message, "events must be an object"):
+		return "validation_event_contract"
+	case strings.Contains(message, "value must be"),
+		strings.Contains(message, "outside the catalog enum"),
+		strings.Contains(message, "required pattern"):
+		return "validation_value_type"
+	case strings.Contains(message, "decode NativeCard"),
+		strings.Contains(message, "NativeCard must"):
+		return "validation_json_shape"
+	default:
+		return "validation_other"
+	}
+}
+
+func classifyNativeEvalContractDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	switch err.Error() {
+	case "required component is missing":
+		return "contract_required_component"
+	case "native evaluation output has excessive component variety":
+		return "contract_component_variety"
+	case "forbidden capability is present":
+		return "contract_forbidden_capability"
+	case "required case semantics are missing":
+		return "contract_semantics"
+	default:
+		return "contract_other"
+	}
+}
+
 func contextErrorCategory(err error) string {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "timeout"
@@ -1007,7 +1114,7 @@ func validateNativeEvalOutput(content string, evalCase nativeEvalCase) error {
 			return fmt.Errorf("required component is missing")
 		}
 	}
-	if len(semantics.components) > len(requiredComponents)+3 {
+	if len(semantics.components) > len(requiredComponents)+5 {
 		return fmt.Errorf("native evaluation output has excessive component variety")
 	}
 	for _, capability := range evalCase.ForbiddenCapabilities {
