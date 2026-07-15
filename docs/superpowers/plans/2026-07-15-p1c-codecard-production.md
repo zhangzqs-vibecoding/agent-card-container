@@ -115,4 +115,4 @@
 - [x] 运行 Go race、Flutter analyze/test、Node、安全门、Docker、Chromium 和持久化门禁。
 - [x] 执行敏感信息与构建/容器残留审计。
 - [x] 自动化范围完整通过后标记 `HEADLESS AUTOMATION PASS / LIVE QUALITY NOT RUN / WINDOWS DEVICE NOT RUN`。
-- [ ] 提交：`docs: record P1-C headless evidence`，不 push。
+- [x] 提交：`docs: record P1-C headless evidence`，不 push（`b994849`）。
