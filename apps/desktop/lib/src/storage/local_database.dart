@@ -6,6 +6,28 @@ import '../contracts/card_definition.dart';
 import '../surfaces/surface.dart';
 import 'sqlite_connection.dart';
 
+class CardStateBackup {
+  const CardStateBackup({
+    required this.backupId,
+    required this.instanceId,
+    required this.cardId,
+    required this.versionId,
+    required this.stateSchemaVersion,
+    required this.stateNamespace,
+    required this.snapshot,
+    required this.createdAt,
+  });
+
+  final String backupId;
+  final String instanceId;
+  final String cardId;
+  final String versionId;
+  final int stateSchemaVersion;
+  final String stateNamespace;
+  final Map<String, Object?> snapshot;
+  final DateTime createdAt;
+}
+
 class LocalDatabase {
   LocalDatabase._(this._connection) {
     _migrate();
@@ -351,6 +373,85 @@ class LocalDatabase {
     };
   }
 
+  void backupState({
+    required String backupId,
+    required String instanceId,
+    required String cardId,
+    required String versionId,
+    required int stateSchemaVersion,
+    required String stateNamespace,
+    required DateTime createdAt,
+  }) {
+    final snapshotJson = jsonEncode(readState(stateNamespace));
+    if (utf8.encode(snapshotJson).length > 1024 * 1024) {
+      throw StateError('card state snapshot exceeds 1 MiB');
+    }
+    _connection.execute(
+      '''
+      INSERT INTO card_state_backups (
+        backup_id, instance_id, card_id, version_id, state_schema_version,
+        state_namespace, snapshot_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ''',
+      [
+        backupId,
+        instanceId,
+        cardId,
+        versionId,
+        stateSchemaVersion,
+        stateNamespace,
+        snapshotJson,
+        createdAt.toUtc().toIso8601String(),
+      ],
+    );
+    _connection.execute(
+      '''
+      DELETE FROM card_state_backups
+      WHERE card_id = ? AND backup_id NOT IN (
+        SELECT backup_id
+        FROM card_state_backups
+        WHERE card_id = ?
+        ORDER BY created_at DESC, backup_id DESC
+        LIMIT 10
+      )
+      ''',
+      [cardId, cardId],
+    );
+  }
+
+  List<CardStateBackup> stateBackups({
+    required String instanceId,
+    required String versionId,
+  }) {
+    return _connection
+        .query(
+          '''
+          SELECT *
+          FROM card_state_backups
+          WHERE instance_id = ? AND version_id = ?
+          ORDER BY created_at DESC, backup_id DESC
+          ''',
+          [instanceId, versionId],
+        )
+        .map((row) {
+          final decoded = jsonDecode(row['snapshot_json']! as String);
+          if (decoded is! Map<String, Object?>) {
+            throw StateError('card state backup must contain a JSON object');
+          }
+          return CardStateBackup(
+            backupId: row['backup_id']! as String,
+            instanceId: row['instance_id']! as String,
+            cardId: row['card_id']! as String,
+            versionId: row['version_id']! as String,
+            stateSchemaVersion: row['state_schema_version']! as int,
+            stateNamespace: row['state_namespace']! as String,
+            snapshot: decoded,
+            createdAt: DateTime.parse(row['created_at']! as String).toUtc(),
+          );
+        })
+        .toList(growable: false);
+  }
+
   void deleteState(String namespace, String key) {
     _connection.execute(
       'DELETE FROM card_state WHERE namespace = ? AND state_key = ?',
@@ -538,6 +639,28 @@ class LocalDatabase {
           )
         ''');
         _connection.execute('PRAGMA user_version = 4');
+      });
+    }
+    if (schemaVersion < 5) {
+      _connection.transaction(() {
+        _connection.execute('''
+          CREATE TABLE card_state_backups (
+            backup_id TEXT PRIMARY KEY,
+            instance_id TEXT NOT NULL,
+            card_id TEXT NOT NULL,
+            version_id TEXT NOT NULL,
+            state_schema_version INTEGER NOT NULL
+              CHECK(state_schema_version > 0),
+            state_namespace TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          )
+        ''');
+        _connection.execute('''
+          CREATE INDEX card_state_backups_lookup
+          ON card_state_backups(instance_id, version_id, created_at DESC)
+        ''');
+        _connection.execute('PRAGMA user_version = 5');
       });
     }
   }

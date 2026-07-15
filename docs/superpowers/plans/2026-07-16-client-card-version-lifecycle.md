@@ -26,17 +26,17 @@
 - Modify: `apps/desktop/lib/src/storage/local_database.dart`
 - Modify: `apps/desktop/test/storage/local_database_test.dart`
 
-- [ ] **Step 1: 写 migration 和 snapshot 的失败测试**
+- [x] **Step 1: 写 migration 和 snapshot 的失败测试**
 
 测试新库 `schemaVersion == 5`，并用 `backupState(...)` 后断言 `stateBackups(instanceId, versionId)` 返回原 namespace、schema 和完整 JSON；构造超过 1 MiB 的 JSON 时断言抛出 `StateError('card state snapshot exceeds 1 MiB')`。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `cd apps/desktop && flutter test test/storage/local_database_test.dart`
 
 Expected: FAIL，schema 仍为 4，备份 API 尚不存在。
 
-- [ ] **Step 3: 实现最小 v5 schema 和有界 API**
+- [x] **Step 3: 实现最小 v5 schema 和有界 API**
 
 增加不可变 `CardStateBackup`；migration 创建：
 
@@ -57,11 +57,11 @@ ON card_state_backups(instance_id, version_id, created_at DESC);
 
 `backupState` 使用规范 JSON 的 UTF-8 长度执行 1 MiB 上限，在调用者事务内写入；查询时严格解析为 `Map<String,Object?>`。
 
-- [ ] **Step 4: 增加每卡只保留最近 10 条测试和实现**
+- [x] **Step 4: 增加每卡只保留最近 10 条测试和实现**
 
 连续写入 11 条，断言最旧记录被删除；删除 SQL 按同一 `card_id` 的 `created_at DESC, backup_id DESC` 保留 10 条。
 
-- [ ] **Step 5: 格式化、测试并提交**
+- [x] **Step 5: 格式化、测试并提交**
 
 Run: `cd apps/desktop && dart format lib/src/storage/local_database.dart test/storage/local_database_test.dart && flutter test test/storage/local_database_test.dart`
 

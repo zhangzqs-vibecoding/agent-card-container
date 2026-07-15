@@ -20,8 +20,87 @@ void main() {
       database.close();
     });
 
-    test('migrates a new database to schema version four', () {
-      expect(database.schemaVersion, 4);
+    test('migrates a new database to schema version five', () {
+      expect(database.schemaVersion, 5);
+    });
+
+    test('persists a bounded card state backup snapshot', () {
+      database.putState('state-1', 'timer', {
+        'remaining': 1500,
+        'running': false,
+      });
+
+      database.backupState(
+        backupId: 'backup-1',
+        instanceId: 'instance-1',
+        cardId: 'card-1',
+        versionId: 'version-1',
+        stateSchemaVersion: 2,
+        stateNamespace: 'state-1',
+        createdAt: DateTime.utc(2026, 7, 16, 1),
+      );
+
+      final backup = database
+          .stateBackups(instanceId: 'instance-1', versionId: 'version-1')
+          .single;
+      expect(backup.backupId, 'backup-1');
+      expect(backup.cardId, 'card-1');
+      expect(backup.stateSchemaVersion, 2);
+      expect(backup.stateNamespace, 'state-1');
+      expect(backup.snapshot, {
+        'timer': {'remaining': 1500, 'running': false},
+      });
+      expect(backup.createdAt, DateTime.utc(2026, 7, 16, 1));
+    });
+
+    test('rejects a state backup larger than one MiB', () {
+      database.putState('state-1', 'payload', 'x' * (1024 * 1024));
+
+      expect(
+        () => database.backupState(
+          backupId: 'backup-large',
+          instanceId: 'instance-1',
+          cardId: 'card-1',
+          versionId: 'version-1',
+          stateSchemaVersion: 1,
+          stateNamespace: 'state-1',
+          createdAt: DateTime.utc(2026, 7, 16),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'card state snapshot exceeds 1 MiB',
+          ),
+        ),
+      );
+      expect(
+        database.stateBackups(instanceId: 'instance-1', versionId: 'version-1'),
+        isEmpty,
+      );
+    });
+
+    test('keeps only the ten most recent backups for one card', () {
+      for (var index = 0; index < 11; index++) {
+        database.putState('state-1', 'revision', index);
+        database.backupState(
+          backupId: 'backup-$index',
+          instanceId: 'instance-1',
+          cardId: 'card-1',
+          versionId: 'version-1',
+          stateSchemaVersion: 1,
+          stateNamespace: 'state-1',
+          createdAt: DateTime.utc(2026, 7, 16, 0, index),
+        );
+      }
+
+      final backups = database.stateBackups(
+        instanceId: 'instance-1',
+        versionId: 'version-1',
+      );
+      expect(backups, hasLength(10));
+      expect(backups.first.backupId, 'backup-10');
+      expect(backups.last.backupId, 'backup-1');
     });
 
     test('restores the immutable CardDefinition installation index', () {
