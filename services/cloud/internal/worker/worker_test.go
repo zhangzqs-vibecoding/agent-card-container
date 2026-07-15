@@ -759,6 +759,129 @@ func TestWorkerRetriesTemporaryPublishFailureWithStableVersion(t *testing.T) {
 	}
 }
 
+func TestWorkerRetriesAfterObjectUploadWhenVersionInsertTemporarilyFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	current := time.Date(2026, 7, 15, 12, 30, 0, 0, time.UTC)
+	service := generation.NewService(generation.NewMemoryRepository(), func() string { return "gen_version_retry" }, func() time.Time { return current })
+	session, err := service.Create(ctx, "user", generation.CreateRequest{Prompt: "版本重试", Target: generation.TargetNative, Locale: "zh-CN"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewMemoryStore(func() string { return "job_version_retry" })
+	if _, err := jobStore.Enqueue(ctx, session.ID, current); err != nil {
+		t.Fatal(err)
+	}
+	provider := &captureProvider{}
+	objects := &countingObjectStore{MemoryObjectStore: publish.NewMemoryObjectStore()}
+	versions := &temporaryFailureVersionRepository{MemoryVersionRepository: publish.NewMemoryVersionRepository()}
+	seed := sha256.Sum256([]byte("version-retry-key"))
+	publisher := publish.NewPublisher(artifact.NewBuilder("version-key", ed25519.NewKeyFromSeed(seed[:])), objects, versions)
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-version-retry", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()), Publisher: publisher,
+		NewCardID: func() string { return "card_version_retry" }, NewVersionID: func() string { return "ver_version_retry" },
+		Now: func() time.Time { return current },
+	})
+
+	if _, err := runner.RunOnce(ctx); !errors.Is(err, publish.ErrRetryable) {
+		t.Fatalf("first RunOnce() error = %v", err)
+	}
+	current = current.Add(time.Second)
+	if _, err := runner.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	detail, err := publisher.Card(ctx, "user", "card_version_retry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Versions) != 1 || objects.puts != 2 || len(provider.requests) != 2 ||
+		len(objects.keys) != 2 || objects.keys[0] != objects.keys[1] {
+		t.Fatalf("versions=%d puts=%d keys=%#v providerCalls=%d", len(detail.Versions), objects.puts, objects.keys, len(provider.requests))
+	}
+}
+
+func TestWorkerCancellationPropagatesToBuilderAndObjectUpload(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		prompt string
+		build  func(*stageCancellation) (*agent.CodingAgent, publish.ObjectStore)
+	}{
+		{
+			name: "CodeCard builder", prompt: "做一个自由绘制画板",
+			build: func(stage *stageCancellation) (*agent.CodingAgent, publish.ObjectStore) {
+				provider := staticProvider{content: `{"files":{"src/card.tsx":"export default function Card(){return <canvas/>}"}}`}
+				return agent.NewCodingAgent(
+					provider, agent.NewNativeValidator(), agent.WithWebBuilder(blockingWebBuilder{stage: stage}),
+				), publish.NewMemoryObjectStore()
+			},
+		},
+		{
+			name: "object upload", prompt: "做一个离线文本卡片",
+			build: func(stage *stageCancellation) (*agent.CodingAgent, publish.ObjectStore) {
+				return agent.NewCodingAgent(&captureProvider{}, agent.NewNativeValidator()), blockingObjectStore{stage: stage}
+			},
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			jobStore := jobs.NewMemoryStore(func() string { return "job_stage_cancel" })
+			service := generation.NewService(
+				generation.NewMemoryRepository(), func() string { return "gen_stage_cancel" }, time.Now,
+				generation.WithJobQueue(jobs.NewGenerationQueue(jobStore)),
+			)
+			session, err := service.Create(ctx, "user", generation.CreateRequest{
+				Prompt: testCase.prompt, Target: generation.TargetAuto, Locale: "zh-CN",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+				t.Fatal(err)
+			}
+			stage := &stageCancellation{started: make(chan struct{}), cancelled: make(chan struct{})}
+			codingAgent, objectStore := testCase.build(stage)
+			seed := sha256.Sum256([]byte("stage-cancel-key"))
+			versions := publish.NewMemoryVersionRepository()
+			runner := worker.New(worker.Config{
+				WorkerID: "worker-stage-cancel", Jobs: jobStore, Generations: service, Agent: codingAgent,
+				Publisher: publish.NewPublisher(artifact.NewBuilder("stage-key", ed25519.NewKeyFromSeed(seed[:])), objectStore, versions),
+				NewCardID: func() string { return "card_stage_cancel" }, NewVersionID: func() string { return "ver_stage_cancel" },
+				Now: time.Now, LeaseDuration: 40 * time.Millisecond, HeartbeatInterval: 10 * time.Millisecond,
+			})
+			done := make(chan error, 1)
+			go func() { _, runErr := runner.RunOnce(ctx); done <- runErr }()
+			<-stage.started
+			if _, err := service.Cancel(ctx, "user", session.ID); err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case <-stage.cancelled:
+			case <-time.After(time.Second):
+				t.Fatal("stage did not observe cancellation")
+			}
+			if err := <-done; !errors.Is(err, jobs.ErrConflict) {
+				t.Fatalf("RunOnce() error = %v", err)
+			}
+			stored, err := service.Get(ctx, "user", session.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			published, err := versions.ListByUser(ctx, "user")
+			if err != nil || stored.Status != generation.StatusCancelled || len(published) != 0 {
+				t.Fatalf("session=%s versions=%d error=%v", stored.Status, len(published), err)
+			}
+		})
+	}
+}
+
 func TestWorkerPublishesSandboxedCodeCard(t *testing.T) {
 	t.Parallel()
 
@@ -881,6 +1004,60 @@ type captureObjectStore struct {
 type temporaryFailureObjectStore struct {
 	*publish.MemoryObjectStore
 	failed bool
+}
+
+type countingObjectStore struct {
+	*publish.MemoryObjectStore
+	puts int
+	keys []string
+}
+
+func (store *countingObjectStore) PutIfAbsent(ctx context.Context, key string, content []byte) error {
+	store.puts++
+	store.keys = append(store.keys, key)
+	return store.MemoryObjectStore.PutIfAbsent(ctx, key, content)
+}
+
+type temporaryFailureVersionRepository struct {
+	*publish.MemoryVersionRepository
+	failed bool
+}
+
+func (repository *temporaryFailureVersionRepository) Create(
+	ctx context.Context, version publish.CardVersion,
+) (publish.CardVersion, error) {
+	if !repository.failed {
+		repository.failed = true
+		return publish.CardVersion{}, publish.ErrRetryable
+	}
+	return repository.MemoryVersionRepository.Create(ctx, version)
+}
+
+type stageCancellation struct {
+	started   chan struct{}
+	cancelled chan struct{}
+}
+
+type blockingWebBuilder struct{ stage *stageCancellation }
+
+func (builder blockingWebBuilder) Build(ctx context.Context, _ map[string]string) (map[string][]byte, error) {
+	close(builder.stage.started)
+	<-ctx.Done()
+	close(builder.stage.cancelled)
+	return nil, ctx.Err()
+}
+
+type blockingObjectStore struct{ stage *stageCancellation }
+
+func (store blockingObjectStore) PutIfAbsent(ctx context.Context, _ string, _ []byte) error {
+	close(store.stage.started)
+	<-ctx.Done()
+	close(store.stage.cancelled)
+	return ctx.Err()
+}
+
+func (blockingObjectStore) SignedURL(context.Context, string, time.Duration) (string, time.Time, error) {
+	return "", time.Time{}, publish.ErrNotFound
 }
 
 func (store *temporaryFailureObjectStore) PutIfAbsent(

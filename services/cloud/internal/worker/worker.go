@@ -216,7 +216,7 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		MaxSize:            contracts.Size{Width: 1200, Height: 900},
 		Capabilities:       append([]string(nil), requirement.AllowedCapabilities...),
 		NetworkPolicy:      contracts.NetworkPolicy{Mode: "none", Domains: []string{}},
-		CreatedAt:          now,
+		CreatedAt:          job.CreatedAt,
 	}
 	publishStartedAt := time.Now()
 	worker.config.Logger.InfoContext(ctx, "artifact_publish_started",
@@ -235,7 +235,7 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 			"runtime": string(result.Runtime),
 			"reason":  result.Reason,
 		},
-		CreatedAt: now,
+		CreatedAt: job.CreatedAt,
 	})
 	if err != nil {
 		worker.config.Logger.WarnContext(ctx, "artifact_publish_failed",
