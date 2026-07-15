@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,15 +20,17 @@ import (
 )
 
 type Config struct {
-	WorkerID     string
-	Jobs         jobs.Store
-	Generations  *generation.Service
-	Agent        *agent.CodingAgent
-	Publisher    *publish.Publisher
-	NewCardID    func() string
-	NewVersionID func() string
-	Now          func() time.Time
-	Logger       *slog.Logger
+	WorkerID          string
+	Jobs              jobs.Store
+	Generations       *generation.Service
+	Agent             *agent.CodingAgent
+	Publisher         *publish.Publisher
+	NewCardID         func() string
+	NewVersionID      func() string
+	Now               func() time.Time
+	Logger            *slog.Logger
+	LeaseDuration     time.Duration
+	HeartbeatInterval time.Duration
 }
 
 type Worker struct {
@@ -44,15 +47,47 @@ func New(config Config) *Worker {
 	if config.Logger == nil {
 		config.Logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 	}
+	if config.LeaseDuration == 0 {
+		config.LeaseDuration = 90 * time.Second
+	}
+	if config.HeartbeatInterval == 0 {
+		config.HeartbeatInterval = 30 * time.Second
+	}
+	if config.LeaseDuration <= 0 ||
+		config.HeartbeatInterval <= 0 ||
+		config.HeartbeatInterval*2 >= config.LeaseDuration {
+		panic("worker heartbeat interval must be less than half the lease duration")
+	}
 	return &Worker{config: config}
 }
 
-func (worker *Worker) RunOnce(ctx context.Context) (Outcome, error) {
+func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr error) {
 	now := worker.config.Now().UTC()
-	job, err := worker.config.Jobs.Claim(ctx, worker.config.WorkerID, now, time.Minute)
+	job, err := worker.config.Jobs.Claim(
+		ctx,
+		worker.config.WorkerID,
+		now,
+		worker.config.LeaseDuration,
+	)
 	if err != nil {
 		return Outcome{}, err
 	}
+	heartbeat := startLeaseHeartbeat(
+		ctx,
+		worker.config.Jobs,
+		job.ID,
+		worker.config.WorkerID,
+		worker.config.LeaseDuration,
+		worker.config.HeartbeatInterval,
+		worker.config.Now,
+	)
+	ctx = heartbeat.workContext
+	defer func() {
+		if heartbeatErr := heartbeat.Stop(); heartbeatErr != nil {
+			outcome = Outcome{}
+			runErr = fmt.Errorf("JOB_LEASE_LOST: %w", heartbeatErr)
+		}
+	}()
 	jobStartedAt := time.Now()
 	worker.config.Logger.InfoContext(ctx, "generation_job_started",
 		"jobId", job.ID,
@@ -212,6 +247,9 @@ func descriptionFromRequirement(requirement generation.RequirementSnapshot) stri
 }
 
 func (worker *Worker) fail(ctx context.Context, job *jobs.Job, code string, cause error) error {
+	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
+		return cause
+	}
 	_, _ = worker.config.Generations.MarkFailed(ctx, job.SessionID, code)
 	_ = worker.config.Jobs.Fail(ctx, job.ID, worker.config.WorkerID, worker.config.Now())
 	worker.config.Logger.WarnContext(ctx, "generation_job_failed",

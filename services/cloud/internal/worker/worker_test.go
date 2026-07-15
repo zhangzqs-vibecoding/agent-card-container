@@ -7,6 +7,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"io"
 	"slices"
 	"strings"
@@ -22,6 +23,51 @@ import (
 	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 	"github.com/zzq/agent-card-container/services/cloud/internal/worker"
 )
+
+func TestWorkerCancelsGenerationWhenHeartbeatLosesLease(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	repository := generation.NewMemoryRepository()
+	service := generation.NewService(repository, func() string { return "gen_lease_loss" }, time.Now)
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "生成离线卡片", Target: generation.TargetNative, Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	baseStore := jobs.NewMemoryStore(func() string { return "job_lease_loss" })
+	if _, err := baseStore.Enqueue(ctx, session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := &leaseLosingStore{Store: baseStore}
+	seed := sha256.Sum256([]byte("lease-loss-key"))
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-lease-loss", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(blockingProvider{}, agent.NewNativeValidator()),
+		Publisher: publish.NewPublisher(
+			artifact.NewBuilder("lease-loss-key", ed25519.NewKeyFromSeed(seed[:])),
+			publish.NewMemoryObjectStore(), publish.NewMemoryVersionRepository(),
+		),
+		NewCardID: func() string { return "card_lease_loss" }, NewVersionID: func() string { return "ver_lease_loss" },
+		Now: time.Now, LeaseDuration: 20 * time.Millisecond, HeartbeatInterval: 5 * time.Millisecond,
+	})
+
+	if _, err := runner.RunOnce(ctx); !errors.Is(err, jobs.ErrConflict) {
+		t.Fatalf("RunOnce() error = %v, want lease conflict", err)
+	}
+	stored, err := service.Get(ctx, "user", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Status != generation.StatusGenerating || stored.VersionID != "" {
+		t.Fatalf("session after lease loss = %#v", stored)
+	}
+}
 
 func TestWorkerUsesOnlyConfirmedRequirementSnapshot(t *testing.T) {
 	t.Parallel()
@@ -442,6 +488,23 @@ func TestWorkerPublishesSandboxedCodeCard(t *testing.T) {
 
 type staticProvider struct {
 	content string
+}
+
+type blockingProvider struct{}
+
+func (blockingProvider) Generate(ctx context.Context, _ modelprovider.Request) (modelprovider.Response, error) {
+	<-ctx.Done()
+	return modelprovider.Response{}, ctx.Err()
+}
+
+type leaseLosingStore struct {
+	jobs.Store
+}
+
+func (*leaseLosingStore) ExtendLease(
+	context.Context, string, string, time.Time, time.Duration,
+) error {
+	return jobs.ErrConflict
 }
 
 type captureProvider struct {
