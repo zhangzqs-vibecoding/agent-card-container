@@ -359,6 +359,8 @@ P0-B、P0-C 和所有 P1/P2 工作分别在其前置条件满足后创建独立�
 | `docs/superpowers/plans/2026-07-15-p1b-worker-reliability.md` | P1-B 的 TDD、heartbeat、幂等和故障恢复任务 | worker 可靠性行为改变后 |
 | `docs/verification/p1b-worker-reliability.md` | P1-B race、事务、租约、重试、取消和 crash recovery 证据 | worker 或持久化门禁复验后 |
 | `docs/superpowers/specs/2026-07-15-next-stage-product-roadmap.md` | 下一阶段产品优先级、Agent 边界和实施顺序 | 阶段目标、依赖或产品边界改变后 |
+| `docs/superpowers/specs/2026-07-15-codecard-production-design.md` | P1-C 固定评测、builder、浏览器/RPC 和安全边界 | CodeCard 合同、门槛或运行边界改变后 |
+| `docs/superpowers/plans/2026-07-15-p1c-codecard-production.md` | P1-C 的 TDD 实施任务和小步提交序列 | 每项产生实际实现和验证证据后 |
 | `docs/verification/m3-production-integration.md` | PostgreSQL、S3 和 sandbox adapter 集成证据 | P0-B 固定环境复验后 |
 | `docs/verification/m4-acceptance.md` | 跨里程碑总验收与 release withheld 决策 | 新的自动化、设备或发行证据产生后 |
 | `docs/verification/windows-m0-m4-evidence-template.md` | Windows 设备矩阵证据模板 | P0-C/P2 真实设备执行时 |
