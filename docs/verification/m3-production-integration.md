@@ -8,6 +8,12 @@ This evidence uses disposable local containers and repository integration
 tests. It proves the production persistence and sandbox adapters; it does not
 claim a real third-party model call or Windows WebView2 acceptance.
 
+The later P0-B gate extends this one-run adapter evidence with runtime and data
+service restart, readiness failure injection, signed network download and
+paired backup/restore. See
+`docs/verification/p0b-persistent-test-environment.md`. M3 PASS alone must not
+be used as P0-B restart or recovery evidence.
+
 ## PostgreSQL 17 and MinIO
 
 Disposable `postgres:17-alpine`, `minio/minio` and `minio/mc` containers ran on

@@ -32,7 +32,7 @@ P0-B 只有同时满足以下条件才能标记 `PASS`：
 - Modify: `services/cloud/internal/httpapi/server_test.go`
 - Modify: `services/cloud/internal/httpapi/accesslog_test.go`
 
-- [ ] **Step 1：先写失败测试**
+- [x] **Step 1：先写失败测试**
 
 新增表驱动测试，覆盖 readiness checker 成功、返回错误和超时三种情况。断言：
 
@@ -41,7 +41,7 @@ P0-B 只有同时满足以下条件才能标记 `PASS`：
 - 响应和 access log 不包含数据库 DSN、S3 endpoint、底层错误字符串或凭据。
 - `POST /readyz` 返回 `405`；既有 `/healthz` 行为不变。
 
-- [ ] **Step 2：运行 RED**
+- [x] **Step 2：运行 RED**
 
 ```bash
 cd services/cloud
@@ -50,7 +50,7 @@ go test ./internal/httpapi -run 'Ready|Health|AccessLog' -count=1
 
 预期：因 `ReadinessChecker`、配置字段和 `/readyz` 路由尚不存在而失败。
 
-- [ ] **Step 3：实现最小 readiness handler**
+- [x] **Step 3：实现最小 readiness handler**
 
 在 `httpapi` 定义窄接口：
 
@@ -62,7 +62,7 @@ type ReadinessChecker interface {
 
 将其加入 `CloudHandlerConfig`。`/readyz` 使用请求 context 调用 checker，只向客户端返回稳定状态，不暴露原始错误；底层诊断只允许以结构化、安全分类记录。不要把 readiness 合并进 `/healthz`。
 
-- [ ] **Step 4：运行 GREEN**
+- [x] **Step 4：运行 GREEN**
 
 ```bash
 cd services/cloud
@@ -70,7 +70,7 @@ go test ./internal/httpapi -run 'Ready|Health|AccessLog' -count=1
 go test ./internal/httpapi -count=1
 ```
 
-- [ ] **Step 5：提交检查点**
+- [x] **Step 5：提交检查点**
 
 ```bash
 git diff --check
@@ -87,11 +87,11 @@ git commit -m "feat: add readiness endpoint contract"
 - Modify: `services/cloud/internal/bootstrap/runtime.go`
 - Modify: `services/cloud/internal/bootstrap/runtime_test.go`
 
-- [ ] **Step 1：先写失败测试**
+- [x] **Step 1：先写失败测试**
 
 在 bootstrap 测试中用可控 probe 证明：两个依赖均成功才 ready；任一失败都失败；探测遵循 context。S3 集成测试停止 MinIO 后必须观察到 probe 失败，恢复后再次成功。测试错误只比较类别，不把 endpoint 或凭据写入失败消息。
 
-- [ ] **Step 2：运行 RED**
+- [x] **Step 2：运行 RED**
 
 ```bash
 cd services/cloud
@@ -101,7 +101,7 @@ go test ./internal/publish -run S3ObjectStoreReady -count=1
 
 预期：因 S3 probe 和组合 checker 尚不存在而失败。
 
-- [ ] **Step 3：实现最小依赖探测**
+- [x] **Step 3：实现最小依赖探测**
 
 - PostgreSQL 使用 `DB.PingContext`。
 - `S3ObjectStore.Ready` 使用 `BucketExists` 验证服务可达且目标 bucket 存在；readiness 不自动创建 bucket。
@@ -111,7 +111,7 @@ go test ./internal/publish -run S3ObjectStoreReady -count=1
 
 不要扩大 `publish.ObjectStore` 接口；readiness 是部署能力，不是发布领域能力。
 
-- [ ] **Step 4：运行 GREEN 与 race test**
+- [x] **Step 4：运行 GREEN 与 race test**
 
 ```bash
 cd services/cloud
@@ -119,7 +119,7 @@ go test ./internal/publish ./internal/bootstrap -count=1
 go test ./internal/bootstrap -run Ready -race -count=1
 ```
 
-- [ ] **Step 5：提交检查点**
+- [x] **Step 5：提交检查点**
 
 ```bash
 git diff --check
@@ -137,7 +137,7 @@ git commit -m "feat: probe persistent runtime readiness"
 - Modify: `services/cloud/internal/bootstrap/runtime_test.go`
 - Modify: `services/cloud/.env.example`
 
-- [ ] **Step 1：先写失败测试**
+- [x] **Step 1：先写失败测试**
 
 为 `AGENTCARD_PERSISTENCE_REQUIRED=true` 增加测试矩阵：
 
@@ -147,25 +147,25 @@ git commit -m "feat: probe persistent runtime readiness"
 - 未设置该开关且两者都为空时仍允许当前单进程内存开发模式。
 - 非法布尔值启动失败，避免拼写错误降低安全等级。
 
-- [ ] **Step 2：运行 RED**
+- [x] **Step 2：运行 RED**
 
 ```bash
 cd services/cloud
 go test ./internal/bootstrap -run PersistenceRequired -count=1
 ```
 
-- [ ] **Step 3：实现显式 fail-closed 配置**
+- [x] **Step 3：实现显式 fail-closed 配置**
 
 只新增一个布尔配置，不引入新的 mode 层次。远程测试部署必须设置 `AGENTCARD_PERSISTENCE_REQUIRED=true`。错误信息只指出缺失的配置名，不回显配置值。更新 `.env.example` 说明该开关在远程环境必须启用。
 
-- [ ] **Step 4：运行 GREEN**
+- [x] **Step 4：运行 GREEN**
 
 ```bash
 cd services/cloud
 go test ./internal/bootstrap -count=1
 ```
 
-- [ ] **Step 5：提交检查点**
+- [x] **Step 5：提交检查点**
 
 ```bash
 git diff --check
@@ -181,7 +181,7 @@ git commit -m "feat: require persistence for remote runtime"
 - Modify: `services/cloud/internal/bootstrap/runtime_test.go`
 - Create: `services/cloud/internal/bootstrap/artifact_verifier_test.go`
 
-- [ ] **Step 1：扩展现有 opt-in 集成测试并先确认 RED**
+- [x] **Step 1：扩展现有 opt-in 集成测试并先确认 RED**
 
 将 `TestProductionRuntimesSharePostgresJobsAndS3Artifacts` 拆成可复用 fixture，并覆盖完整顺序：
 
@@ -196,7 +196,7 @@ git commit -m "feat: require persistence for remote runtime"
 
 先让测试要求“重建后查询 version 与下载并验签”；在补齐 helper 前确认测试失败或不能编译。
 
-- [ ] **Step 2：运行 RED**
+- [x] **Step 2：运行 RED**
 
 ```bash
 cd services/cloud
@@ -205,7 +205,7 @@ go test ./internal/bootstrap -run ProductionRuntimes -count=1
 
 若未提供测试环境变量，测试应明确 `SKIP`；Task 6 的门禁脚本负责提供环境并把它变为必跑。
 
-- [ ] **Step 3：实现独立验证器 helper**
+- [x] **Step 3：实现独立验证器 helper**
 
 验证器只接收 URL、预期 digest、公钥和 key ID。它必须：
 
@@ -217,14 +217,14 @@ go test ./internal/bootstrap -run ProductionRuntimes -count=1
 
 优先复用 `artifact` 包的只读解析/规范化函数；若现有函数与 builder 耦合，只抽取最小纯函数，不复制第二套协议。
 
-- [ ] **Step 4：运行 GREEN**
+- [x] **Step 4：运行 GREEN**
 
 ```bash
 cd services/cloud
 go test ./internal/bootstrap -run ProductionRuntimes -count=1
 ```
 
-- [ ] **Step 5：提交检查点**
+- [x] **Step 5：提交检查点**
 
 ```bash
 git diff --check
@@ -239,7 +239,7 @@ git commit -m "test: prove persistent signed artifact recovery"
 - Modify: `services/cloud/internal/bootstrap/runtime_test.go`
 - Modify: `docs/verification/m3-production-integration.md`
 
-- [ ] **Step 1：先写失败的 opt-in 场景**
+- [x] **Step 1：先写失败的 opt-in 场景**
 
 通过测试环境提供的控制命令或 Docker 容器名依次暂停 PostgreSQL、恢复 PostgreSQL、暂停 MinIO、恢复 MinIO。每一步只从 HTTP 观察：
 
@@ -253,7 +253,7 @@ git commit -m "test: prove persistent signed artifact recovery"
 
 测试必须有总超时和有限轮询，不使用固定长 sleep。
 
-- [ ] **Step 2：运行场景并修复实现缺口**
+- [x] **Step 2：运行场景并修复实现缺口**
 
 ```bash
 cd services/cloud
@@ -262,11 +262,11 @@ go test ./internal/bootstrap -run 'ProductionReadinessFailureMatrix' -count=1
 
 只修复从该矩阵暴露出的 readiness 问题；不要在 P0-B 顺带实现 worker 重试或自动故障转移。
 
-- [ ] **Step 3：更新原 M3 证据边界**
+- [x] **Step 3：更新原 M3 证据边界**
 
 在 `m3-production-integration.md` 保留历史 PASS，同时链接新的 P0-B 证据，并明确 M3 的一次运行共享测试不能替代重启/故障/恢复证明。
 
-- [ ] **Step 4：提交检查点**
+- [x] **Step 4：提交检查点**
 
 ```bash
 git diff --check
@@ -282,7 +282,7 @@ git commit -m "test: cover persistent dependency readiness"
 - Create: `tooling/persistence/README.md`
 - Modify: `.gitignore`
 
-- [ ] **Step 1：先写脚本静态测试**
+- [x] **Step 1：先写脚本静态测试**
 
 在 shell 脚本开头提供 `--check` 模式，验证 Docker、`go`、`curl`、`sha256sum` 和空闲端口能力；任何依赖缺失必须非零退出。使用 `tooling/security/run-security-gate.sh` 的 shell 规范作为参考，但不复用与本任务无关的逻辑。
 
@@ -294,7 +294,7 @@ sh tooling/persistence/run-p0b-gate.sh --check
 
 预期：文件不存在而失败。
 
-- [ ] **Step 2：实现隔离环境生命周期**
+- [x] **Step 2：实现隔离环境生命周期**
 
 脚本必须：
 
@@ -307,7 +307,7 @@ sh tooling/persistence/run-p0b-gate.sh --check
 
 镜像版本必须固定到仓库已验证的主版本；若固定 digest，README 记录更新方式。脚本不得使用 `latest`。
 
-- [ ] **Step 3：实现同代次备份和恢复演练**
+- [x] **Step 3：实现同代次备份和恢复演练**
 
 脚本在第一次垂直测试成功后：
 
@@ -322,7 +322,7 @@ sh tooling/persistence/run-p0b-gate.sh --check
 
 数据库 dump 与对象镜像任一失败都必须判定整个备份失败，不允许继续形成“可用备份”标记。
 
-- [ ] **Step 4：运行完整门禁**
+- [x] **Step 4：运行完整门禁**
 
 ```bash
 sh tooling/persistence/run-p0b-gate.sh
@@ -330,11 +330,11 @@ sh tooling/persistence/run-p0b-gate.sh
 
 预期：输出逐阶段 PASS 摘要；不输出任何生成凭据；退出后不存在本次命名的容器、network、volume 或仓库内运行数据。
 
-- [ ] **Step 5：更新忽略规则与使用说明**
+- [x] **Step 5：更新忽略规则与使用说明**
 
 `.gitignore` 防止误提交本地 backup/evidence 临时目录。README 记录先决条件、运行命令、失败排查和“只用于测试环境”的边界，不提供固定密码示例。
 
-- [ ] **Step 6：提交检查点**
+- [x] **Step 6：提交检查点**
 
 ```bash
 git diff --check
@@ -350,7 +350,7 @@ git commit -m "test: automate P0-B persistence gate"
 - Modify: `docs/superpowers/plans/2026-07-15-p0b-persistent-test-environment.md`
 - Modify: `docs/verification/m4-acceptance.md`
 
-- [ ] **Step 1：执行完整自动化验证**
+- [x] **Step 1：执行完整自动化验证**
 
 ```bash
 test -z "$(gofmt -l services/cloud)"
@@ -366,7 +366,7 @@ git diff --check
 
 所有命令必须使用不含真实模型凭据的环境。若当前 shell 有真实 provider key，先为命令显式 `env -u`，但不要打印环境。
 
-- [ ] **Step 2：执行敏感信息与运行产物审计**
+- [x] **Step 2：执行敏感信息与运行产物审计**
 
 检查 tracked 和 untracked 文件，确认没有：
 
@@ -376,7 +376,7 @@ git diff --check
 
 只记录审计结论，不把可疑值输出到终端或文档。
 
-- [ ] **Step 3：形成可复核证据**
+- [x] **Step 3：形成可复核证据**
 
 `docs/verification/p0b-persistent-test-environment.md` 至少记录：
 
@@ -388,7 +388,7 @@ git diff --check
 - backup ID、备份 manifest digest、恢复后查询/下载/验签结果。
 - Windows 远程访问继续标记为 `P0-C DEVICE NOT RUN`。
 
-- [ ] **Step 4：更新状态但不夸大结论**
+- [x] **Step 4：更新状态但不夸大结论**
 
 仅当全部 P0-B 条件通过后：
 
@@ -398,7 +398,7 @@ git diff --check
 
 若 Docker 本地门禁通过但固定远程服务器尚未执行，只能标记 `LOCAL HEADLESS PASS / REMOTE NOT RUN`。
 
-- [ ] **Step 5：最终自审与提交**
+- [x] **Step 5：最终自审与提交**
 
 ```bash
 git status --short

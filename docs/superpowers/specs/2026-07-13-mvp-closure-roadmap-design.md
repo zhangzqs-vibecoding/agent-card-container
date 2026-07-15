@@ -3,7 +3,7 @@
 状态：**已确认，实施中**
 记录日期：2026-07-13（Asia/Shanghai）
 最近核对：2026-07-15（Asia/Shanghai）
-代码基线：`41f9894`
+代码基线：`b77b677`
 
 ## 1. 文档目的
 
@@ -47,7 +47,7 @@
 | 工作包 | 当前状态 | 已有交付物 | 下一可交付物 | 完整通过的外部依赖 |
 |---|---|---|---|---|
 | P0-A 真实 DeepSeek NativeCard | **HEADLESS PASS** | 确认快照、catalog 派生语义、严格 validator、有界重试、3/3 签名垂直链路、16/20 真实质量门和脱敏证据 | 保持回归门稳定，等待 P0-C 消费同一协议和制品 | Windows 设备证据属于 P0-C，不反向阻塞 headless 结论 |
-| P0-B 持久化测试环境 | **计划已形成，待实施** | PostgreSQL、S3/MinIO adapter、集成测试与 `docs/superpowers/plans/2026-07-15-p0b-persistent-test-environment.md` | 固定测试环境部署、`/readyz`、重启恢复、备份恢复和远程制品下载 | 可用测试服务器、数据库和对象存储 |
+| P0-B 持久化测试环境 | **LOCAL HEADLESS PASS / REMOTE NOT RUN** | PostgreSQL/MinIO、`/readyz`、服务与数据依赖重启、网络下载、独立验签和成对备份恢复均通过可重复 Docker 门禁 | 在固定测试服务器复跑并证明 Windows 参考设备网络可达 | 可用测试服务器；Windows 设备消费属于 P0-C |
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
 | P1-A 工作区与版本生命周期 | **未开始** | 现有 placement、Surface 和版本查询骨架 | 独立设计/计划；完成拖放缩放、实例管理、同卡升级与回滚 | P0-C 暴露的问题已分类 |
 | P1-B worker 可靠性 | **未开始，局部基础已有** | PostgreSQL job store、现有租约与取消边界 | 独立设计/计划；完成 heartbeat、事务一致性、幂等和故障恢复矩阵 | P0-B 持久化环境 |
@@ -337,8 +337,8 @@ MVP 先使用现有结构化日志、聚合查询和少量指标端点；在单�
 
 P0-A 已完成 Linux/headless 范围的独立实施计划，状态为 `HEADLESS PASS`。当前按“关键路径 + 并行泳道”继续推进：
 
-1. 为 P0-B 单独编写并确认实施计划，部署 PostgreSQL/MinIO 持久化测试环境，完成重启、备份恢复、`/readyz` 和远程制品下载验收。
-2. P0-B 通过后立即启动 P1-B 的非设备工作，优先关闭 heartbeat、确认/入队事务、发布幂等和部分失败恢复。
+1. P0-B 已达到 `LOCAL HEADLESS PASS`；在固定测试服务器复跑相同门禁并证明 Windows 参考设备可达后，才更新为远程 `PASS`。
+2. 立即启动 P1-B 的非设备工作，优先关闭 heartbeat、确认/入队事务、发布幂等和部分失败恢复；本地持久化门禁已经满足其开发前置条件。
 3. P0-B 为 `PASS` 后，在 Windows 11 x64 参考设备执行 P0-C。此前 Windows 安装、交互、状态保留和断网重启保持 `DEVICE NOT RUN`。
 4. P1-A 的具体修正由 P0-C 设备结果排序；没有 Windows 设备证据时只推进与平台无关的 controller、repository 和布局算法测试。
 5. P1-C 必须等待 P0-A、P0-B 和 P1-B 的关键安全与可靠性边界稳定；P2 的进入与退出条件按第 5.7 节执行。
@@ -354,6 +354,8 @@ P0-B、P0-C 和所有 P1/P2 工作分别在其前置条件满足后创建独立�
 | `docs/superpowers/specs/2026-07-12-agent-card-container-design.md` | 顶层架构、安全边界和运行时事实来源 | 仅当协议、安全边界或运行时选择改变时 |
 | `docs/superpowers/plans/2026-07-13-real-deepseek-nativecard-closure.md` | P0-A 的 TDD 实施任务与命令 | 每个任务有实际测试证据后 |
 | `docs/verification/p0a-real-deepseek-nativecard.md` | P0-A 真实模型、签名制品和未执行设备项证据 | live gate 或相关审计实际运行后 |
+| `docs/superpowers/plans/2026-07-15-p0b-persistent-test-environment.md` | P0-B 的 TDD 实施任务与可重复门禁 | 每个任务有实际测试证据后 |
+| `docs/verification/p0b-persistent-test-environment.md` | P0-B 重启、readiness、下载、验签和备份恢复证据 | 本地或固定远程环境复验后 |
 | `docs/verification/m3-production-integration.md` | PostgreSQL、S3 和 sandbox adapter 集成证据 | P0-B 固定环境复验后 |
 | `docs/verification/m4-acceptance.md` | 跨里程碑总验收与 release withheld 决策 | 新的自动化、设备或发行证据产生后 |
 | `docs/verification/windows-m0-m4-evidence-template.md` | Windows 设备矩阵证据模板 | P0-C/P2 真实设备执行时 |

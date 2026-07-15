@@ -1,7 +1,7 @@
 # M4 acceptance evidence
 
 Overall status: **DEVICE EVIDENCE REQUIRED**  
-Latest automated code commit: `41f9894`
+Latest automated code commit: `b77b677`
 
 Recorded: 2026-07-15 (Asia/Shanghai)
 
@@ -28,6 +28,7 @@ commit.
 | Go static analysis | `cd services/cloud && go vet ./...` | PASS | Exit 0 |
 | Go race suite | `cd services/cloud && CGO_ENABLED=1 go test ./... -race` | PASS | All packages passed |
 | Real DeepSeek NativeCard headless gate | opt-in three-case vertical test plus 20-case fixed evaluation | **HEADLESS PASS** | Commits `808b435`, `0a11ef3`, `41f9894`; 3/3 signed artifacts verified and 16/20 fixed cases passed; Windows device work remains `NOT RUN` |
+| P0-B persistent environment gate | `sh tooling/persistence/run-p0b-gate.sh` | **LOCAL HEADLESS PASS / REMOTE NOT RUN** | PostgreSQL/MinIO repositories, runtime and data-service restart, dependency failure matrix, non-memory network download, independent SHA/manifest/Ed25519 verification and paired backup/restore passed at `b77b677`; fixed remote host and Windows reachability remain `NOT RUN` |
 | Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | TypeScript shared fixtures, Flutter security suite 66 tests, Go race suite, CodeCard dependency/typecheck/tests/build/bundle validation and official npm bulk advisory audit passed; 164 packages, zero high/critical findings |
 | Performance evaluator | `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart` | PASS | Budgets, percentile calculation and minimum sample populations tested |
 | Insufficient performance evidence | `dart tooling/performance/summarize.dart tooling/performance/fixtures/insufficient.json` | PASS (rejected) | Exit 1 with four `:samples` failures and `passed: false` |
