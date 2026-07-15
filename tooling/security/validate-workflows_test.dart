@@ -75,6 +75,30 @@ jobs:
     steps:
       - run: go test ./internal/modelprovider
 ''',
+    'codecard-builder.yml': r'''
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [develop]
+permissions:
+  contents: read
+jobs:
+  verify:
+    timeout-minutes: 30
+    steps:
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      - run: NODE_IMAGE=node@sha256:b04ce4ae4e95b522112c2e5c52f781471a5cbc3b594527bcddedee9bc48c03a0 sh tooling/security/run-sandbox-integration.sh
+  publish:
+    if: github.event_name != 'pull_request'
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - run: docker push "$IMAGE"
+      - run: docker image inspect "$IMAGE" --format '{{json .RepoDigests}}'
+''',
   });
   if (setErrors.isNotEmpty) {
     throw StateError('valid workflow set rejected: ${setErrors.join('; ')}');
@@ -83,12 +107,24 @@ jobs:
     'release.yml': 'on: [push]\njobs: {}',
     'deepseek-live.yml': r'''on: [push]
 secrets.AGENTCARD_MODEL_API_KEY''',
+    'codecard-builder.yml': '''
+on: [pull_request]
+permissions: write-all
+jobs:
+  publish:
+    steps:
+      - run: docker push latest
+''',
   });
   for (final expected in [
     'release workflow must be limited to v* tags',
     'release workflow must verify archives and publish checksums as prerelease',
     'DeepSeek workflow must be manual and paid-test confirmed',
     'DeepSeek workflow must use the protected deepseek-live environment',
+    'CodeCard builder workflow must verify pull requests and develop',
+    'CodeCard builder workflow must pin and scan its base image',
+    'CodeCard builder publish job must exclude pull requests',
+    'CodeCard builder workflow must publish and record an immutable digest',
   ]) {
     if (!unsafeSet.any((error) => error.contains(expected))) {
       throw StateError(

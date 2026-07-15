@@ -48,12 +48,12 @@
 - Modify: `tooling/security/validate-workflows.dart`
 - Modify: `tooling/security/validate-workflows_test.dart`
 
-- [ ] RED：workflow 使用未固定 action/base image、PR 发布、权限过宽或仅 tag 输出时失败。
-- [ ] 固定 Node 基础镜像 digest和 pnpm；加入 OCI labels 与非 root health-free builder。
-- [ ] workflow 对 PR 构建/扫描/集成测试，对 develop/手工任务登录 GHCR 并发布 digest。
-- [ ] 扫描结果 high/critical 非零时失败，保存 digest 和非敏感 SBOM 证据。
-- [ ] 本地构建镜像并运行 `run-sandbox-integration.sh`。
-- [ ] 提交：`ci: publish verified CodeCard builder image`。
+- [x] RED：workflow 使用未固定 action/base image、PR 发布、权限过宽或仅 tag 输出时失败。
+- [x] 固定 Node 基础镜像 digest和 pnpm；加入 OCI labels 与非 root health-free builder。
+- [x] workflow 对 PR 构建/扫描/集成测试，对 develop/手工任务登录 GHCR 并发布 digest。
+- [x] 扫描结果 high/critical 非零时失败，保存 digest 和非敏感 SBOM 证据。
+- [x] 本地构建镜像并运行 `run-sandbox-integration.sh`。
+- [x] 提交：`ci: publish verified CodeCard builder image`。
 
 ## Task 4：建立真实模型 CodeCard gate
 

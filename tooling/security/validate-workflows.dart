@@ -19,12 +19,28 @@ List<String> validateWorkflowText(String sourceText, {required String source}) {
     r'^\s{2}pull_request\s*:',
     multiLine: true,
   ).hasMatch(sourceText);
-  if (pullRequest &&
-      RegExp(
-        r'^\s*[A-Za-z_-]+:\s*(write|write-all)\s*$',
+  final writePermission = RegExp(
+    r'^\s*[A-Za-z_-]+:\s*(write|write-all)\s*$',
+    multiLine: true,
+  );
+  if (pullRequest) {
+    var guardedWritePermissions = 0;
+    for (final job in _jobBlocks(sourceText)) {
+      final writes = writePermission.allMatches(job.text).length;
+      if (writes == 0) continue;
+      if (RegExp(
+        r'''^\s{4}if:\s*github\.event_name\s*!=\s*['"]pull_request['"]\s*$''',
         multiLine: true,
-      ).hasMatch(sourceText)) {
-    errors.add('$source: pull-request workflow cannot grant write permissions');
+      ).hasMatch(job.text)) {
+        guardedWritePermissions += writes;
+      }
+    }
+    if (writePermission.allMatches(sourceText).length !=
+        guardedWritePermissions) {
+      errors.add(
+        '$source: pull-request workflow cannot grant write permissions',
+      );
+    }
   }
   if (pullRequest && sourceText.contains(r'${{ secrets.')) {
     errors.add('$source: pull-request workflow cannot reference secrets');
@@ -88,6 +104,49 @@ List<String> validateWorkflowSet(Map<String, String> workflows) {
       deepSeek.contains('actions/upload-artifact@')) {
     errors.add(
       'DeepSeek workflow must use the protected deepseek-live environment',
+    );
+  }
+
+  final codeCard = workflows['codecard-builder.yml'] ?? '';
+  final verifiesPullRequests = RegExp(
+    r'^\s{2}pull_request\s*:',
+    multiLine: true,
+  ).hasMatch(codeCard);
+  final verifiesDevelop = RegExp(
+    r'branches:\s*(?:\[\s*develop\s*\]|\n\s*-\s*develop)',
+  ).hasMatch(codeCard);
+  if (!verifiesPullRequests || !verifiesDevelop) {
+    errors.add(
+      'CodeCard builder workflow must verify pull requests and develop',
+    );
+  }
+  final pinnedNode = RegExp(
+    r'NODE_IMAGE[^\n]*node(?:[:@][^\s]*)?@sha256:[0-9a-f]{64}',
+  ).hasMatch(codeCard);
+  if (!pinnedNode ||
+      !codeCard.contains('aquasecurity/trivy-action@') ||
+      !codeCard.contains('run-sandbox-integration.sh')) {
+    errors.add('CodeCard builder workflow must pin and scan its base image');
+  }
+  final publishJob = _jobBlocks(
+    codeCard,
+  ).where((job) => job.name == 'publish').map((job) => job.text).firstOrNull;
+  if (publishJob == null ||
+      !RegExp(
+        r'''^\s{4}if:\s*github\.event_name\s*!=\s*['"]pull_request['"]\s*$''',
+        multiLine: true,
+      ).hasMatch(publishJob) ||
+      !RegExp(
+        r'^\s+packages:\s*write\s*$',
+        multiLine: true,
+      ).hasMatch(publishJob)) {
+    errors.add('CodeCard builder publish job must exclude pull requests');
+  }
+  if (publishJob == null ||
+      !publishJob.contains('docker push') ||
+      !publishJob.contains('RepoDigests')) {
+    errors.add(
+      'CodeCard builder workflow must publish and record an immutable digest',
     );
   }
   return errors;

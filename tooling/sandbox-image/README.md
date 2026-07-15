@@ -1,20 +1,26 @@
 # CodeCard sandbox image
 
-Build from the repository root with a Node 22 image pinned by digest:
+The Dockerfile defaults to Node 22.17.0 pinned by registry digest. Build from
+the repository root without overriding it:
 
     docker build \
-      --build-arg NODE_IMAGE=node:22-bookworm-slim@sha256:<verified-digest> \
       -f tooling/sandbox-image/Dockerfile \
       -t agent-card-builder:<version> .
 
-`NPM_REGISTRY` defaults to the configured public mirror and may be overridden
-with an approved internal registry. The lockfile integrity hashes remain
-mandatory regardless of registry.
+`NODE_IMAGE` may only be changed to another reviewed full digest. The CI policy
+and sandbox integration gate reject a mutable base image. `NPM_REGISTRY`
+defaults to the official npm registry and may be overridden with an approved
+internal registry; lockfile integrity remains mandatory.
 
 Production configuration must reference the resulting image by its digest.
 The worker never forwards model credentials, signing keys, database credentials,
 or object-store credentials into this container.
 
-The image installs dependencies with `pnpm --frozen-lockfile`. Refresh
+The image installs dependencies with `pnpm --frozen-lockfile --ignore-scripts`.
+The workflow scans both pull-request images and the independently rebuilt image
+before publishing `ghcr.io/<owner>/agent-card-codecard-builder@sha256:<digest>`.
+Runtime configuration must copy that digest, never the commit tag.
+
+Refresh
 `dependency-policy.json` only after the production license list and
 the fail-closed bulk advisory audit both pass review.

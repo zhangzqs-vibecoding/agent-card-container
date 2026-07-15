@@ -1,0 +1,109 @@
+name: codecard-builder
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tooling/codecard-template/**'
+      - 'tooling/sandbox-image/**'
+      - 'tooling/security/run-sandbox-integration.sh'
+      - '.github/workflows/codecard-builder.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'tooling/codecard-template/**'
+      - 'tooling/sandbox-image/**'
+      - 'tooling/security/run-sandbox-integration.sh'
+      - '.github/workflows/codecard-builder.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codecard-builder-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_IMAGE: node:22.17.0-bookworm-slim@sha256:b04ce4ae4e95b522112c2e5c52f781471a5cbc3b594527bcddedee9bc48c03a0
+  IMAGE: ghcr.io/${{ github.repository_owner }}/agent-card-codecard-builder:${{ github.sha }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Build the pinned builder image
+        shell: bash
+        run: |
+          docker build \
+            --build-arg "NODE_IMAGE=$NODE_IMAGE" \
+            --build-arg "BUILD_REVISION=$GITHUB_SHA" \
+            --build-arg "BUILD_SOURCE=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE" \
+            --file tooling/sandbox-image/Dockerfile .
+      - name: Reject high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+      - name: Run the locked-down sandbox integration gate
+        shell: bash
+        run: NODE_IMAGE="$NODE_IMAGE" sh tooling/security/run-sandbox-integration.sh
+      - name: Create a non-sensitive CycloneDX SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: cyclonedx
+          output: codecard-builder.sbom.json
+      - name: Upload verification SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: codecard-builder-sbom-${{ github.sha }}
+          path: codecard-builder.sbom.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - name: Rebuild the candidate from the verified source
+        shell: bash
+        run: |
+          docker build \
+            --build-arg "NODE_IMAGE=$NODE_IMAGE" \
+            --build-arg "BUILD_REVISION=$GITHUB_SHA" \
+            --build-arg "BUILD_SOURCE=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE" \
+            --file tooling/sandbox-image/Dockerfile .
+      - name: Scan the exact candidate before publication
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          severity: HIGH,CRITICAL
+      - name: Publish and record the immutable digest
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE"
+          digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          case "$digest" in
+            *@sha256:*) ;;
+            *) echo "published image has no immutable digest" >&2; exit 1 ;;
+          esac
+          echo "Published builder: $digest" >> "$GITHUB_STEP_SUMMARY"
