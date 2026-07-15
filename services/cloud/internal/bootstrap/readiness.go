@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 var (
@@ -13,9 +14,16 @@ var (
 type dependencyReadiness struct {
 	database func(context.Context) error
 	objects  func(context.Context) error
+	timeout  time.Duration
 }
 
 func (checker dependencyReadiness) Ready(ctx context.Context) error {
+	timeout := checker.timeout
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	type result struct {
 		dependency error
 		err        error

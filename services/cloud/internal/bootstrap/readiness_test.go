@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestDependencyReadinessRequiresEveryCheck(t *testing.T) {
@@ -33,6 +34,30 @@ func TestDependencyReadinessRequiresEveryCheck(t *testing.T) {
 				t.Fatalf("Ready() error = %v, want %v", err, testCase.want)
 			}
 		})
+	}
+}
+
+func TestDependencyReadinessBoundsSlowChecks(t *testing.T) {
+	t.Parallel()
+
+	checker := dependencyReadiness{
+		timeout: 10 * time.Millisecond,
+		database: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+		objects: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+	started := time.Now()
+	err := checker.Ready(context.Background())
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Ready() error = %v, want deadline exceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Ready() took %s", elapsed)
 	}
 }
 

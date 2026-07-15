@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -57,9 +58,10 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 		"AGENTCARD_DEV_TOKEN": "dev-token", "AGENTCARD_DEV_USER": "user-01",
 		"AGENTCARD_MODEL_BASE_URL": model.URL, "AGENTCARD_MODEL_API_KEY": "model-secret",
 		"AGENTCARD_MODEL": "deepseek-v4-flash", "AGENTCARD_MODEL_ALLOW_INSECURE": "true",
-		"AGENTCARD_SIGNING_KEY_ID":      "test-key",
-		"AGENTCARD_SIGNING_PRIVATE_KEY": base64.RawStdEncoding.EncodeToString(privateKey),
-		"AGENTCARD_DATABASE_URL":        dsn, "AGENTCARD_S3_ENDPOINT": s3Endpoint,
+		"AGENTCARD_SIGNING_KEY_ID":       "test-key",
+		"AGENTCARD_SIGNING_PRIVATE_KEY":  base64.RawStdEncoding.EncodeToString(privateKey),
+		"AGENTCARD_PERSISTENCE_REQUIRED": "true",
+		"AGENTCARD_DATABASE_URL":         dsn, "AGENTCARD_S3_ENDPOINT": s3Endpoint,
 		"AGENTCARD_S3_ACCESS_KEY": os.Getenv("AGENTCARD_S3_TEST_ACCESS_KEY"),
 		"AGENTCARD_S3_SECRET_KEY": os.Getenv("AGENTCARD_S3_TEST_SECRET_KEY"),
 		"AGENTCARD_S3_BUCKET":     os.Getenv("AGENTCARD_S3_TEST_BUCKET"),
@@ -153,6 +155,82 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	}
 	if err := verifyVerticalArchive(archive, version, "test-key", publicKey); err != nil {
 		t.Fatalf("verify restored artifact: %v", err)
+	}
+}
+
+func TestProductionReadinessFailureMatrix(t *testing.T) {
+	dsn := os.Getenv("AGENTCARD_POSTGRES_TEST_DSN")
+	s3Endpoint := os.Getenv("AGENTCARD_S3_TEST_ENDPOINT")
+	postgresContainer := os.Getenv("AGENTCARD_POSTGRES_TEST_CONTAINER")
+	minioContainer := os.Getenv("AGENTCARD_S3_TEST_CONTAINER")
+	if dsn == "" || s3Endpoint == "" || postgresContainer == "" || minioContainer == "" {
+		t.Skip("controlled production persistence test environment is not configured")
+	}
+	model := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(writer).Encode(map[string]any{"choices": []any{}})
+	}))
+	defer model.Close()
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environment := map[string]string{
+		"AGENTCARD_DEV_TOKEN": "dev-token", "AGENTCARD_DEV_USER": "user-01",
+		"AGENTCARD_MODEL_BASE_URL": model.URL, "AGENTCARD_MODEL_API_KEY": "model-secret",
+		"AGENTCARD_MODEL": "deepseek-v4-flash", "AGENTCARD_MODEL_ALLOW_INSECURE": "true",
+		"AGENTCARD_SIGNING_KEY_ID":       "test-key",
+		"AGENTCARD_SIGNING_PRIVATE_KEY":  base64.RawStdEncoding.EncodeToString(privateKey),
+		"AGENTCARD_PERSISTENCE_REQUIRED": "true",
+		"AGENTCARD_DATABASE_URL":         dsn,
+		"AGENTCARD_S3_ENDPOINT":          s3Endpoint,
+		"AGENTCARD_S3_ACCESS_KEY":        os.Getenv("AGENTCARD_S3_TEST_ACCESS_KEY"),
+		"AGENTCARD_S3_SECRET_KEY":        os.Getenv("AGENTCARD_S3_TEST_SECRET_KEY"),
+		"AGENTCARD_S3_BUCKET":            os.Getenv("AGENTCARD_S3_TEST_BUCKET"),
+		"AGENTCARD_S3_REGION":            "us-east-1",
+		"AGENTCARD_S3_SECURE":            "false",
+	}
+	runtime, err := bootstrap.NewFromEnvironment(environment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+	t.Cleanup(func() {
+		_ = exec.Command("docker", "unpause", postgresContainer).Run()
+		_ = exec.Command("docker", "unpause", minioContainer).Run()
+	})
+
+	assertRuntimeStatus(t, runtime.Handler(), "/healthz", http.StatusOK)
+	assertRuntimeStatus(t, runtime.Handler(), "/readyz", http.StatusOK)
+
+	dockerContainerAction(t, "pause", postgresContainer)
+	assertRuntimeStatus(t, runtime.Handler(), "/healthz", http.StatusOK)
+	assertRuntimeStatus(t, runtime.Handler(), "/readyz", http.StatusServiceUnavailable)
+	dockerContainerAction(t, "unpause", postgresContainer)
+	assertRuntimeStatus(t, runtime.Handler(), "/readyz", http.StatusOK)
+
+	dockerContainerAction(t, "pause", minioContainer)
+	assertRuntimeStatus(t, runtime.Handler(), "/healthz", http.StatusOK)
+	assertRuntimeStatus(t, runtime.Handler(), "/readyz", http.StatusServiceUnavailable)
+	dockerContainerAction(t, "unpause", minioContainer)
+	assertRuntimeStatus(t, runtime.Handler(), "/readyz", http.StatusOK)
+}
+
+func dockerContainerAction(t *testing.T, action, container string) {
+	t.Helper()
+	if err := exec.Command("docker", action, container).Run(); err != nil {
+		t.Fatalf("docker %s test dependency: %v", action, err)
+	}
+}
+
+func assertRuntimeStatus(t *testing.T, handler http.Handler, path string, want int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	request := httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != want {
+		t.Fatalf("GET %s status = %d, want %d", path, response.Code, want)
 	}
 }
 
