@@ -126,6 +126,7 @@ func NewFromEnvironmentWithLogger(environment map[string]string, logger *slog.Lo
 		NewRequestID:  func() string { return randomID("req_") },
 		Logger:        logger,
 		Now:           time.Now,
+		Readiness:     repositories.readiness,
 	})
 	composed = true
 	return &Runtime{
@@ -156,6 +157,7 @@ type repositorySet struct {
 	versions    publish.VersionRepository
 	objects     publish.ObjectStore
 	database    *sql.DB
+	readiness   httpapi.ReadinessChecker
 }
 
 func buildRepositories(environment map[string]string) (repositorySet, error) {
@@ -167,6 +169,7 @@ func buildRepositories(environment map[string]string) (repositorySet, error) {
 			jobs:        jobs.NewMemoryStore(func() string { return randomID("job_") }),
 			versions:    publish.NewMemoryVersionRepository(),
 			objects:     publish.NewMemoryObjectStore(),
+			readiness:   readyRuntime{},
 		}, nil
 	}
 	if databaseURL == "" || s3Endpoint == "" {
@@ -206,6 +209,10 @@ func buildRepositories(environment map[string]string) (repositorySet, error) {
 		versions:    publish.NewPostgresVersionRepository(database),
 		objects:     objects,
 		database:    database,
+		readiness: dependencyReadiness{
+			database: database.PingContext,
+			objects:  objects.Ready,
+		},
 	}, nil
 }
 

@@ -27,6 +27,17 @@ type S3ObjectStore struct {
 	now    func() time.Time
 }
 
+func (store *S3ObjectStore) Ready(ctx context.Context) error {
+	exists, err := store.client.BucketExists(ctx, store.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return fmt.Errorf("S3 bucket is unavailable")
+	}
+	return nil
+}
+
 func NewS3ObjectStore(ctx context.Context, config S3Config) (*S3ObjectStore, error) {
 	if strings.TrimSpace(config.Endpoint) == "" ||
 		strings.TrimSpace(config.AccessKey) == "" ||

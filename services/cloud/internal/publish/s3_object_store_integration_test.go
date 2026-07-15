@@ -27,6 +27,9 @@ func TestS3ObjectStoreUploadsAndSignsContentAddressedArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := store.Ready(context.Background()); err != nil {
+		t.Fatalf("Ready() error = %v", err)
+	}
 	key := "artifacts/sha256/integration.agentcard"
 	content := []byte("signed artifact")
 	if err := store.PutIfAbsent(context.Background(), key, content); err != nil {
