@@ -107,6 +107,15 @@ void main() {
       now: () => DateTime.utc(2026, 7, 12),
     );
 
+    final registered = await coordinator.downloadAndRegisterCardVersion(
+      'card_pomodoro',
+      'ver_pomodoro_1',
+    );
+
+    expect(registered.definition.versionId, 'ver_pomodoro_1');
+    expect(database.listInstances(), isEmpty);
+    expect(database.installation('ver_pomodoro_1')?.keyId, artifact.keyId);
+
     final installed = await coordinator.installCardVersion(
       'card_pomodoro',
       'ver_pomodoro_1',

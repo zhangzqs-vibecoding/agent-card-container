@@ -1,0 +1,138 @@
+import '../artifacts/artifact_installer.dart';
+import '../cards/card_instance.dart';
+import '../storage/local_database.dart';
+
+class CardVersionLifecycleException implements Exception {
+  const CardVersionLifecycleException(this.code, this.message);
+
+  final String code;
+  final String message;
+
+  @override
+  String toString() => 'CardVersionLifecycleException($code): $message';
+}
+
+class CardVersionDifference {
+  CardVersionDifference({
+    required Iterable<String> addedCapabilities,
+    required Iterable<String> removedCapabilities,
+    required Iterable<String> addedDomains,
+    required Iterable<String> removedDomains,
+    required this.currentStateSchemaVersion,
+    required this.targetStateSchemaVersion,
+  }) : addedCapabilities = _sorted(addedCapabilities),
+       removedCapabilities = _sorted(removedCapabilities),
+       addedDomains = _sorted(addedDomains),
+       removedDomains = _sorted(removedDomains);
+
+  final List<String> addedCapabilities;
+  final List<String> removedCapabilities;
+  final List<String> addedDomains;
+  final List<String> removedDomains;
+  final int currentStateSchemaVersion;
+  final int targetStateSchemaVersion;
+
+  bool get stateCompatible =>
+      currentStateSchemaVersion == targetStateSchemaVersion;
+}
+
+class PreparedCardVersionChange {
+  const PreparedCardVersionChange({
+    required this.instance,
+    required this.currentInstallation,
+    required this.targetInstallation,
+    required this.targetArtifact,
+    required this.difference,
+  });
+
+  final CardInstance instance;
+  final StoredInstallation currentInstallation;
+  final StoredInstallation targetInstallation;
+  final InstalledArtifact targetArtifact;
+  final CardVersionDifference difference;
+}
+
+class CardVersionLifecycle {
+  const CardVersionLifecycle({
+    required this.database,
+    required this.newBackupId,
+    required this.newStateNamespace,
+    required this.now,
+  });
+
+  final LocalDatabase database;
+  final String Function() newBackupId;
+  final String Function() newStateNamespace;
+  final DateTime Function() now;
+
+  PreparedCardVersionChange prepare(
+    String instanceId,
+    InstalledArtifact targetArtifact,
+  ) {
+    final instances = database.listInstances().where(
+      (candidate) => candidate.instanceId == instanceId,
+    );
+    if (instances.isEmpty) {
+      throw const CardVersionLifecycleException(
+        'INSTANCE_NOT_FOUND',
+        'card instance does not exist',
+      );
+    }
+    final instance = instances.single;
+    final current = database.installation(instance.versionId);
+    final target = database.installation(targetArtifact.definition.versionId);
+    if (current == null || target == null) {
+      throw const CardVersionLifecycleException(
+        'INSTALLATION_NOT_FOUND',
+        'card version is not installed',
+      );
+    }
+    if (!target.installation.verified ||
+        target.installation.cardId != targetArtifact.definition.cardId ||
+        target.installation.versionId != targetArtifact.definition.versionId ||
+        target.installation.contentHash != targetArtifact.contentHash ||
+        target.keyId != targetArtifact.keyId) {
+      throw const CardVersionLifecycleException(
+        'ARTIFACT_NOT_VERIFIED',
+        'target artifact does not match the verified installation',
+      );
+    }
+    if (instance.cardId != targetArtifact.definition.cardId ||
+        current.definition.cardId != targetArtifact.definition.cardId) {
+      throw const CardVersionLifecycleException(
+        'CARD_VERSION_MISMATCH',
+        'target version belongs to a different card',
+      );
+    }
+    if (instance.versionId == targetArtifact.definition.versionId) {
+      throw const CardVersionLifecycleException(
+        'VERSION_ALREADY_ACTIVE',
+        'target version is already active',
+      );
+    }
+
+    final currentCapabilities = current.definition.capabilities.toSet();
+    final targetCapabilities = target.definition.capabilities.toSet();
+    final currentDomains = current.definition.networkPolicy.domains.toSet();
+    final targetDomains = target.definition.networkPolicy.domains.toSet();
+    return PreparedCardVersionChange(
+      instance: instance,
+      currentInstallation: current,
+      targetInstallation: target,
+      targetArtifact: targetArtifact,
+      difference: CardVersionDifference(
+        addedCapabilities: targetCapabilities.difference(currentCapabilities),
+        removedCapabilities: currentCapabilities.difference(targetCapabilities),
+        addedDomains: targetDomains.difference(currentDomains),
+        removedDomains: currentDomains.difference(targetDomains),
+        currentStateSchemaVersion: current.definition.stateSchemaVersion,
+        targetStateSchemaVersion: target.definition.stateSchemaVersion,
+      ),
+    );
+  }
+}
+
+List<String> _sorted(Iterable<String> values) {
+  final result = values.toSet().toList()..sort();
+  return List.unmodifiable(result);
+}

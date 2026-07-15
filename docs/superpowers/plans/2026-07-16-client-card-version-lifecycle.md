@@ -113,11 +113,11 @@ Commit: `feat: switch installed card versions atomically`
 - Modify: `apps/desktop/lib/src/cloud/card_install_coordinator.dart`
 - Modify: `apps/desktop/test/cloud/card_install_coordinator_test.dart`
 
-- [ ] **Step 1: 写差异模型测试**
+- [x] **Step 1: 写差异模型测试**
 
 `CardVersionDifference` 必须精确给出 added/removed capabilities、added/removed network domains、当前与目标 schema，以及 `stateCompatible`。集合必须不可变且稳定排序供 UI 使用。
 
-- [ ] **Step 2: 写 prepare 测试并确认失败**
+- [x] **Step 2: 写 prepare 测试并确认失败**
 
 `prepare(instanceId, InstalledArtifact target)` 应拒绝未登记、未验证、不同 card 或与当前相同 version；合法目标返回差异但不修改数据库。
 
@@ -125,7 +125,7 @@ Run: `cd apps/desktop && flutter test test/cloud/card_version_lifecycle_test.dar
 
 Expected: FAIL，生命周期服务尚不存在。
 
-- [ ] **Step 3: 将下载验签与创建实例拆开**
+- [x] **Step 3: 将下载验签与创建实例拆开**
 
 在 `CardInstallCoordinator` 增加 `downloadAndRegisterCardVersion(cardId, versionId)`，复用现有下载、元数据核对、签名和文件校验，只调用 `registerInstallation` 并返回 `InstalledArtifact`；现有安装新实例流程调用该方法后保持原行为。
 

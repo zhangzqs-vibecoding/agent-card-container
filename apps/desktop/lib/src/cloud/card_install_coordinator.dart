@@ -67,6 +67,19 @@ class CardInstallCoordinator {
     String cardId,
     String versionId,
   ) async {
+    final version = await _cardVersion(cardId, versionId);
+    return _install(version);
+  }
+
+  Future<InstalledArtifact> downloadAndRegisterCardVersion(
+    String cardId,
+    String versionId,
+  ) async {
+    final version = await _cardVersion(cardId, versionId);
+    return _downloadAndRegister(version);
+  }
+
+  Future<CloudCardVersion> _cardVersion(String cardId, String versionId) async {
     final card = await client.getCard(cardId);
     CloudCardVersion? version;
     for (final candidate in card.versions) {
@@ -82,10 +95,17 @@ class CardInstallCoordinator {
         message: '待安装版本不存在',
       );
     }
-    return _install(version);
+    return version;
   }
 
   Future<InstalledCardResult> _install(CloudCardVersion version) async {
+    final installed = await _downloadAndRegister(version);
+    return _createInstance(installed);
+  }
+
+  Future<InstalledArtifact> _downloadAndRegister(
+    CloudCardVersion version,
+  ) async {
     final download = await client.artifactDownload(
       version.cardId,
       version.versionId,
@@ -115,6 +135,24 @@ class CardInstallCoordinator {
       );
     }
 
+    database.registerInstallation(
+      StoredInstallation(
+        installation: CardInstallation(
+          cardId: installed.definition.cardId,
+          versionId: installed.definition.versionId,
+          contentHash: installed.contentHash,
+          runtime: installed.definition.runtime,
+          installedAt: now().toUtc(),
+          verified: true,
+        ),
+        definition: installed.definition,
+        keyId: installed.keyId,
+      ),
+    );
+    return installed;
+  }
+
+  InstalledCardResult _createInstance(InstalledArtifact installed) {
     NativeCardSpec? nativeSpec;
     if (installed.definition.runtime == CardRuntime.native) {
       final payload = File(
