@@ -102,6 +102,10 @@ func (service *Service) Get(ctx context.Context, userID, sessionID string) (*Ses
 	return service.repository.Get(ctx, userID, sessionID)
 }
 
+func (service *Service) GetSystem(ctx context.Context, sessionID string) (*Session, error) {
+	return service.repository.GetSystem(ctx, sessionID)
+}
+
 func (service *Service) AddMessage(ctx context.Context, userID, sessionID, content string) (*Session, error) {
 	service.streamMu.Lock()
 	defer service.streamMu.Unlock()

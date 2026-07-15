@@ -16,6 +16,7 @@ import (
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/agent"
 	"github.com/zzq/agent-card-container/services/cloud/internal/artifact"
+	"github.com/zzq/agent-card-container/services/cloud/internal/contracts"
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/jobs"
 	"github.com/zzq/agent-card-container/services/cloud/internal/modelprovider"
@@ -372,6 +373,149 @@ func TestWorkerPublishesValidatedNativeCardAndMarksReady(t *testing.T) {
 	}
 	if strings.Contains(logs.String(), "做一个离线文本卡片") || strings.Contains(logs.String(), "initialState") {
 		t.Fatalf("sensitive generation content leaked: %s", logs.String())
+	}
+}
+
+func TestWorkerUsesPublicationIdentityReservedByEarlierAttempt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	firstAttemptAt := time.Date(2026, 7, 15, 10, 0, 0, 0, time.UTC)
+	retryAt := firstAttemptAt.Add(2 * time.Minute)
+	repository := generation.NewMemoryRepository()
+	service := generation.NewService(repository, func() string { return "gen_stable" }, func() time.Time { return retryAt })
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "稳定发布", Target: generation.TargetNative, Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewMemoryStore(func() string { return "job_stable" })
+	job, err := jobStore.Enqueue(ctx, session.ID, firstAttemptAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := jobStore.Claim(ctx, "worker-old", firstAttemptAt, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := jobStore.ReservePublication(
+		ctx, job.ID, "worker-old", "card_reserved", "ver_reserved", firstAttemptAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	seed := sha256.Sum256([]byte("stable-publication-key"))
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("stable-key", ed25519.NewKeyFromSeed(seed[:])),
+		publish.NewMemoryObjectStore(), publish.NewMemoryVersionRepository(),
+	)
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-new", Jobs: jobStore, Generations: service,
+		Agent:     agent.NewCodingAgent(&captureProvider{}, agent.NewNativeValidator()),
+		Publisher: publisher,
+		NewCardID: func() string { return "card_new_candidate" }, NewVersionID: func() string { return "ver_new_candidate" },
+		Now: func() time.Time { return retryAt },
+	})
+
+	outcome, err := runner.RunOnce(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.VersionID != "ver_reserved" {
+		t.Fatalf("outcome = %#v", outcome)
+	}
+	if _, err := publisher.Card(ctx, "user", "card_reserved"); err != nil {
+		t.Fatalf("reserved card was not published: %v", err)
+	}
+	if _, err := publisher.Card(ctx, "user", "card_new_candidate"); !errors.Is(err, publish.ErrNotFound) {
+		t.Fatalf("candidate card lookup error = %v", err)
+	}
+}
+
+func TestWorkerCompletesVersionPublishedBeforePreviousAttemptCrashed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	firstAttemptAt := time.Date(2026, 7, 15, 11, 0, 0, 0, time.UTC)
+	retryAt := firstAttemptAt.Add(2 * time.Minute)
+	repository := generation.NewMemoryRepository()
+	service := generation.NewService(repository, func() string { return "gen_recover" }, func() time.Time { return retryAt })
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "恢复发布", Target: generation.TargetNative, Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.StartGenerating(ctx, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.StartValidating(ctx, session.ID); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewMemoryStore(func() string { return "job_recover" })
+	job, err := jobStore.Enqueue(ctx, session.ID, firstAttemptAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := jobStore.Claim(ctx, "worker-old", firstAttemptAt, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := jobStore.ReservePublication(
+		ctx, job.ID, "worker-old", "card_recover", "ver_recover", firstAttemptAt,
+	); err != nil {
+		t.Fatal(err)
+	}
+	seed := sha256.Sum256([]byte("recover-publication-key"))
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("recover-key", ed25519.NewKeyFromSeed(seed[:])),
+		publish.NewMemoryObjectStore(), publish.NewMemoryVersionRepository(),
+	)
+	definition := contracts.CardDefinition{
+		FormatVersion: 1, MinHostVersion: "1.0.0", CardID: "card_recover", VersionID: "ver_recover",
+		DisplayVersion: "1.0.0", Runtime: contracts.CardRuntimeNative, StateSchemaVersion: 1,
+		Title: "恢复发布", Entrypoint: "payload/native.json", CatalogVersion: "1",
+		MinSize: contracts.Size{Width: 240, Height: 160}, PreferredSize: contracts.Size{Width: 360, Height: 240}, MaxSize: contracts.Size{Width: 1200, Height: 900},
+		Capabilities: []string{"storage", "window.manageSelf"}, NetworkPolicy: contracts.NetworkPolicy{Mode: "none", Domains: []string{}}, CreatedAt: firstAttemptAt,
+	}
+	if _, err := publisher.Publish(ctx, publish.Input{
+		UserID: "user", Definition: definition, CreatedAt: firstAttemptAt,
+		Files: map[string][]byte{
+			"payload/native.json":     []byte(`{"schemaVersion":1,"initialState":{"text":"完成"},"root":{"id":"root","type":"Text","props":{"text":{"path":"state.text"}}}}`),
+			"reports/validation.json": []byte(`{"status":"passed","runtime":"native","attempts":1}`),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	provider := &captureProvider{}
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-new", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()), Publisher: publisher,
+		NewCardID: func() string { return "card_other" }, NewVersionID: func() string { return "ver_other" },
+		Now: func() time.Time { return retryAt },
+	})
+
+	outcome, err := runner.RunOnce(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.VersionID != "ver_recover" || len(provider.requests) != 0 {
+		t.Fatalf("outcome = %#v, provider calls = %d", outcome, len(provider.requests))
+	}
+	ready, err := service.Get(ctx, "user", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := jobStore.Get(ctx, job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ready.Status != generation.StatusReady || ready.VersionID != "ver_recover" || completed.Status != jobs.StatusCompleted {
+		t.Fatalf("ready = %#v, job = %#v", ready, completed)
 	}
 }
 

@@ -169,6 +169,13 @@ func (publisher *Publisher) Card(ctx context.Context, userID, cardID string) (Ca
 	}, nil
 }
 
+func (publisher *Publisher) FindVersion(
+	ctx context.Context,
+	userID, cardID, versionID string,
+) (CardVersion, error) {
+	return publisher.versions.Find(ctx, userID, cardID, versionID)
+}
+
 func (publisher *Publisher) Download(
 	ctx context.Context,
 	userID string,

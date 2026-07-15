@@ -94,9 +94,22 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		"sessionId", job.SessionID,
 		"attempt", job.Attempts,
 	)
-	session, err := worker.config.Generations.StartGenerating(ctx, job.SessionID)
+	session, err := worker.config.Generations.GetSystem(ctx, job.SessionID)
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
+	}
+	if session.Status == generation.StatusQueued {
+		session, err = worker.config.Generations.StartGenerating(ctx, job.SessionID)
+		if err != nil {
+			return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
+		}
+	} else if session.Status != generation.StatusGenerating &&
+		session.Status != generation.StatusValidating &&
+		session.Status != generation.StatusReady {
+		return Outcome{}, worker.fail(
+			ctx, job, "GENERATION_STATE_INVALID",
+			fmt.Errorf("generation session cannot be resumed from %s", session.Status),
+		)
 	}
 	if session.ConfirmedRequirement == nil {
 		return Outcome{}, worker.fail(
@@ -107,6 +120,47 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		)
 	}
 	requirement := cloneRequirementSnapshot(*session.ConfirmedRequirement)
+	publication, err := worker.config.Jobs.ReservePublication(
+		ctx,
+		job.ID,
+		worker.config.WorkerID,
+		worker.config.NewCardID(),
+		worker.config.NewVersionID(),
+		now,
+	)
+	if err != nil {
+		return Outcome{}, err
+	}
+	existing, findErr := worker.config.Publisher.FindVersion(
+		ctx, session.UserID, publication.CardID, publication.VersionID,
+	)
+	if findErr == nil {
+		if session.Status != generation.StatusReady {
+			if _, err := worker.config.Generations.MarkReady(ctx, session.ID, existing.VersionID); err != nil {
+				return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
+			}
+		} else if session.VersionID != existing.VersionID {
+			return Outcome{}, worker.fail(
+				ctx, job, "GENERATION_STATE_INVALID",
+				fmt.Errorf("ready generation version does not match reserved publication"),
+			)
+		}
+		if err := worker.config.Jobs.Complete(
+			ctx, job.ID, worker.config.WorkerID, worker.config.Now(),
+		); err != nil {
+			return Outcome{}, err
+		}
+		return Outcome{JobID: job.ID, SessionID: session.ID, VersionID: existing.VersionID}, nil
+	}
+	if !errors.Is(findErr, publish.ErrNotFound) {
+		return Outcome{}, findErr
+	}
+	if session.Status == generation.StatusReady {
+		return Outcome{}, worker.fail(
+			ctx, job, "GENERATION_STATE_INVALID",
+			fmt.Errorf("ready generation publication is missing"),
+		)
+	}
 	result, err := worker.config.Agent.Generate(ctx, agent.Request{
 		SessionID:   session.ID,
 		Requirement: requirement,
@@ -114,11 +168,13 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "VALIDATION_FAILED", err)
 	}
-	if _, err := worker.config.Generations.StartValidating(ctx, session.ID); err != nil {
-		return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
+	if session.Status != generation.StatusValidating {
+		if _, err := worker.config.Generations.StartValidating(ctx, session.ID); err != nil {
+			return Outcome{}, worker.fail(ctx, job, "GENERATION_STATE_INVALID", err)
+		}
 	}
-	cardID := worker.config.NewCardID()
-	versionID := worker.config.NewVersionID()
+	cardID := publication.CardID
+	versionID := publication.VersionID
 	report, err := json.Marshal(map[string]any{
 		"status":   "passed",
 		"runtime":  result.Runtime,
