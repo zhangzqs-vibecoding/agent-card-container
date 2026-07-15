@@ -163,15 +163,15 @@ Run: `cd apps/desktop && flutter test test/workspace/workspace_controller_test.d
 
 Expected: 先 FAIL，实施后 PASS。
 
-- [ ] **Step 3: 生命周期成功后才创建目标 runtime**
+- [x] **Step 3: 生命周期成功后才创建目标 runtime**
 
 生命周期服务在数据库提交后调用 `InstalledWorkspaceCardFactory.create(target, updatedInstance)`，再调用 controller 的 `replaceInstance`。数据库失败时 factory 调用次数为 0；成功时 factory 和 replace 各为 1。
 
-- [ ] **Step 4: 处理提交后 runtime 构建失败**
+- [x] **Step 4: 处理提交后 runtime 构建失败**
 
 在内存替换前若 factory 失败，使用同一数据库入口回切原版本和原状态快照；若补偿也失败，抛出 `CardVersionLifecycleException('VERSION_SWITCH_RECOVERY_FAILED')`，不得伪装成功。
 
-- [ ] **Step 5: 格式化、测试并提交**
+- [x] **Step 5: 格式化、测试并提交**
 
 Run: `cd apps/desktop && dart format lib/src/workspace lib/src/cloud test/workspace test/cloud && flutter test test/workspace/workspace_controller_test.dart test/cloud/card_version_lifecycle_test.dart`
 

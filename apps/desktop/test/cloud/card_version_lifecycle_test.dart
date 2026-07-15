@@ -7,6 +7,8 @@ import 'package:agent_card_desktop/src/cloud/card_version_lifecycle.dart';
 import 'package:agent_card_desktop/src/contracts/card_definition.dart';
 import 'package:agent_card_desktop/src/storage/local_database.dart';
 import 'package:agent_card_desktop/src/surfaces/surface.dart';
+import 'package:agent_card_desktop/src/native_card/native_card_spec.dart';
+import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -259,14 +261,102 @@ void main() {
       {'title': 'current'},
     );
   });
+
+  test('builds and replaces the runtime exactly once after commit', () {
+    final current = _definition(versionId: 'ver_card_1');
+    final target = _definition(versionId: 'ver_card_2');
+    _register(database, current);
+    _register(database, target);
+    database.upsertInstance(_instance('ver_card_1'));
+    var builds = 0;
+    var replacements = 0;
+    final lifecycle = _lifecycle(
+      database,
+      buildWorkspaceCard: (_, instance) {
+        builds++;
+        return _workspaceCard(instance);
+      },
+      replaceWorkspaceCard: (card) {
+        replacements++;
+        expect(card.instance.versionId, 'ver_card_2');
+        expect(database.listInstances().single.versionId, 'ver_card_2');
+      },
+    );
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+
+    final switched = lifecycle.applyAndActivate(
+      prepared,
+      decision: CardVersionDecision.reuseState,
+    );
+
+    expect(switched.versionId, 'ver_card_2');
+    expect(builds, 1);
+    expect(replacements, 1);
+  });
+
+  test('restores database state when target runtime construction fails', () {
+    final current = _definition(versionId: 'ver_card_1');
+    final target = _definition(versionId: 'ver_card_2', stateSchemaVersion: 2);
+    _register(database, current);
+    _register(database, target);
+    database.upsertInstance(_instance('ver_card_1'));
+    database.putState('state-1', 'counter', 7);
+    var replacements = 0;
+    var sequence = 0;
+    final lifecycle = CardVersionLifecycle(
+      database: database,
+      newBackupId: () => 'backup-${sequence++}',
+      newStateNamespace: () => sequence == 1 ? 'state-2' : 'state-recovery',
+      now: () => DateTime.utc(2026, 7, 16),
+      buildWorkspaceCard: (_, _) => throw FormatException('broken payload'),
+      replaceWorkspaceCard: (_) => replacements++,
+    );
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+
+    expect(
+      () => lifecycle.applyAndActivate(
+        prepared,
+        decision: CardVersionDecision.resetState,
+      ),
+      throwsA(
+        isA<CardVersionLifecycleException>().having(
+          (error) => error.code,
+          'code',
+          'VERSION_RUNTIME_BUILD_FAILED',
+        ),
+      ),
+    );
+    final restored = database.listInstances().single;
+    expect(restored.versionId, 'ver_card_1');
+    expect(restored.stateNamespace, 'state-1');
+    expect(database.readState('state-1'), {'counter': 7});
+    expect(replacements, 0);
+  });
 }
 
-CardVersionLifecycle _lifecycle(LocalDatabase database) {
+CardVersionLifecycle _lifecycle(
+  LocalDatabase database, {
+  WorkspaceCard Function(InstalledArtifact, CardInstance)? buildWorkspaceCard,
+  void Function(WorkspaceCard)? replaceWorkspaceCard,
+}) {
   return CardVersionLifecycle(
     database: database,
     newBackupId: () => 'backup-1',
     newStateNamespace: () => 'state-2',
     now: () => DateTime.utc(2026, 7, 16),
+    buildWorkspaceCard: buildWorkspaceCard,
+    replaceWorkspaceCard: replaceWorkspaceCard,
+  );
+}
+
+WorkspaceCard _workspaceCard(CardInstance instance) {
+  return WorkspaceCard(
+    instance: instance,
+    spec: NativeCardSpec.fromJson({
+      'schemaVersion': 1,
+      'initialState': <String, Object?>{},
+      'root': {'id': 'root', 'type': 'Text'},
+    }),
   );
 }
 

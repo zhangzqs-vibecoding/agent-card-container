@@ -2,6 +2,11 @@ import '../artifacts/artifact_installer.dart';
 import '../capabilities/capability.dart';
 import '../cards/card_instance.dart';
 import '../storage/local_database.dart';
+import '../workspace/workspace_card.dart';
+
+typedef WorkspaceCardBuilder =
+    WorkspaceCard Function(InstalledArtifact artifact, CardInstance instance);
+typedef WorkspaceCardReplacer = void Function(WorkspaceCard card);
 
 class CardVersionLifecycleException implements Exception {
   const CardVersionLifecycleException(this.code, this.message);
@@ -61,12 +66,16 @@ class CardVersionLifecycle {
     required this.newBackupId,
     required this.newStateNamespace,
     required this.now,
+    this.buildWorkspaceCard,
+    this.replaceWorkspaceCard,
   });
 
   final LocalDatabase database;
   final String Function() newBackupId;
   final String Function() newStateNamespace;
   final DateTime Function() now;
+  final WorkspaceCardBuilder? buildWorkspaceCard;
+  final WorkspaceCardReplacer? replaceWorkspaceCard;
 
   PreparedCardVersionChange prepare(
     String instanceId,
@@ -257,6 +266,88 @@ class CardVersionLifecycle {
       replacementGrants: replacementGrants,
       backupId: compatible ? '' : newBackupId(),
       newStateNamespace: compatible ? '' : newStateNamespace(),
+      createdAt: now().toUtc(),
+      restoreBackup: restoreBackup,
+    );
+  }
+
+  CardInstance applyAndActivate(
+    PreparedCardVersionChange prepared, {
+    required CardVersionDecision decision,
+    Set<PermissionGrant> approvedGrants = const {},
+  }) {
+    final builder = buildWorkspaceCard;
+    final replacer = replaceWorkspaceCard;
+    if (builder == null || replacer == null) {
+      throw const CardVersionLifecycleException(
+        'VERSION_RUNTIME_UNAVAILABLE',
+        'workspace runtime activation is unavailable',
+      );
+    }
+    if (decision == CardVersionDecision.cancel) {
+      return apply(prepared, decision: decision);
+    }
+    final previousGrants = database.grantsForInstance(
+      prepared.instance.instanceId,
+    );
+    final switched = apply(
+      prepared,
+      decision: decision,
+      approvedGrants: approvedGrants,
+    );
+    try {
+      final card = builder(prepared.targetArtifact, switched);
+      replacer(card);
+      return switched;
+    } catch (_) {
+      try {
+        _restoreAfterActivationFailure(prepared, switched, previousGrants);
+      } catch (_) {
+        throw const CardVersionLifecycleException(
+          'VERSION_SWITCH_RECOVERY_FAILED',
+          'target runtime failed and the previous version could not be restored',
+        );
+      }
+      throw const CardVersionLifecycleException(
+        'VERSION_RUNTIME_BUILD_FAILED',
+        'target runtime could not be constructed; the previous version was restored',
+      );
+    }
+  }
+
+  void _restoreAfterActivationFailure(
+    PreparedCardVersionChange prepared,
+    CardInstance switched,
+    Set<PermissionGrant> previousGrants,
+  ) {
+    final previousSchema =
+        prepared.currentInstallation.definition.stateSchemaVersion;
+    final switchedSchema =
+        prepared.targetInstallation.definition.stateSchemaVersion;
+    final compatible = previousSchema == switchedSchema;
+    CardStateBackup? restoreBackup;
+    if (!compatible) {
+      final backups = database.stateBackups(
+        instanceId: prepared.instance.instanceId,
+        versionId: prepared.instance.versionId,
+      );
+      if (backups.isEmpty ||
+          backups.first.stateSchemaVersion != previousSchema) {
+        throw StateError('previous card state backup is unavailable');
+      }
+      restoreBackup = backups.first;
+    }
+    database.switchInstalledInstanceVersion(
+      instanceId: switched.instanceId,
+      targetVersionId: prepared.instance.versionId,
+      statePolicy: compatible
+          ? VersionStatePolicy.reuse
+          : VersionStatePolicy.restore,
+      currentStateSchemaVersion: switchedSchema,
+      targetStateSchemaVersion: previousSchema,
+      replacementGrants: previousGrants,
+      backupId: compatible ? '' : newBackupId(),
+      newStateNamespace: compatible ? '' : prepared.instance.stateNamespace,
       createdAt: now().toUtc(),
       restoreBackup: restoreBackup,
     );
