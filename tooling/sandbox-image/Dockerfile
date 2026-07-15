@@ -1,4 +1,4 @@
-ARG NODE_IMAGE=node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+ARG NODE_IMAGE=node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
 FROM ${NODE_IMAGE}
 
 ARG BUILD_REVISION=unknown
@@ -10,7 +10,8 @@ LABEL org.opencontainers.image.title="Agent Card CodeCard Builder" \
 
 ARG NPM_REGISTRY=https://registry.npmjs.org
 RUN npm install --global --registry=${NPM_REGISTRY} pnpm@11.13.0 && \
-    pnpm config set registry ${NPM_REGISTRY}
+    pnpm config set registry ${NPM_REGISTRY} && \
+    rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 WORKDIR /opt/codecard-template
 COPY tooling/codecard-template/package.json tooling/codecard-template/pnpm-lock.yaml ./
 RUN pnpm install --prod=false --frozen-lockfile --ignore-scripts
