@@ -149,6 +149,33 @@ func TestCodingAgentUsesConfirmedRequirementSnapshot(t *testing.T) {
 	}
 }
 
+func TestCodingAgentRetainsValidatedCodeCardSourceForSignedPublication(t *testing.T) {
+	t.Parallel()
+
+	provider := &fakeProvider{outputs: []string{
+		`{"files":{"src/card.tsx":"export function Card(){return <main/>}","src/card.css":"main{}"}}`,
+	}}
+	codingAgent := agent.NewCodingAgent(
+		provider,
+		agent.NewNativeValidator(),
+		agent.WithWebBuilder(&fakeWebBuilder{output: map[string][]byte{"index.html": []byte("<main></main>")}}),
+	)
+	result, err := codingAgent.Generate(context.Background(), agent.Request{
+		SessionID:   "gen_source_retention",
+		Requirement: confirmedRequirement("生成一个自由绘制画板", generation.TargetWeb, "zh-CN"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Sources["src/card.tsx"] == "" || result.Sources["src/card.css"] != "main{}" {
+		t.Fatalf("sources = %#v", result.Sources)
+	}
+	result.Sources["src/card.tsx"] = "mutated"
+	if strings.Contains(provider.outputs[0], "mutated") {
+		t.Fatal("result source aliases provider output")
+	}
+}
+
 func TestCodingAgentRepairsInvalidNativeOutputAtMostThreeTimes(t *testing.T) {
 	t.Parallel()
 

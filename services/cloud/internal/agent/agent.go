@@ -10,14 +10,16 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/zzq/agent-card-container/services/cloud/internal/contracts"
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/modelprovider"
 	"github.com/zzq/agent-card-container/services/cloud/internal/observability"
 )
 
 type Request struct {
-	SessionID   string
-	Requirement generation.RequirementSnapshot
+	SessionID    string
+	Requirement  generation.RequirementSnapshot
+	BaseArtifact *BaseArtifact
 }
 
 type Result struct {
@@ -25,6 +27,7 @@ type Result struct {
 	Reason       string
 	Content      string
 	Files        map[string][]byte
+	Sources      map[string]string
 	Attempts     int
 	InputTokens  int
 	OutputTokens int
@@ -84,6 +87,10 @@ func NewCodingAgent(
 func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (Result, error) {
 	prompt := requirementPrompt(request.Requirement)
 	decision, err := codingAgent.selector.Select(prompt, request.Requirement.Target)
+	if err != nil {
+		return Result{}, err
+	}
+	decision, err = iterationDecision(request, decision)
 	if err != nil {
 		return Result{}, err
 	}
@@ -233,9 +240,94 @@ func (codingAgent *CodingAgent) generateWeb(
 			continue
 		}
 		result.Files = output
+		result.Sources = cloneSourceFiles(files)
 		return result, nil
 	}
 	return result, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
+}
+
+func iterationDecision(request Request, selected Decision) (Decision, error) {
+	hasBaseIDs := request.Requirement.BaseCardID != "" || request.Requirement.BaseVersionID != ""
+	if request.BaseArtifact == nil {
+		if hasBaseIDs {
+			return Decision{}, fmt.Errorf("verified base artifact is required for card iteration")
+		}
+		return selected, nil
+	}
+	if !hasBaseIDs {
+		return Decision{}, fmt.Errorf("base artifact requires a bound card version")
+	}
+	if err := validateIterationBase(request.Requirement, *request.BaseArtifact); err != nil {
+		return Decision{}, err
+	}
+	baseRuntime := RuntimeNative
+	if request.BaseArtifact.Definition.Runtime == contracts.CardRuntimeWeb {
+		baseRuntime = RuntimeWeb
+	}
+	if (request.Requirement.Target == generation.TargetNative && baseRuntime != RuntimeNative) ||
+		(request.Requirement.Target == generation.TargetWeb && baseRuntime != RuntimeWeb) {
+		return Decision{}, fmt.Errorf("%w: iteration target cannot change the base runtime", ErrUnsupportedRequirement)
+	}
+	if baseRuntime == RuntimeNative && selected.Runtime == RuntimeWeb {
+		return Decision{}, fmt.Errorf("%w: incremental requirement would require changing the base runtime", ErrUnsupportedRequirement)
+	}
+	return Decision{Runtime: baseRuntime, Reason: "同卡迭代继承已验证基线运行时"}, nil
+}
+
+func validateIterationBase(requirement generation.RequirementSnapshot, base BaseArtifact) error {
+	if err := base.Definition.Validate(); err != nil {
+		return fmt.Errorf("invalid base card definition: %w", err)
+	}
+	if base.Definition.CardID != requirement.BaseCardID ||
+		base.Definition.VersionID != requirement.BaseVersionID {
+		return fmt.Errorf("base artifact identity does not match confirmed requirement")
+	}
+	if base.Definition.Runtime == contracts.CardRuntimeNative {
+		if len(base.Sources) != 1 {
+			return fmt.Errorf("base NativeCard source set is invalid")
+		}
+		source, exists := base.Sources["payload/native.json"]
+		if !exists || !validBaseNativeSourceText(source) {
+			return fmt.Errorf("base NativeCard source is invalid")
+		}
+		return nil
+	}
+	if len(base.Sources) == 0 || len(base.Sources) > 3 {
+		return fmt.Errorf("base CodeCard source set is invalid")
+	}
+	if _, exists := base.Sources["src/card.tsx"]; !exists {
+		return fmt.Errorf("base CodeCard source is missing src/card.tsx")
+	}
+	total := 0
+	allowed := map[string]bool{
+		"src/card.tsx": true, "src/card.css": true, "src/card.test.tsx": true,
+	}
+	for name, source := range base.Sources {
+		if !allowed[name] || !validBaseSourceText(source) {
+			return fmt.Errorf("base CodeCard source %q is invalid", name)
+		}
+		total += len(source)
+	}
+	if total > MaxBaseSourceBytes {
+		return fmt.Errorf("base CodeCard source exceeds total size limit")
+	}
+	return nil
+}
+
+func validBaseSourceText(source string) bool {
+	return len(source) <= MaxBaseSourceBytes && validWebSourceText(source)
+}
+
+func validBaseNativeSourceText(source string) bool {
+	return len(source) <= MaxBaseSourceBytes && utf8.ValidString(source) && !strings.ContainsRune(source, '\x00')
+}
+
+func cloneSourceFiles(input map[string]string) map[string]string {
+	output := make(map[string]string, len(input))
+	for name, source := range input {
+		output[name] = source
+	}
+	return output
 }
 
 func providerRetryDelay(retry int) time.Duration {

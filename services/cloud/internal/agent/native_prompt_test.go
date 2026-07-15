@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/zzq/agent-card-container/services/cloud/internal/contracts"
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/modelprovider"
 )
@@ -219,6 +220,91 @@ func TestWebPromptDeclaresTemplateAPIAndOfflineSecurityBoundary(t *testing.T) {
 	}
 }
 
+func TestIterationPromptIncludesStableReadOnlyNativeBaseline(t *testing.T) {
+	t.Parallel()
+
+	request := promptRequest()
+	request.Requirement.BaseCardID = "card_base"
+	request.Requirement.BaseVersionID = "ver_base"
+	request.BaseArtifact = &BaseArtifact{
+		Definition: promptBaseDefinition(contracts.CardRuntimeNative),
+		Sources: map[string]string{
+			"payload/native.json": `{"schemaVersion":1,"initialState":{"count":1},"root":{"id":"root","type":"Text"}}`,
+		},
+	}
+	prompt := nativeModelRequest(request, 1, "").UserPrompt
+	for _, required := range []string{
+		"Existing signed base version (read-only):",
+		`"cardId":"card_base"`,
+		`"versionId":"ver_base"`,
+		`"runtime":"native"`,
+		`"payload/native.json"`,
+		`\"count\":1`,
+		"Modify the existing card instead of creating an unrelated card.",
+		"Do not change runtime, state schema, dependencies, or capability boundaries.",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Fatalf("iteration prompt is missing %q: %q", required, prompt)
+		}
+	}
+}
+
+func TestIterationPromptIncludesControlledCodeCardSources(t *testing.T) {
+	t.Parallel()
+
+	request := promptRequest()
+	request.Requirement.Target = generation.TargetWeb
+	request.Requirement.BaseCardID = "card_base"
+	request.Requirement.BaseVersionID = "ver_base"
+	request.BaseArtifact = &BaseArtifact{
+		Definition: promptBaseDefinition(contracts.CardRuntimeWeb),
+		Sources: map[string]string{
+			"src/card.tsx": "export function Card(){return <main/>}",
+			"src/card.css": "main{display:block}",
+		},
+	}
+	prompt := webModelRequest(request, 1, "").UserPrompt
+	if !strings.Contains(prompt, `"src/card.tsx"`) ||
+		!strings.Contains(prompt, "export function Card") ||
+		strings.Contains(prompt, "reports/validation.json") {
+		t.Fatalf("CodeCard iteration prompt = %q", prompt)
+	}
+}
+
+func TestCodingAgentRejectsMissingOrInvalidBaselineBeforeProvider(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		base *BaseArtifact
+	}{
+		{name: "missing"},
+		{name: "oversized", base: &BaseArtifact{
+			Definition: promptBaseDefinition(contracts.CardRuntimeNative),
+			Sources:    map[string]string{"payload/native.json": strings.Repeat("a", MaxBaseSourceBytes+1)},
+		}},
+		{name: "unknown web source", base: &BaseArtifact{
+			Definition: promptBaseDefinition(contracts.CardRuntimeWeb),
+			Sources:    map[string]string{"src/card.tsx": "export function Card(){return null}", "src/unknown.ts": "x"},
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			provider := &promptCaptureProvider{outputs: []string{`{"schemaVersion":1}`}}
+			request := promptRequest()
+			request.Requirement.BaseCardID = "card_base"
+			request.Requirement.BaseVersionID = "ver_base"
+			request.BaseArtifact = test.base
+			if _, err := NewCodingAgent(provider, NewNativeValidator()).Generate(context.Background(), request); err == nil {
+				t.Fatal("Generate() error = nil")
+			}
+			if len(provider.requests) != 0 {
+				t.Fatalf("provider calls = %d", len(provider.requests))
+			}
+		})
+	}
+}
+
 func TestModelProviderSourceContainsNoAgentCardPrompt(t *testing.T) {
 	t.Parallel()
 
@@ -248,6 +334,23 @@ func promptRequest() Request {
 			ConfirmedAt:         time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
 		},
 	}
+}
+
+func promptBaseDefinition(runtime contracts.CardRuntime) contracts.CardDefinition {
+	definition := contracts.CardDefinition{
+		FormatVersion: 1, MinHostVersion: "1.0.0", CardID: "card_base", VersionID: "ver_base",
+		DisplayVersion: "1.0.0", Runtime: runtime, StateSchemaVersion: 1, Title: "基线",
+		Entrypoint: "payload/native.json", CatalogVersion: "1",
+		MinSize: contracts.Size{Width: 240, Height: 160}, PreferredSize: contracts.Size{Width: 360, Height: 240},
+		MaxSize: contracts.Size{Width: 720, Height: 480}, Capabilities: []string{"storage"},
+		NetworkPolicy: contracts.NetworkPolicy{Mode: "none", Domains: []string{}},
+		CreatedAt:     time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC),
+	}
+	if runtime == contracts.CardRuntimeWeb {
+		definition.Entrypoint = "payload/web/index.html"
+		definition.CatalogVersion = ""
+	}
+	return definition
 }
 
 type promptCaptureProvider struct {

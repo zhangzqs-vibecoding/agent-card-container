@@ -88,11 +88,11 @@
 - Modify: `services/cloud/internal/agent/native_prompt.go`
 - Modify: `services/cloud/internal/agent/native_prompt_test.go`
 
-- [ ] RED：迭代 prompt 必须包含稳定的基线 definition/source 和增量需求，并明确禁止改变身份、依赖和能力边界；新卡 prompt 不包含基线段。
-- [ ] GREEN：`agent.Request` 增加可选只读 `BaseArtifact`，Native/CodeCard prompt 复用同一有界序列化器。
-- [ ] RED：基线超限、非法 UTF-8 或未知文件在调用 provider 前失败。
-- [ ] 运行 agent 全套和固定 eval 合同测试。
-- [ ] 提交：`feat: ground coding agent on prior card version`。
+- [x] RED：迭代 prompt 必须包含稳定的基线 definition/source 和增量需求，并明确禁止改变身份、依赖和能力边界；新卡 prompt 不包含基线段。
+- [x] GREEN：`agent.Request` 增加可选只读 `BaseArtifact`，Native/CodeCard prompt 复用同一有界序列化器。
+- [x] RED：基线缺失、超限、非法 UTF-8 或未知文件在调用 provider 前失败。
+- [x] 运行 agent 全套、race 和固定 eval 合同测试。
+- [x] 提交：`feat: ground coding agent on prior card version`。
 
 ## Task 6：同 card 发布和 display version
 
