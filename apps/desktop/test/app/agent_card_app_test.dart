@@ -274,6 +274,81 @@ void main() {
     expect(find.text('专注时间'), findsNothing);
   });
 
+  testWidgets('drags a workspace card on the grid and preserves identity', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final writes = <CardPlacement>[];
+    final workspace = WorkspaceController([
+      _workspaceTestCard(),
+    ], persistPlacement: (_, _, placement) async => writes.add(placement));
+    addTearDown(workspace.dispose);
+    await tester.pumpWidget(AgentCardApp(workspaceController: workspace));
+
+    await tester.drag(
+      find.byKey(const Key('card-drag-instance-layout')),
+      const Offset(100, 80),
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+
+    final instance = workspace.cards.single.instance;
+    expect(instance.placement.x, 1);
+    expect(instance.placement.y, 1);
+    expect(instance.versionId, 'version-layout');
+    expect(instance.stateNamespace, 'state-layout');
+    expect(writes, hasLength(1));
+  });
+
+  testWidgets('resizes a workspace card with grid constraints', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final workspace = WorkspaceController([_workspaceTestCard()]);
+    addTearDown(workspace.dispose);
+    await tester.pumpWidget(AgentCardApp(workspaceController: workspace));
+
+    await tester.drag(
+      find.byKey(const Key('card-resize-instance-layout')),
+      const Offset(-1000, -1000),
+    );
+    await tester.pump();
+    expect(workspace.cards.single.instance.placement.width, 2);
+    expect(workspace.cards.single.instance.placement.height, 2);
+
+    await tester.drag(
+      find.byKey(const Key('card-resize-instance-layout')),
+      const Offset(100, 80),
+    );
+    await tester.pump();
+    expect(workspace.cards.single.instance.placement.width, 3);
+    expect(workspace.cards.single.instance.placement.height, 3);
+  });
+
+  testWidgets('moves a dragged card below a grid collision', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final workspace = WorkspaceController([
+      _workspaceTestCard(),
+      _workspaceTestCard(
+        instanceId: 'instance-blocker',
+        stateNamespace: 'state-blocker',
+        placement: const CardPlacement(x: 4, y: 0, width: 4, height: 3),
+      ),
+    ]);
+    addTearDown(workspace.dispose);
+    await tester.pumpWidget(AgentCardApp(workspaceController: workspace));
+
+    await tester.drag(
+      find.byKey(const Key('card-drag-instance-layout')),
+      const Offset(315, 0),
+    );
+    await tester.pump();
+
+    final moved = workspace.cards.first.instance.placement;
+    expect(moved.x, 4);
+    expect(moved.y, 3);
+  });
+
   testWidgets('NativeCard invokes host abilities through its attached broker', (
     tester,
   ) async {
@@ -512,6 +587,38 @@ void main() {
     expect(find.text('已暂停：卡片不可见或超过活动上限'), findsOneWidget);
     expect(find.text('当前平台无法满足 CodeCard 的安全隔离要求'), findsNothing);
   });
+}
+
+WorkspaceCard _workspaceTestCard({
+  String instanceId = 'instance-layout',
+  String stateNamespace = 'state-layout',
+  CardPlacement placement = const CardPlacement(
+    x: 0,
+    y: 0,
+    width: 4,
+    height: 3,
+  ),
+}) {
+  return WorkspaceCard(
+    instance: CardInstance(
+      instanceId: instanceId,
+      cardId: 'card-layout',
+      versionId: 'version-layout',
+      surfaceId: 'workspace-main',
+      placement: placement,
+      stateNamespace: stateNamespace,
+      status: CardInstanceStatus.active,
+    ),
+    spec: NativeCardSpec.fromJson({
+      'schemaVersion': 1,
+      'initialState': <String, Object?>{},
+      'root': {
+        'id': 'root',
+        'type': 'Text',
+        'props': {'text': '布局卡片'},
+      },
+    }),
+  );
 }
 
 class _AppTestSecretStore implements SecretStore {

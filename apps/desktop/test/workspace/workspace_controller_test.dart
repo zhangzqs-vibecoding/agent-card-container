@@ -6,7 +6,6 @@ import 'package:agent_card_desktop/src/surfaces/surface.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_controller.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fake_async/fake_async.dart';
 
 void main() {
   test('moves an in-memory card to the same surface persisted by the host', () {
@@ -32,35 +31,35 @@ void main() {
     expect(controller.cards.single.persistedState, {'count': 7});
   });
 
-  test('updates immediately and debounces placement persistence', () {
-    fakeAsync((async) {
-      final writes = <CardPlacement>[];
-      final controller = WorkspaceController([
-        _card(),
-      ], persistPlacement: (_, _, placement) async => writes.add(placement));
-      addTearDown(controller.dispose);
+  test('updates immediately and debounces placement persistence', () async {
+    final writes = <CardPlacement>[];
+    final controller = WorkspaceController(
+      [_card()],
+      debounce: const Duration(milliseconds: 20),
+      persistPlacement: (_, _, placement) async => writes.add(placement),
+    );
+    addTearDown(controller.dispose);
 
-      controller.editPlacement(
-        'instance-1',
-        const CardPlacement(x: 1, y: 0, width: 4, height: 3),
-      );
-      controller.editPlacement(
-        'instance-1',
-        const CardPlacement(x: 2, y: 0, width: 4, height: 3),
-      );
+    controller.editPlacement(
+      'instance-1',
+      const CardPlacement(x: 1, y: 0, width: 4, height: 3),
+    );
+    controller.editPlacement(
+      'instance-1',
+      const CardPlacement(x: 2, y: 0, width: 4, height: 3),
+    );
 
-      expect(controller.cards.single.instance.placement.x, 2);
-      async.elapse(const Duration(milliseconds: 299));
-      expect(writes, isEmpty);
-      async.elapse(const Duration(milliseconds: 1));
-      async.flushMicrotasks();
-      expect(writes, hasLength(1));
-      expect(writes.single.x, 2);
-    });
+    expect(controller.cards.single.instance.placement.x, 2);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(writes, isEmpty);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(writes, hasLength(1));
+    expect(writes.single.x, 2);
   });
 
-  test('rolls back to the last committed placement after a write fails', () {
-    fakeAsync((async) {
+  test(
+    'rolls back to the last committed placement after a write fails',
+    () async {
       final controller = WorkspaceController(
         [_card()],
         debounce: Duration.zero,
@@ -72,15 +71,15 @@ void main() {
         'instance-1',
         const CardPlacement(x: 3, y: 2, width: 4, height: 3),
       );
-      async.flushTimers();
-      async.flushMicrotasks();
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
 
       expect(controller.cards.single.instance.placement.x, 0);
       expect(controller.cards.single.instance.placement.y, 0);
       expect(controller.layoutErrorMessage, '布局保存失败，已恢复上次位置');
       expect(controller.layoutErrorMessage, isNot(contains('sqlite secret')));
-    });
-  });
+    },
+  );
 
   test('ignores completion from an older placement revision', () async {
     final firstWrite = Completer<void>();
@@ -112,12 +111,15 @@ void main() {
     expect(controller.layoutErrorMessage, isNull);
   });
 
-  test('rejects edits outside the main workspace and cancels on dispose', () {
-    fakeAsync((async) {
+  test(
+    'rejects edits outside the main workspace and cancels on dispose',
+    () async {
       var writes = 0;
-      final controller = WorkspaceController([
-        _card(),
-      ], persistPlacement: (_, _, _) async => writes++);
+      final controller = WorkspaceController(
+        [_card()],
+        debounce: const Duration(milliseconds: 20),
+        persistPlacement: (_, _, _) async => writes++,
+      );
       controller.moveInstance(
         'instance-1',
         surfaceId: 'detached-1',
@@ -141,10 +143,10 @@ void main() {
         const CardPlacement(x: 1, y: 0, width: 4, height: 3),
       );
       controller.dispose();
-      async.elapse(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 30));
       expect(writes, 0);
-    });
-  });
+    },
+  );
 }
 
 WorkspaceCard _card() {

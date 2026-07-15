@@ -65,14 +65,14 @@
 - Modify: `apps/desktop/lib/src/workspace/workspace_screen.dart`
 - Modify: `apps/desktop/test/app/agent_card_app_test.dart`
 
-- [ ] RED：widget test 用稳定 key 拖动 `card-drag-<instanceId>` 一个列宽和一行，断言 controller 得到吸附 placement，`versionId/stateNamespace` 不变。
-- [ ] GREEN：把 controller 编辑回调、列宽和行高传入 `_WorkspaceCardView`；标题拖动把手累计 delta 后调用 `editPlacement`。
-- [ ] RED：拖动到已占位置时断言向下 first-fit，不与另一卡重叠。
-- [ ] GREEN：复用布局引擎结果，不在 Widget 重写碰撞算法。
-- [ ] RED：拖动 `card-resize-<instanceId>`，断言尺寸吸附、最小 2×2、12 列边界和碰撞避让。
-- [ ] GREEN：增加右下角语义化缩放把手与 tooltip；手势开始固定初始 placement，update 使用累计 delta。
-- [ ] 运行相关 widget test，确认 NativeCard 和 CodeCard runtime 未因 placement-only 更新而重建。
-- [ ] 提交：`feat: add workspace drag and resize gestures`。
+- [x] RED：widget test 用稳定 key 拖动 `card-drag-<instanceId>` 一个列宽和一行，断言 controller 得到吸附 placement，`versionId/stateNamespace` 不变。
+- [x] GREEN：把 controller 编辑回调、列宽和行高传入 `_WorkspaceCardView`；标题拖动把手累计 delta 后调用 `editPlacement`。
+- [x] RED：拖动到已占位置时断言向下 first-fit，不与另一卡重叠。
+- [x] GREEN：复用布局引擎结果，不在 Widget 重写碰撞算法。
+- [x] RED：拖动 `card-resize-<instanceId>`，断言尺寸吸附、最小 2×2、12 列边界和碰撞避让。
+- [x] GREEN：增加右下角语义化缩放把手与 tooltip；手势开始固定初始 placement，update 使用累计 delta。
+- [x] 运行相关 widget test，确认 NativeCard 和 CodeCard runtime 未因 placement-only 更新而重建。
+- [x] 提交：`feat: add workspace drag and resize gestures`。
 
 ## Task 5：错误提示与空状态入口
 

@@ -21,6 +21,8 @@ typedef NativeCardStateChanged =
     void Function(String namespace, Map<String, Object?> state);
 typedef CardSurfaceAction =
     Future<void> Function(String instanceId, CardPlacement placement);
+typedef CardPlacementEdit =
+    void Function(String instanceId, CardPlacement placement);
 
 class WorkspaceScreen extends StatefulWidget {
   const WorkspaceScreen({
@@ -155,6 +157,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
         onNativeCardStateChanged: widget.onNativeCardStateChanged,
         onDetachCard: widget.onDetachCard,
         onMoveCardToOverlay: widget.onMoveCardToOverlay,
+        onEditPlacement: widget.workspaceController?.editPlacement,
       ),
     );
   }
@@ -705,6 +708,7 @@ class _WorkspaceCanvas extends StatelessWidget {
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
+    this.onEditPlacement,
   });
 
   final InAppWebViewPortFactory webViewPortFactory;
@@ -715,6 +719,7 @@ class _WorkspaceCanvas extends StatelessWidget {
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
+  final CardPlacementEdit? onEditPlacement;
 
   @override
   Widget build(BuildContext context) {
@@ -865,6 +870,10 @@ class _WorkspaceCanvas extends StatelessWidget {
                   ),
                   onDetachCard: onDetachCard,
                   onMoveCardToOverlay: onMoveCardToOverlay,
+                  gridPlacement: card.instance.placement,
+                  columnWidth: columnWidth,
+                  rowHeight: 80,
+                  onEditPlacement: onEditPlacement,
                 ),
               ),
             if (!agentPanelOpen)
@@ -891,9 +900,13 @@ class _WorkspaceCardView extends StatefulWidget {
     required this.active,
     required this.surfacePlacement,
     required this.webViewPortFactory,
+    required this.gridPlacement,
+    required this.columnWidth,
+    required this.rowHeight,
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
+    this.onEditPlacement,
     super.key,
   });
 
@@ -901,9 +914,13 @@ class _WorkspaceCardView extends StatefulWidget {
   final bool active;
   final CardPlacement surfacePlacement;
   final InAppWebViewPortFactory webViewPortFactory;
+  final CardPlacement gridPlacement;
+  final double columnWidth;
+  final double rowHeight;
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
+  final CardPlacementEdit? onEditPlacement;
 
   @override
   State<_WorkspaceCardView> createState() => _WorkspaceCardViewState();
@@ -916,6 +933,8 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   CodeCardHost? _codeCardHost;
   Object? _codeCardError;
   var _codeCardMounted = false;
+  CardPlacement? _gestureStart;
+  Offset _gestureDelta = Offset.zero;
 
   @override
   void initState() {
@@ -1063,6 +1082,54 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
       child: Stack(
         children: [
           Positioned.fill(child: _cardContent()),
+          if (widget.onEditPlacement != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.move,
+                child: GestureDetector(
+                  key: Key('card-drag-${widget.card.instance.instanceId}'),
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) => _startPlacementGesture(),
+                  onPanUpdate: _dragPlacement,
+                  onPanEnd: (_) => _endPlacementGesture(),
+                  onPanCancel: _endPlacementGesture,
+                  child: const Tooltip(
+                    message: '拖动卡片',
+                    child: SizedBox(
+                      width: 42,
+                      height: 34,
+                      child: Icon(Icons.drag_indicator_rounded, size: 18),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (widget.onEditPlacement != null)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.resizeDownRight,
+                child: GestureDetector(
+                  key: Key('card-resize-${widget.card.instance.instanceId}'),
+                  behavior: HitTestBehavior.opaque,
+                  onPanStart: (_) => _startPlacementGesture(),
+                  onPanUpdate: _resizePlacement,
+                  onPanEnd: (_) => _endPlacementGesture(),
+                  onPanCancel: _endPlacementGesture,
+                  child: const Tooltip(
+                    message: '调整卡片大小',
+                    child: SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: Icon(Icons.south_east_rounded, size: 15),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (widget.onDetachCard != null || widget.onMoveCardToOverlay != null)
             Positioned(
               right: 0,
@@ -1088,6 +1155,50 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
         ],
       ),
     );
+  }
+
+  void _startPlacementGesture() {
+    _gestureStart = widget.gridPlacement;
+    _gestureDelta = Offset.zero;
+  }
+
+  void _dragPlacement(DragUpdateDetails details) {
+    final start = _gestureStart;
+    if (start == null) return;
+    _gestureDelta += details.delta;
+    widget.onEditPlacement?.call(
+      widget.card.instance.instanceId,
+      CardPlacement(
+        x: start.x + _gestureDelta.dx / widget.columnWidth,
+        y: start.y + _gestureDelta.dy / widget.rowHeight,
+        width: start.width,
+        height: start.height,
+      ),
+    );
+  }
+
+  void _resizePlacement(DragUpdateDetails details) {
+    final start = _gestureStart;
+    if (start == null) return;
+    _gestureDelta += details.delta;
+    widget.onEditPlacement?.call(
+      widget.card.instance.instanceId,
+      CardPlacement(
+        x: start.x,
+        y: start.y,
+        width: (start.width + _gestureDelta.dx / widget.columnWidth)
+            .clamp(0.01, double.infinity)
+            .toDouble(),
+        height: (start.height + _gestureDelta.dy / widget.rowHeight)
+            .clamp(0.01, double.infinity)
+            .toDouble(),
+      ),
+    );
+  }
+
+  void _endPlacementGesture() {
+    _gestureStart = null;
+    _gestureDelta = Offset.zero;
   }
 
   Future<void> _runSurfaceAction(_SurfaceAction action) async {
