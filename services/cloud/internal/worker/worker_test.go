@@ -519,6 +519,131 @@ func TestWorkerCompletesVersionPublishedBeforePreviousAttemptCrashed(t *testing.
 	}
 }
 
+func TestWorkerCompletesReadySessionAfterPreviousCompleteFailed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	current := time.Date(2026, 7, 15, 11, 30, 0, 0, time.UTC)
+	repository := generation.NewMemoryRepository()
+	service := generation.NewService(repository, func() string { return "gen_complete_recovery" }, func() time.Time { return current })
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "完成恢复", Target: generation.TargetNative, Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	baseStore := jobs.NewMemoryStore(func() string { return "job_complete_recovery" })
+	if _, err := baseStore.Enqueue(ctx, session.ID, current); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := &completeFailOnceStore{Store: baseStore}
+	provider := &captureProvider{}
+	seed := sha256.Sum256([]byte("complete-recovery-key"))
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("complete-key", ed25519.NewKeyFromSeed(seed[:])),
+		publish.NewMemoryObjectStore(), publish.NewMemoryVersionRepository(),
+	)
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-complete", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()), Publisher: publisher,
+		NewCardID: func() string { return "card_complete" }, NewVersionID: func() string { return "ver_complete" },
+		Now: func() time.Time { return current },
+	})
+
+	if _, err := runner.RunOnce(ctx); !errors.Is(err, publish.ErrRetryable) {
+		t.Fatalf("first RunOnce() error = %v", err)
+	}
+	ready, err := service.Get(ctx, "user", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ready.Status != generation.StatusReady || ready.VersionID != "ver_complete" {
+		t.Fatalf("session = %#v", ready)
+	}
+	current = current.Add(2 * time.Minute)
+	outcome, err := runner.RunOnce(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.VersionID != "ver_complete" || len(provider.requests) != 1 {
+		t.Fatalf("outcome=%#v provider calls=%d", outcome, len(provider.requests))
+	}
+	completed, err := baseStore.Get(ctx, "job_complete_recovery")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completed.Status != jobs.StatusCompleted {
+		t.Fatalf("job status = %s", completed.Status)
+	}
+}
+
+func TestWorkerCancellationStopsBlockedProviderWithoutOverwritingSession(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	jobStore := jobs.NewMemoryStore(func() string { return "job_user_cancel" })
+	service := generation.NewService(
+		generation.NewMemoryRepository(), func() string { return "gen_user_cancel" }, time.Now,
+		generation.WithJobQueue(jobs.NewGenerationQueue(jobStore)),
+	)
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "可取消生成", Target: generation.TargetNative, Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	provider := &cancellationProvider{started: make(chan struct{}), cancelled: make(chan struct{})}
+	seed := sha256.Sum256([]byte("user-cancel-key"))
+	versions := publish.NewMemoryVersionRepository()
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-user-cancel", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()),
+		Publisher: publish.NewPublisher(
+			artifact.NewBuilder("cancel-key", ed25519.NewKeyFromSeed(seed[:])),
+			publish.NewMemoryObjectStore(), versions,
+		),
+		NewCardID: func() string { return "card_cancel" }, NewVersionID: func() string { return "ver_cancel" },
+		Now: time.Now, LeaseDuration: 40 * time.Millisecond, HeartbeatInterval: 10 * time.Millisecond,
+	})
+	done := make(chan error, 1)
+	go func() {
+		_, runErr := runner.RunOnce(ctx)
+		done <- runErr
+	}()
+	<-provider.started
+	if _, err := service.Cancel(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-provider.cancelled:
+	case <-time.After(time.Second):
+		t.Fatal("provider did not observe cancellation")
+	}
+	if err := <-done; !errors.Is(err, jobs.ErrConflict) {
+		t.Fatalf("RunOnce() error = %v, want lease conflict", err)
+	}
+	cancelled, err := service.Get(ctx, "user", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := jobStore.Get(ctx, "job_user_cancel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cancelled.Status != generation.StatusCancelled || cancelled.VersionID != "" || job.Status != jobs.StatusCancelled {
+		t.Fatalf("cancelled session=%#v job=%#v", cancelled, job)
+	}
+	if versionsCount, err := versions.ListByUser(ctx, "user"); err != nil || len(versionsCount) != 0 {
+		t.Fatalf("versions after cancellation = %#v, error=%v", versionsCount, err)
+	}
+}
+
 func TestWorkerFailsSessionAfterAgentValidationFailure(t *testing.T) {
 	t.Parallel()
 
@@ -708,6 +833,35 @@ func (blockingProvider) Generate(ctx context.Context, _ modelprovider.Request) (
 
 type leaseLosingStore struct {
 	jobs.Store
+}
+
+type completeFailOnceStore struct {
+	jobs.Store
+	failed bool
+}
+
+func (store *completeFailOnceStore) Complete(
+	ctx context.Context, jobID, workerID string, at time.Time,
+) error {
+	if !store.failed {
+		store.failed = true
+		return publish.ErrRetryable
+	}
+	return store.Store.Complete(ctx, jobID, workerID, at)
+}
+
+type cancellationProvider struct {
+	started   chan struct{}
+	cancelled chan struct{}
+}
+
+func (provider *cancellationProvider) Generate(
+	ctx context.Context, _ modelprovider.Request,
+) (modelprovider.Response, error) {
+	close(provider.started)
+	<-ctx.Done()
+	close(provider.cancelled)
+	return modelprovider.Response{}, ctx.Err()
 }
 
 func (*leaseLosingStore) ExtendLease(
