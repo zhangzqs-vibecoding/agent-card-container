@@ -3,7 +3,7 @@
 状态：**已确认，实施中**
 记录日期：2026-07-13（Asia/Shanghai）
 最近核对：2026-07-15（Asia/Shanghai）
-代码基线：`039c4f2`
+代码基线：`5a6a7fd`
 
 ## 1. 文档目的
 
@@ -37,7 +37,7 @@
 | 6 | 工作区拖动、缩放、碰撞和布局编辑 | **开放** | 归入 P1-A，不在 P0-A/P0-B 中提前扩展。 |
 | 7 | 同卡迭代、升级和回滚 | **开放** | 归入 P1-A；需要 `baseCardId`/`baseVersionId`、能力差异、同 schema 状态复用及异 schema 备份/重置流程。MVP 不执行 Agent 生成的状态迁移。 |
 | 8 | worker heartbeat、事务、重试与发布幂等 | **HEADLESS PASS** | 原子确认/入队、租约 heartbeat/fencing、稳定发布身份、基础设施有限重试及五阶段部分失败恢复已通过 race 与 PostgreSQL/MinIO 门禁；Windows 消费仍属设备范围。 |
-| 9 | CodeCard 正式 builder 和真实生成链路 | **开放** | 沙箱 adapter 自动化已通过，P1-C 才启用受控镜像、真实 Agent 生成和 Windows WebView2 闸门。 |
+| 9 | CodeCard 正式 builder 和真实生成链路 | **HEADLESS AUTOMATION PASS / LIVE、DEVICE NOT RUN** | 受控 builder、固定评测合同、Linux Chromium 离线/RPC、签名发布及 PostgreSQL/MinIO 恢复已通过；真实 CodeCard 20 例质量门和 Windows WebView2 仍未执行。 |
 | 10 | Windows/macOS 可信发行 | **开放** | Authenticode、正式安装器、WebView2 缺失引导、macOS 签名和 notarization 归入 P2。 |
 
 因此，当前状态应描述为“自动化骨架和安全边界基本成形，MVP 真实闭环尚未通过”，不能描述为发布就绪。
@@ -51,7 +51,7 @@
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
 | P1-A 工作区与版本生命周期 | **未开始** | 现有 placement、Surface 和版本查询骨架 | 独立设计/计划；完成拖放缩放、实例管理、同卡升级与回滚 | P0-C 暴露的问题已分类 |
 | P1-B worker 可靠性 | **HEADLESS PASS** | 原子确认/入队、90s/30s lease heartbeat、owner fencing、稳定 card/version、1s/2s 基础设施退避、取消传播及真实 PostgreSQL/MinIO crash recovery | 保持回归稳定；Windows 产品消费证据随 P0-C/P1-C 收集 | Linux/headless 不再有外部依赖 |
-| P1-C CodeCard 生产链路 | **未开始，沙箱基础已有** | 本地 Runtime Server、RPC、受限 OCI 沙箱和自动化安全门 | 受控 builder 镜像、CodeCard 固定评测、真实生成及 Windows 离线 WebView2 证据 | P0-A、P0-B、P1-B |
+| P1-C CodeCard 生产链路 | **HEADLESS AUTOMATION PASS / LIVE、DEVICE NOT RUN** | 受控 builder、20 例固定质量合同、本地 JS SDK、Linux Chromium 离线/RPC、签名发布和真实 PostgreSQL/MinIO 恢复 | 执行真实 CodeCard 质量门；在 Windows 参考设备完成离线 WebView2 矩阵 | 临时模型凭据与价格配置；Windows 11 x64 参考设备 |
 | P2 可信发行与 macOS | **未开始** | 静态安装器/entitlement 结构和跨平台 CI | Windows 签名发行、干净机升级卸载；macOS 签名、notarization 和设备闸门 | P0/P1 功能链路与 Windows M0 设备闸门通过；M4 完整通过是本阶段退出条件 |
 
 主要事实依据：

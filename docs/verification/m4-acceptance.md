@@ -1,7 +1,7 @@
 # M4 acceptance evidence
 
 Overall status: **DEVICE EVIDENCE REQUIRED**  
-Latest automated code commit: `039c4f2`
+Latest automated code commit: `5a6a7fd`
 
 Recorded: 2026-07-15 (Asia/Shanghai)
 
@@ -30,6 +30,7 @@ commit.
 | Real DeepSeek NativeCard headless gate | opt-in three-case vertical test plus 20-case fixed evaluation | **HEADLESS PASS** | Commits `808b435`, `0a11ef3`, `41f9894`; 3/3 signed artifacts verified and 16/20 fixed cases passed; Windows device work remains `NOT RUN` |
 | P0-B persistent environment gate | `sh tooling/persistence/run-p0b-gate.sh` | **LOCAL HEADLESS PASS / REMOTE NOT RUN** | PostgreSQL/MinIO repositories, runtime and data-service restart, dependency failure matrix, non-memory network download, independent SHA/manifest/Ed25519 verification and paired backup/restore passed at `b77b677`; fixed remote host and Windows reachability remain `NOT RUN` |
 | P1-B worker reliability gate | full Go race suite plus extended P0-B Docker gate | **HEADLESS PASS** | Atomic confirm/enqueue, lease heartbeat and owner fencing, stable publication identity, bounded infrastructure retry, cancellation propagation, published-version/ready-session recovery and real PostgreSQL/MinIO lease-expiry recovery passed at `039c4f2`; Windows device consumption remains `NOT RUN` |
+| P1-C CodeCard production automation | Go/Flutter/Node security gates, Linux Chromium and extended PostgreSQL/MinIO gate | **HEADLESS AUTOMATION PASS / LIVE QUALITY NOT RUN / WINDOWS DEVICE NOT RUN** | Fixed 20-case contract, bounded local SDK, pinned builder, 3/3 Chromium runtime cases and real signed publication recovery passed at `5a6a7fd`; see `docs/verification/p1c-codecard-production.md` |
 | Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | TypeScript shared fixtures, Flutter security suite 66 tests, Go race suite, CodeCard dependency/typecheck/tests/build/bundle validation and official npm bulk advisory audit passed; 164 packages, zero high/critical findings |
 | Performance evaluator | `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart` | PASS | Budgets, percentile calculation and minimum sample populations tested |
 | Insufficient performance evidence | `dart tooling/performance/summarize.dart tooling/performance/fixtures/insufficient.json` | PASS (rejected) | Exit 1 with four `:samples` failures and `passed: false` |
