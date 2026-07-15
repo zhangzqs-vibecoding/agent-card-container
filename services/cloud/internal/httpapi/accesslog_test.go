@@ -2,6 +2,7 @@ package httpapi_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -104,6 +105,36 @@ func TestAccessLogWriterFailureDoesNotChangeResponse(t *testing.T) {
 	if response.Code != http.StatusNoContent {
 		t.Fatalf("status = %d", response.Code)
 	}
+}
+
+func TestReadinessFailureAccessLogDoesNotExposeDependencyError(t *testing.T) {
+	var output bytes.Buffer
+	handler := httpapi.AccessLogMiddleware(httpapi.AccessLogConfig{
+		Logger:       observability.NewJSONLogger(&output),
+		NewRequestID: func() string { return "req_ready" },
+		Now:          time.Now,
+	})(httpapi.NewReadinessHandler(
+		"agent-card-cloud",
+		readinessCheckerFunc(func(context.Context) error {
+			return errors.New("postgres://user:database-secret@private-host/database")
+		}),
+	))
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if strings.Contains(output.String(), "database-secret") ||
+		strings.Contains(response.Body.String(), "database-secret") {
+		t.Fatalf("dependency error leaked: response=%q log=%q", response.Body.String(), output.String())
+	}
+	event := decodeLog(t, output.Bytes())
+	assertFields(t, event, map[string]any{
+		"path":   "/readyz",
+		"status": float64(http.StatusServiceUnavailable),
+	})
 }
 
 type failingWriter struct{}
