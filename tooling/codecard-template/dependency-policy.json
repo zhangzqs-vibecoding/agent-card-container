@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "auditedAt": "2026-07-15T00:00:00Z",
-  "packageManager": "pnpm@10.33.0",
+  "auditedAt": "2026-07-16T00:00:00Z",
+  "packageManager": "pnpm@11.13.0",
   "productionDependencies": [
     {
       "name": "preact",
-      "version": "10.26.4",
+      "version": "10.29.7",
       "license": "MIT"
     }
   ],
