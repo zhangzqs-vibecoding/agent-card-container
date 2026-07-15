@@ -46,6 +46,8 @@ class GenerationSession {
     required this.createdAt,
     required this.updatedAt,
     this.versionId,
+    this.baseCardId,
+    this.baseVersionId,
   });
 
   factory GenerationSession.fromJson(Map<String, Object?> json) {
@@ -57,6 +59,8 @@ class GenerationSession {
       status: _status(_string(json, 'status')),
       summary: RequirementSummary.fromJson(_map(json, 'summary')),
       versionId: json['versionId'] as String?,
+      baseCardId: json['baseCardId'] as String?,
+      baseVersionId: json['baseVersionId'] as String?,
       createdAt: DateTime.parse(_string(json, 'createdAt')).toUtc(),
       updatedAt: DateTime.parse(_string(json, 'updatedAt')).toUtc(),
     );
@@ -69,6 +73,8 @@ class GenerationSession {
   final GenerationStatus status;
   final RequirementSummary summary;
   final String? versionId;
+  final String? baseCardId;
+  final String? baseVersionId;
   final DateTime createdAt;
   final DateTime updatedAt;
 }
@@ -321,12 +327,30 @@ class CloudApiClient {
     required String prompt,
     GenerationTarget target = GenerationTarget.auto,
     String locale = 'zh-CN',
+    String? baseCardId,
+    String? baseVersionId,
   }) async {
+    final normalizedCardId = baseCardId?.trim();
+    final normalizedVersionId = baseVersionId?.trim();
+    final hasCard = normalizedCardId != null && normalizedCardId.isNotEmpty;
+    final hasVersion =
+        normalizedVersionId != null && normalizedVersionId.isNotEmpty;
+    if (hasCard != hasVersion) {
+      throw ArgumentError(
+        'baseCardId and baseVersionId must be provided together',
+      );
+    }
     return GenerationSession.fromJson(
       await _json(
         'POST',
         '/v1/generations',
-        body: {'prompt': prompt, 'target': target.name, 'locale': locale},
+        body: {
+          'prompt': prompt,
+          'target': target.name,
+          'locale': locale,
+          if (hasCard) 'baseCardId': normalizedCardId,
+          if (hasVersion) 'baseVersionId': normalizedVersionId,
+        },
         expectedStatus: HttpStatus.created,
       ),
     );

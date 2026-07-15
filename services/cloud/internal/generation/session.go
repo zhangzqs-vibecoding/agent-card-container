@@ -30,18 +30,21 @@ const (
 )
 
 var (
-	ErrInvalidTarget     = errors.New("invalid generation target")
-	ErrInvalidTransition = errors.New("invalid generation transition")
-	ErrTerminalSession   = errors.New("generation session is terminal")
+	ErrInvalidTarget      = errors.New("invalid generation target")
+	ErrInvalidBaseVersion = errors.New("invalid generation base version")
+	ErrInvalidTransition  = errors.New("invalid generation transition")
+	ErrTerminalSession    = errors.New("generation session is terminal")
 )
 
 type CreateInput struct {
-	ID        string
-	UserID    string
-	Prompt    string
-	Target    Target
-	Locale    string
-	CreatedAt time.Time
+	ID            string
+	UserID        string
+	Prompt        string
+	Target        Target
+	Locale        string
+	BaseCardID    string
+	BaseVersionID string
+	CreatedAt     time.Time
 }
 
 type Transition struct {
@@ -82,6 +85,8 @@ type RequirementSnapshot struct {
 	AdditionalMessages  []Message `json:"additionalMessages"`
 	Target              Target    `json:"target"`
 	Locale              string    `json:"locale"`
+	BaseCardID          string    `json:"baseCardId,omitempty"`
+	BaseVersionID       string    `json:"baseVersionId,omitempty"`
 	AllowedCapabilities []string  `json:"allowedCapabilities"`
 	ConfirmedAt         time.Time `json:"confirmedAt"`
 }
@@ -92,6 +97,8 @@ type Session struct {
 	Prompt               string               `json:"prompt"`
 	Target               Target               `json:"target"`
 	Locale               string               `json:"locale"`
+	BaseCardID           string               `json:"baseCardId,omitempty"`
+	BaseVersionID        string               `json:"baseVersionId,omitempty"`
 	Status               Status               `json:"status"`
 	Summary              RequirementSummary   `json:"summary"`
 	Messages             []Message            `json:"messages"`
@@ -125,21 +132,28 @@ func NewSession(input CreateInput) (*Session, error) {
 	if strings.TrimSpace(input.Locale) == "" {
 		input.Locale = "zh-CN"
 	}
+	input.BaseCardID = strings.TrimSpace(input.BaseCardID)
+	input.BaseVersionID = strings.TrimSpace(input.BaseVersionID)
+	if (input.BaseCardID == "") != (input.BaseVersionID == "") {
+		return nil, ErrInvalidBaseVersion
+	}
 	if input.CreatedAt.IsZero() {
 		input.CreatedAt = time.Now().UTC()
 	}
 	input.CreatedAt = input.CreatedAt.UTC()
 	prompt := strings.TrimSpace(input.Prompt)
 	return &Session{
-		ID:        input.ID,
-		UserID:    input.UserID,
-		Prompt:    prompt,
-		Target:    input.Target,
-		Locale:    input.Locale,
-		Status:    StatusDraft,
-		CreatedAt: input.CreatedAt,
-		UpdatedAt: input.CreatedAt,
-		Events:    make([]Event, 0),
+		ID:            input.ID,
+		UserID:        input.UserID,
+		Prompt:        prompt,
+		Target:        input.Target,
+		Locale:        input.Locale,
+		BaseCardID:    input.BaseCardID,
+		BaseVersionID: input.BaseVersionID,
+		Status:        StatusDraft,
+		CreatedAt:     input.CreatedAt,
+		UpdatedAt:     input.CreatedAt,
+		Events:        make([]Event, 0),
 		Messages: []Message{{
 			Role:      "user",
 			Content:   prompt,
@@ -202,6 +216,8 @@ func (session *Session) Confirm(capabilities []string, at time.Time) (Event, err
 		AdditionalMessages:  additionalMessages,
 		Target:              session.Target,
 		Locale:              session.Locale,
+		BaseCardID:          session.BaseCardID,
+		BaseVersionID:       session.BaseVersionID,
 		AllowedCapabilities: normalizeCapabilities(capabilities),
 		ConfirmedAt:         at,
 	}

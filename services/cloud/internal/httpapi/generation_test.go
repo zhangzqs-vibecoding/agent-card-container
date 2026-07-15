@@ -153,6 +153,40 @@ func TestGenerationAPICreateMessageConfirmGetAndSSEReplay(t *testing.T) {
 	}
 }
 
+func TestGenerationAPIFreezesPairedBaseVersion(t *testing.T) {
+	t.Parallel()
+
+	handler := generationHandler()
+	created := doJSON(t, handler, http.MethodPost, "/v1/generations", "token-owner", map[string]any{
+		"prompt":        "增加暂停按钮",
+		"target":        "native",
+		"locale":        "zh-CN",
+		"baseCardId":    "card_01",
+		"baseVersionId": "ver_01",
+	}, http.StatusCreated)
+	if created["baseCardId"] != "card_01" || created["baseVersionId"] != "ver_01" {
+		t.Fatalf("created base = %v/%v", created["baseCardId"], created["baseVersionId"])
+	}
+	confirmed := doJSON(
+		t,
+		handler,
+		http.MethodPost,
+		"/v1/generations/"+created["id"].(string)+"/confirm",
+		"token-owner",
+		nil,
+		http.StatusOK,
+	)
+	snapshot := confirmed["confirmedRequirement"].(map[string]any)
+	if snapshot["baseCardId"] != "card_01" || snapshot["baseVersionId"] != "ver_01" {
+		t.Fatalf("confirmed base = %v/%v", snapshot["baseCardId"], snapshot["baseVersionId"])
+	}
+
+	doJSON(t, handler, http.MethodPost, "/v1/generations", "token-owner", map[string]any{
+		"prompt":     "增加暂停按钮",
+		"baseCardId": "card_01",
+	}, http.StatusBadRequest)
+}
+
 type streamingRecorder struct {
 	*httptest.ResponseRecorder
 	flushed chan struct{}

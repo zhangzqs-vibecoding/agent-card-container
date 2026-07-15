@@ -22,6 +22,8 @@ abstract interface class GenerationPort {
     required String prompt,
     required GenerationTarget target,
     required String locale,
+    String? baseCardId,
+    String? baseVersionId,
   });
 
   Future<GenerationSession> addMessage(String sessionId, String content);
@@ -45,11 +47,15 @@ class CloudGenerationPort implements GenerationPort {
     required String prompt,
     required GenerationTarget target,
     required String locale,
+    String? baseCardId,
+    String? baseVersionId,
   }) {
     return client.createGeneration(
       prompt: prompt,
       target: target,
       locale: locale,
+      baseCardId: baseCardId,
+      baseVersionId: baseVersionId,
     );
   }
 
@@ -112,6 +118,8 @@ class AgentStudioController extends ChangeNotifier {
     String prompt, {
     GenerationTarget target = GenerationTarget.auto,
     String locale = 'zh-CN',
+    String? baseCardId,
+    String? baseVersionId,
   }) async {
     final normalized = prompt.trim();
     if (normalized.isEmpty || !canSubmit) {
@@ -127,6 +135,8 @@ class AgentStudioController extends ChangeNotifier {
               prompt: normalized,
               target: target,
               locale: locale,
+              baseCardId: baseCardId,
+              baseVersionId: baseVersionId,
             )
           : await port.addMessage(current.id, normalized);
       _errorMessage = '';

@@ -9,9 +9,11 @@ import (
 )
 
 type CreateRequest struct {
-	Prompt string
-	Target Target
-	Locale string
+	Prompt        string
+	Target        Target
+	Locale        string
+	BaseCardID    string
+	BaseVersionID string
 }
 
 type Service struct {
@@ -73,12 +75,14 @@ func NewService(
 func (service *Service) Create(ctx context.Context, userID string, request CreateRequest) (*Session, error) {
 	createdAt := service.now().UTC()
 	session, err := NewSession(CreateInput{
-		ID:        service.newID(),
-		UserID:    userID,
-		Prompt:    request.Prompt,
-		Target:    request.Target,
-		Locale:    request.Locale,
-		CreatedAt: createdAt,
+		ID:            service.newID(),
+		UserID:        userID,
+		Prompt:        request.Prompt,
+		Target:        request.Target,
+		Locale:        request.Locale,
+		BaseCardID:    request.BaseCardID,
+		BaseVersionID: request.BaseVersionID,
+		CreatedAt:     createdAt,
 	})
 	if err != nil {
 		return nil, err
@@ -399,5 +403,6 @@ func IsClientError(err error) bool {
 	return errors.Is(err, ErrNotFound) ||
 		errors.Is(err, ErrConflict) ||
 		errors.Is(err, ErrInvalidTarget) ||
+		errors.Is(err, ErrInvalidBaseVersion) ||
 		errors.Is(err, ErrInvalidTransition)
 }

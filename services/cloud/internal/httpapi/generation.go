@@ -71,18 +71,22 @@ func (api *generationAPI) create(writer http.ResponseWriter, request *http.Reque
 		return
 	}
 	var input struct {
-		Prompt string            `json:"prompt"`
-		Target generation.Target `json:"target"`
-		Locale string            `json:"locale"`
+		Prompt        string            `json:"prompt"`
+		Target        generation.Target `json:"target"`
+		Locale        string            `json:"locale"`
+		BaseCardID    string            `json:"baseCardId"`
+		BaseVersionID string            `json:"baseVersionId"`
 	}
 	if err := decodeStrictJSON(request, &input); err != nil {
 		writeAPIError(writer, requestID, http.StatusBadRequest, "INVALID_REQUEST", "请求格式不正确")
 		return
 	}
 	session, err := api.service.Create(request.Context(), userID, generation.CreateRequest{
-		Prompt: input.Prompt,
-		Target: input.Target,
-		Locale: input.Locale,
+		Prompt:        input.Prompt,
+		Target:        input.Target,
+		Locale:        input.Locale,
+		BaseCardID:    input.BaseCardID,
+		BaseVersionID: input.BaseVersionID,
 	})
 	if err != nil {
 		api.writeServiceError(writer, requestID, err)

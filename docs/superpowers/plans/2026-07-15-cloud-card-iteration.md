@@ -22,13 +22,13 @@
 - Modify: `apps/desktop/lib/src/cloud/cloud_api_client.dart`
 - Modify: `apps/desktop/test/cloud/cloud_api_client_test.dart`
 
-- [ ] RED：Go 测试证明 base IDs 只能成对出现，确认快照会冻结两字段，新卡保持空值。
-- [ ] GREEN：为 `CreateInput/CreateRequest/Session/RequirementSnapshot` 增加字段和统一 validator。
-- [ ] RED：Dart HTTP 测试证明普通请求不发送 base 字段，迭代请求精确发送两个字段且拒绝单边参数。
-- [ ] GREEN：扩展 `CloudApiClient.createGeneration`，不改变现有调用默认行为。
-- [ ] 更新 OpenAPI request/session/snapshot schema，跨语言安全门必须接受同一字段名。
-- [ ] 运行 Go generation 与 Dart cloud client 测试。
-- [ ] 提交：`feat: define card iteration request contract`。
+- [x] RED：Go 测试证明 base IDs 只能成对出现，确认快照会冻结两字段，新卡保持空值。
+- [x] GREEN：为 `CreateInput/CreateRequest/Session/RequirementSnapshot` 增加字段和统一 validator。
+- [x] RED：Dart HTTP 测试证明普通请求不发送 base 字段，迭代请求精确发送两个字段且拒绝单边参数。
+- [x] GREEN：扩展 `CloudApiClient.createGeneration`，不改变现有调用默认行为。
+- [x] 更新 OpenAPI request/session/snapshot schema，跨语言安全门必须接受同一字段名。
+- [x] 运行 Go generation 与 Dart cloud client 测试。
+- [x] 提交：`feat: define card iteration request contract`。
 
 ## Task 2：验证基线版本归属
 

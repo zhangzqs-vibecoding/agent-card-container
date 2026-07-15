@@ -9,9 +9,11 @@ void main() {
     late HttpServer server;
     late CloudApiClient client;
     late List<HttpRequest> requests;
+    late List<Map<String, Object?>> requestBodies;
 
     setUp(() async {
       requests = [];
+      requestBodies = [];
       server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
         requests.add(request);
@@ -145,6 +147,7 @@ void main() {
         final decoded = body.isEmpty
             ? const <String, Object?>{}
             : jsonDecode(body) as Map<String, Object?>;
+        requestBodies.add(decoded);
         request.response.headers.contentType = ContentType.json;
         if (request.uri.path == '/v1/generations') {
           expect(decoded['prompt'], '离线番茄钟');
@@ -157,6 +160,10 @@ void main() {
                 'target': 'auto',
                 'locale': 'zh-CN',
                 'status': 'awaiting_confirmation',
+                if (decoded['baseCardId'] != null)
+                  'baseCardId': decoded['baseCardId'],
+                if (decoded['baseVersionId'] != null)
+                  'baseVersionId': decoded['baseVersionId'],
                 'summary': {
                   'goal': '离线番茄钟',
                   'constraints': ['可离线'],
@@ -220,6 +227,29 @@ void main() {
         ),
         isTrue,
       );
+      expect(requestBodies.first.containsKey('baseCardId'), isFalse);
+      expect(requestBodies.first.containsKey('baseVersionId'), isFalse);
+    });
+
+    test('creates a generation bound to one base card version', () async {
+      final created = await client.createGeneration(
+        prompt: '离线番茄钟',
+        baseCardId: 'card_01',
+        baseVersionId: 'ver_01',
+      );
+
+      expect(created.baseCardId, 'card_01');
+      expect(created.baseVersionId, 'ver_01');
+      expect(requestBodies.single['baseCardId'], 'card_01');
+      expect(requestBodies.single['baseVersionId'], 'ver_01');
+    });
+
+    test('rejects an unpaired base card version before HTTP', () async {
+      await expectLater(
+        client.createGeneration(prompt: '离线番茄钟', baseCardId: 'card_01'),
+        throwsArgumentError,
+      );
+      expect(requests, isEmpty);
     });
 
     test('parses one SSE connection and sends Last-Event-ID', () async {

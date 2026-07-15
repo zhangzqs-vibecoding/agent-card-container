@@ -39,6 +39,23 @@ void main() {
     expect(controller.phase, AgentStudioPhase.idle);
   });
 
+  test('submits an iteration bound to its base version', () async {
+    final port = FakeGenerationPort();
+    final controller = AgentStudioController(port: port);
+    addTearDown(controller.dispose);
+
+    await controller.submit(
+      '增加暂停按钮',
+      baseCardId: 'card_01',
+      baseVersionId: 'ver_01',
+    );
+
+    expect(port.createdBaseCardId, 'card_01');
+    expect(port.createdBaseVersionId, 'ver_01');
+    expect(controller.session?.baseCardId, 'card_01');
+    expect(controller.session?.baseVersionId, 'ver_01');
+  });
+
   test('invokes ready installation callback once per version', () async {
     var installs = 0;
     final controller = AgentStudioController(

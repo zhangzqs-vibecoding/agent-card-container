@@ -5,13 +5,19 @@ class FakeGenerationPort implements GenerationPort {
   FakeGenerationPort({this.failCreate = false});
 
   final bool failCreate;
+  String? createdBaseCardId;
+  String? createdBaseVersionId;
 
   @override
   Future<GenerationSession> create({
     required String prompt,
     required GenerationTarget target,
     required String locale,
+    String? baseCardId,
+    String? baseVersionId,
   }) async {
+    createdBaseCardId = baseCardId;
+    createdBaseVersionId = baseVersionId;
     if (failCreate) {
       throw const CloudApiException(
         statusCode: 500,
@@ -22,6 +28,8 @@ class FakeGenerationPort implements GenerationPort {
     return fakeGenerationSession(
       status: GenerationStatus.awaitingConfirmation,
       prompt: prompt,
+      baseCardId: baseCardId,
+      baseVersionId: baseVersionId,
     );
   }
 
@@ -82,6 +90,8 @@ GenerationSession fakeGenerationSession({
   required GenerationStatus status,
   String prompt = '做一个离线番茄钟',
   String? versionId,
+  String? baseCardId,
+  String? baseVersionId,
 }) {
   return GenerationSession(
     id: 'gen_01',
@@ -95,6 +105,8 @@ GenerationSession fakeGenerationSession({
       locale: 'zh-CN',
     ),
     versionId: versionId,
+    baseCardId: baseCardId,
+    baseVersionId: baseVersionId,
     createdAt: DateTime.utc(2026, 7, 12),
     updatedAt: DateTime.utc(2026, 7, 12),
   );

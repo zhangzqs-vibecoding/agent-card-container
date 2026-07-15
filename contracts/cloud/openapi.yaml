@@ -28,6 +28,11 @@ paths:
                 prompt: {type: string, minLength: 1}
                 target: {enum: [auto, native, web], default: auto}
                 locale: {type: string, default: zh-CN}
+                baseCardId: {type: string, pattern: "^card_[A-Za-z0-9_-]+$"}
+                baseVersionId: {type: string, pattern: "^ver_[A-Za-z0-9_-]+$"}
+              dependentRequired:
+                baseCardId: [baseVersionId]
+                baseVersionId: [baseCardId]
       responses:
         "201":
           description: Generation awaiting confirmation
@@ -150,11 +155,16 @@ components:
           items: {$ref: "#/components/schemas/GenerationMessage"}
         target: {type: string, enum: [auto, native, web]}
         locale: {type: string, minLength: 1}
+        baseCardId: {type: string, pattern: "^card_[A-Za-z0-9_-]+$"}
+        baseVersionId: {type: string, pattern: "^ver_[A-Za-z0-9_-]+$"}
         allowedCapabilities:
           type: array
           uniqueItems: true
           items: {type: string, minLength: 1}
         confirmedAt: {type: string, format: date-time}
+      dependentRequired:
+        baseCardId: [baseVersionId]
+        baseVersionId: [baseCardId]
     RequirementSummary:
       type: object
       additionalProperties: false
@@ -183,6 +193,8 @@ components:
         prompt: {type: string, minLength: 1}
         target: {type: string, enum: [auto, native, web]}
         locale: {type: string, minLength: 1}
+        baseCardId: {type: string, pattern: "^card_[A-Za-z0-9_-]+$"}
+        baseVersionId: {type: string, pattern: "^ver_[A-Za-z0-9_-]+$"}
         status:
           type: string
           enum:
@@ -202,6 +214,9 @@ components:
         versionId: {type: string}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+      dependentRequired:
+        baseCardId: [baseVersionId]
+        baseVersionId: [baseCardId]
   securitySchemes:
     oidcBearer:
       type: openIdConnect

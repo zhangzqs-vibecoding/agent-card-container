@@ -77,6 +77,51 @@ func TestSessionRejectsInvalidInputAndTransitions(t *testing.T) {
 	}
 }
 
+func TestSessionRequiresPairedBaseVersionIdentity(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []generation.CreateInput{
+		{ID: "gen_card_only", UserID: "user", Prompt: "修改卡片", BaseCardID: "card_01"},
+		{ID: "gen_version_only", UserID: "user", Prompt: "修改卡片", BaseVersionID: "ver_01"},
+	} {
+		if _, err := generation.NewSession(input); !errors.Is(err, generation.ErrInvalidBaseVersion) {
+			t.Fatalf("NewSession(%#v) error = %v, want ErrInvalidBaseVersion", input, err)
+		}
+	}
+}
+
+func TestSessionConfirmFreezesBaseVersionIdentity(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 15, 15, 0, 0, 0, time.UTC)
+	session, err := generation.NewSession(generation.CreateInput{
+		ID:            "gen_iteration",
+		UserID:        "user",
+		Prompt:        "增加一个暂停按钮",
+		Target:        generation.TargetNative,
+		Locale:        "zh-CN",
+		BaseCardID:    "card_01",
+		BaseVersionID: "ver_01",
+		CreatedAt:     now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Transition(generation.StatusAwaitingConfirmation, generation.Transition{At: now}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Confirm([]string{"storage"}, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if session.BaseCardID != "card_01" || session.BaseVersionID != "ver_01" {
+		t.Fatalf("session base = %q/%q", session.BaseCardID, session.BaseVersionID)
+	}
+	if session.ConfirmedRequirement.BaseCardID != "card_01" ||
+		session.ConfirmedRequirement.BaseVersionID != "ver_01" {
+		t.Fatalf("snapshot base = %#v", session.ConfirmedRequirement)
+	}
+}
+
 func TestSessionCanCancelOnlyBeforeTerminalState(t *testing.T) {
 	t.Parallel()
 
