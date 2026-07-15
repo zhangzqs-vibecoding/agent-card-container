@@ -136,7 +136,7 @@
 - Modify: `docs/verification/m4-acceptance.md`
 - Modify: `docs/superpowers/plans/2026-07-15-cloud-card-iteration.md`
 
-- [ ] 运行 Go format/vet/race、Flutter analyze/test、共享安全门和 P0-B 持久化门。
-- [ ] 执行敏感信息、运行数据、构建、容器和 volume 残留审计。
-- [ ] 记录 `P1-A CLOUD ITERATION HEADLESS PASS`；客户端升级/回滚和 Windows 设备仍明确开放。
-- [ ] 提交：`docs: record cloud card iteration evidence`，不 push。
+- [x] 运行 Go format/vet/race、Flutter analyze/test、共享安全门和 P0-B 持久化门。
+- [x] 执行敏感信息、运行数据、构建、容器和 volume 残留审计。
+- [x] 记录 `P1-A CLOUD ITERATION HEADLESS PASS`；客户端升级/回滚和 Windows 设备仍明确开放。
+- [x] 提交：`docs: record cloud card iteration evidence`，不 push。
