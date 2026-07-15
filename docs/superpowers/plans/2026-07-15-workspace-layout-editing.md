@@ -17,13 +17,13 @@
 - Create: `apps/desktop/lib/src/workspace/workspace_layout_engine.dart`
 - Create: `apps/desktop/test/workspace/workspace_layout_engine_test.dart`
 
-- [ ] RED：测试 `resolve` 将小数吸附为整数、限制 12 列、最小 2×2，并拒绝 NaN/Infinity/非正尺寸。
-- [ ] 运行 `flutter test test/workspace/workspace_layout_engine_test.dart`，确认因 `WorkspaceLayoutEngine` 不存在而失败。
-- [ ] GREEN：实现 `WorkspaceLayoutEngine(columns: 12, minWidth: 2, minHeight: 2)` 和 `resolve(candidate, occupied)`；只返回有限的整数网格值。
-- [ ] RED：增加边界接触不碰撞、面积相交碰撞、忽略当前实例、逐行向下 first-fit 和从 `(0,0)` 自动落位测试。
-- [ ] GREEN：实现私有矩形相交与有限 first-fit；不移动其他实例。
-- [ ] 运行布局引擎测试和 `dart format`，确认全部通过。
-- [ ] 提交：`feat: add deterministic workspace layout engine`。
+- [x] RED：测试 `resolve` 将小数吸附为整数、限制 12 列、最小 2×2，并拒绝 NaN/Infinity/非正尺寸。
+- [x] 运行 `flutter test test/workspace/workspace_layout_engine_test.dart`，确认因 `WorkspaceLayoutEngine` 不存在而失败。
+- [x] GREEN：实现 `WorkspaceLayoutEngine(columns: 12, minWidth: 2, minHeight: 2)` 和 `resolve(candidate, occupied)`；只返回有限的整数网格值。
+- [x] RED：增加边界接触不碰撞、面积相交碰撞、忽略当前实例、逐行向下 first-fit 和从 `(0,0)` 自动落位测试。
+- [x] GREEN：实现私有矩形相交与有限 first-fit；不移动其他实例。
+- [x] 运行布局引擎测试和 `dart format`，确认全部通过。
+- [x] 提交：`feat: add deterministic workspace layout engine`。
 
 ## Task 2：控制器的内存编辑与防抖持久化
 
