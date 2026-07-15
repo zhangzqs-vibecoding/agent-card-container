@@ -50,10 +50,7 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 		})
 	}))
 	defer model.Close()
-	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	publicKey, privateKey := productionSigningKey(t)
 	environment := map[string]string{
 		"AGENTCARD_DEV_TOKEN": "dev-token", "AGENTCARD_DEV_USER": "user-01",
 		"AGENTCARD_MODEL_BASE_URL": model.URL, "AGENTCARD_MODEL_API_KEY": "model-secret",
@@ -155,6 +152,133 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	}
 	if err := verifyVerticalArchive(archive, version, "test-key", publicKey); err != nil {
 		t.Fatalf("verify restored artifact: %v", err)
+	}
+}
+
+func TestProductionPersistenceRestoredSnapshot(t *testing.T) {
+	if os.Getenv("AGENTCARD_P0B_RESTORE_VERIFY") != "1" {
+		t.Skip("P0-B restored snapshot verification is not enabled")
+	}
+	dsn := os.Getenv("AGENTCARD_POSTGRES_TEST_DSN")
+	s3Endpoint := os.Getenv("AGENTCARD_S3_TEST_ENDPOINT")
+	if dsn == "" || s3Endpoint == "" {
+		t.Skip("production persistence test environment is not configured")
+	}
+	publicKey, privateKey := productionSigningKey(t)
+	model := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(writer).Encode(map[string]any{"choices": []any{}})
+	}))
+	defer model.Close()
+	runtime, err := bootstrap.NewFromEnvironment(productionEnvironment(model.URL, dsn, s3Endpoint, privateKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runtime.Close()
+
+	database, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var sessionID, jobID, jobStatus, cardID, versionID, artifactSHA256, keyID string
+	if err := database.QueryRow(`
+		SELECT session.id, job.id, job.status, version.card_id,
+		       version.version_id, version.artifact_sha256, version.key_id
+		FROM generation_sessions AS session
+		JOIN generation_jobs AS job ON job.session_id = session.id
+		JOIN card_versions AS version ON version.version_id = session.version_id
+		WHERE session.status = 'ready'
+		ORDER BY session.created_at
+		LIMIT 1
+	`).Scan(&sessionID, &jobID, &jobStatus, &cardID, &versionID, &artifactSHA256, &keyID); err != nil {
+		t.Fatal(err)
+	}
+	if jobID == "" || jobStatus != "completed" {
+		t.Fatalf("restored job status = %q", jobStatus)
+	}
+	session := requestJSON(t, runtime.Handler(), http.MethodGet, "/v1/generations/"+sessionID, nil)
+	if session["status"] != "ready" || session["versionId"] != versionID {
+		t.Fatalf("restored session = %#v", session)
+	}
+	detail := requestJSON(t, runtime.Handler(), http.MethodGet, "/v1/cards/"+cardID, nil)
+	if len(detail["versions"].([]any)) == 0 {
+		t.Fatalf("restored card has no versions")
+	}
+	download := requestJSON(
+		t,
+		runtime.Handler(),
+		http.MethodGet,
+		"/v1/cards/"+cardID+"/versions/"+versionID+"/artifact",
+		nil,
+	)
+	archive := downloadProductionArtifact(t, download["url"].(string))
+	if err := verifyVerticalArchive(archive, publish.CardVersion{
+		CardID: cardID, VersionID: versionID, ArtifactSHA256: artifactSHA256,
+	}, keyID, publicKey); err != nil {
+		t.Fatalf("verify restored snapshot artifact: %v", err)
+	}
+}
+
+func productionSigningKey(t *testing.T) (ed25519.PublicKey, ed25519.PrivateKey) {
+	t.Helper()
+	encoded := os.Getenv("AGENTCARD_P0B_TEST_SIGNING_PRIVATE_KEY")
+	if encoded == "" {
+		publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return publicKey, privateKey
+	}
+	decoded, err := base64.RawStdEncoding.DecodeString(encoded)
+	if err != nil {
+		decoded, err = base64.StdEncoding.DecodeString(encoded)
+	}
+	if err != nil {
+		t.Fatal("decode P0-B test signing key")
+	}
+	var privateKey ed25519.PrivateKey
+	switch len(decoded) {
+	case ed25519.SeedSize:
+		privateKey = ed25519.NewKeyFromSeed(decoded)
+	case ed25519.PrivateKeySize:
+		privateKey = ed25519.PrivateKey(decoded)
+	default:
+		t.Fatal("P0-B test signing key length is invalid")
+	}
+	return privateKey.Public().(ed25519.PublicKey), privateKey
+}
+
+func TestProductionSigningKeyAcceptsStandardBase64Seed(t *testing.T) {
+	seed := make([]byte, ed25519.SeedSize)
+	if _, err := rand.Read(seed); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTCARD_P0B_TEST_SIGNING_PRIVATE_KEY", base64.StdEncoding.EncodeToString(seed))
+
+	publicKey, privateKey := productionSigningKey(t)
+	if len(publicKey) != ed25519.PublicKeySize || len(privateKey) != ed25519.PrivateKeySize {
+		t.Fatalf("key sizes = (%d, %d)", len(publicKey), len(privateKey))
+	}
+}
+
+func productionEnvironment(
+	modelURL, dsn, s3Endpoint string,
+	privateKey ed25519.PrivateKey,
+) map[string]string {
+	return map[string]string{
+		"AGENTCARD_DEV_TOKEN": "dev-token", "AGENTCARD_DEV_USER": "user-01",
+		"AGENTCARD_MODEL_BASE_URL": modelURL, "AGENTCARD_MODEL_API_KEY": "model-secret",
+		"AGENTCARD_MODEL": "deepseek-v4-flash", "AGENTCARD_MODEL_ALLOW_INSECURE": "true",
+		"AGENTCARD_SIGNING_KEY_ID":       "test-key",
+		"AGENTCARD_SIGNING_PRIVATE_KEY":  base64.RawStdEncoding.EncodeToString(privateKey),
+		"AGENTCARD_PERSISTENCE_REQUIRED": "true",
+		"AGENTCARD_DATABASE_URL":         dsn,
+		"AGENTCARD_S3_ENDPOINT":          s3Endpoint,
+		"AGENTCARD_S3_ACCESS_KEY":        os.Getenv("AGENTCARD_S3_TEST_ACCESS_KEY"),
+		"AGENTCARD_S3_SECRET_KEY":        os.Getenv("AGENTCARD_S3_TEST_SECRET_KEY"),
+		"AGENTCARD_S3_BUCKET":            os.Getenv("AGENTCARD_S3_TEST_BUCKET"),
+		"AGENTCARD_S3_REGION":            "us-east-1",
+		"AGENTCARD_S3_SECURE":            "false",
 	}
 }
 

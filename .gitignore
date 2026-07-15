@@ -28,3 +28,5 @@ Thumbs.db
 /artifacts/
 /tmp/
 /services/cloud/agentcard
+/p0b-backups/
+/p0b-evidence/
