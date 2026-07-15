@@ -14,8 +14,93 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
+	"github.com/zzq/agent-card-container/services/cloud/internal/jobs"
 	"github.com/zzq/agent-card-container/services/cloud/migrations"
 )
+
+func TestPostgresConfirmAndEnqueueAreAtomic(t *testing.T) {
+	database := openPostgres(t)
+
+	t.Run("commit together", func(t *testing.T) {
+		resetPostgres(t, database)
+		service := newAtomicConfirmationService(database, "gen_atomic_success", "job_atomic_success")
+		created, err := service.Create(context.Background(), "owner", generation.CreateRequest{
+			Prompt: "原子确认", Target: generation.TargetNative, Locale: "zh-CN",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		confirmed, err := service.Confirm(context.Background(), "owner", created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if confirmed.Status != generation.StatusQueued || confirmed.ConfirmedRequirement == nil {
+			t.Fatalf("confirmed session = %#v", confirmed)
+		}
+		var jobID, status string
+		if err := database.QueryRow(
+			`SELECT id, status FROM generation_jobs WHERE session_id = $1`, created.ID,
+		).Scan(&jobID, &status); err != nil {
+			t.Fatal(err)
+		}
+		if jobID != "job_atomic_success" || status != "queued" {
+			t.Fatalf("job = (%q, %q)", jobID, status)
+		}
+	})
+
+	t.Run("job insert failure rolls back confirmation", func(t *testing.T) {
+		resetPostgres(t, database)
+		service := newAtomicConfirmationService(database, "gen_atomic_rollback", "job_atomic_rollback")
+		created, err := service.Create(context.Background(), "owner", generation.CreateRequest{
+			Prompt: "回滚确认", Target: generation.TargetNative, Locale: "zh-CN",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.Exec(`
+			CREATE FUNCTION reject_generation_job() RETURNS trigger LANGUAGE plpgsql AS $$
+			BEGIN RAISE EXCEPTION 'injected job insert failure'; END $$;
+			CREATE TRIGGER reject_generation_job
+			BEFORE INSERT ON generation_jobs
+			FOR EACH ROW EXECUTE FUNCTION reject_generation_job();
+		`); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := service.Confirm(context.Background(), "owner", created.ID); err == nil {
+			t.Fatal("Confirm() error = nil")
+		}
+		stored, err := generation.NewPostgresRepository(database).Get(context.Background(), "owner", created.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.Status != generation.StatusAwaitingConfirmation || stored.ConfirmedRequirement != nil {
+			t.Fatalf("rolled back session = %#v", stored)
+		}
+		var count int
+		if err := database.QueryRow(
+			`SELECT count(*) FROM generation_jobs WHERE session_id = $1`, created.ID,
+		).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != 0 {
+			t.Fatalf("job count = %d, want 0", count)
+		}
+	})
+}
+
+func newAtomicConfirmationService(
+	database *sql.DB,
+	sessionID, jobID string,
+) *generation.Service {
+	store := jobs.NewPostgresStore(database, func() string { return "unused_queue_id" })
+	return generation.NewService(
+		generation.NewPostgresRepository(database),
+		func() string { return sessionID },
+		time.Now,
+		generation.WithJobQueue(jobs.NewGenerationQueue(store)),
+		generation.WithAtomicJobID(func() string { return jobID }),
+	)
+}
 
 func TestPostgresRepositoryPersistsAndSerializesUpdates(t *testing.T) {
 	database := openPostgres(t)

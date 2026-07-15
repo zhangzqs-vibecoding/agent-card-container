@@ -78,6 +78,7 @@ func NewFromEnvironmentWithLogger(environment map[string]string, logger *slog.Lo
 		func() string { return randomID("gen_") },
 		time.Now,
 		generation.WithJobQueue(jobs.NewGenerationQueue(jobStore)),
+		generation.WithAtomicJobID(func() string { return randomID("job_") }),
 	)
 	publisher := publish.NewPublisher(
 		artifact.NewBuilder(keyID, privateKey),

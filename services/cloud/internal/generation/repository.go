@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 )
 
 var (
@@ -17,6 +18,17 @@ type Repository interface {
 	Update(context.Context, string, string, func(*Session) error) (*Session, error)
 	GetSystem(context.Context, string) (*Session, error)
 	UpdateSystem(context.Context, string, func(*Session) error) (*Session, error)
+}
+
+type AtomicConfirmationRepository interface {
+	ConfirmAndEnqueue(
+		context.Context,
+		string,
+		string,
+		func(*Session) error,
+		string,
+		time.Time,
+	) (*Session, error)
 }
 
 func (repository *MemoryRepository) GetSystem(ctx context.Context, sessionID string) (*Session, error) {

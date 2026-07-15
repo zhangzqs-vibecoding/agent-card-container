@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -89,6 +90,55 @@ func (repository *PostgresRepository) update(
 		return nil, err
 	}
 	defer func() { _ = transaction.Rollback() }()
+	session, err := repository.updateInTransaction(ctx, transaction, sessionID, userID, change)
+	if err != nil {
+		return nil, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (repository *PostgresRepository) ConfirmAndEnqueue(
+	ctx context.Context,
+	userID, sessionID string,
+	change func(*Session) error,
+	jobID string,
+	at time.Time,
+) (*Session, error) {
+	transaction, err := repository.database.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = transaction.Rollback() }()
+	session, err := repository.updateInTransaction(ctx, transaction, sessionID, userID, change)
+	if err != nil {
+		return nil, err
+	}
+	_, err = transaction.ExecContext(
+		ctx,
+		`INSERT INTO generation_jobs (
+		  id, session_id, status, attempts, max_attempts,
+		  available_at, created_at, updated_at
+		) VALUES ($1, $2, 'queued', 0, 3, $3, $3, $3)`,
+		jobID, sessionID, at.UTC(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := transaction.Commit(); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (repository *PostgresRepository) updateInTransaction(
+	ctx context.Context,
+	transaction *sql.Tx,
+	sessionID, userID string,
+	change func(*Session) error,
+) (*Session, error) {
 	session, err := loadSession(ctx, transaction, sessionID, userID, true)
 	if err != nil {
 		return nil, err
@@ -144,9 +194,6 @@ func (repository *PostgresRepository) update(
 		return nil, err
 	}
 	if err := insertEvents(ctx, transaction, session.Events, eventCount); err != nil {
-		return nil, err
-	}
-	if err := transaction.Commit(); err != nil {
 		return nil, err
 	}
 	return cloneSession(session), nil

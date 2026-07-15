@@ -19,6 +19,7 @@ type Service struct {
 	newID      func() string
 	now        func() time.Time
 	jobQueue   JobQueue
+	newJobID   func() string
 	streamMu   sync.Mutex
 	streams    map[string]map[*eventStream]struct{}
 }
@@ -42,6 +43,12 @@ type ServiceOption func(*Service)
 func WithJobQueue(queue JobQueue) ServiceOption {
 	return func(service *Service) {
 		service.jobQueue = queue
+	}
+}
+
+func WithAtomicJobID(newID func() string) ServiceOption {
+	return func(service *Service) {
+		service.newJobID = newID
 	}
 }
 
@@ -114,13 +121,14 @@ func (service *Service) AddMessage(ctx context.Context, userID, sessionID, conte
 
 func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (*Session, error) {
 	service.streamMu.Lock()
-	session, err := service.repository.Update(ctx, userID, sessionID, func(session *Session) error {
+	confirmedAt := service.now()
+	change := func(session *Session) error {
 		if session.Status != StatusAwaitingConfirmation {
 			return ErrConflict
 		}
 		if _, err := session.Confirm(
 			[]string{"storage", "window.manageSelf"},
-			service.now(),
+			confirmedAt,
 		); err != nil {
 			return err
 		}
@@ -130,15 +138,27 @@ func (service *Service) Confirm(ctx context.Context, userID, sessionID string) (
 			session.ConfirmedRequirement.Locale,
 		)
 		return nil
-	})
+	}
+	atomic := false
+	var session *Session
+	var err error
+	if repository, ok := service.repository.(AtomicConfirmationRepository); ok &&
+		service.jobQueue != nil && service.newJobID != nil {
+		atomic = true
+		session, err = repository.ConfirmAndEnqueue(
+			ctx, userID, sessionID, change, service.newJobID(), confirmedAt,
+		)
+	} else {
+		session, err = service.repository.Update(ctx, userID, sessionID, change)
+	}
 	if err != nil {
 		service.streamMu.Unlock()
 		return nil, err
 	}
 	service.publishLocked(session, nil)
 	service.streamMu.Unlock()
-	if service.jobQueue != nil {
-		if err := service.jobQueue.EnqueueGeneration(ctx, sessionID, service.now()); err != nil {
+	if service.jobQueue != nil && !atomic {
+		if err := service.jobQueue.EnqueueGeneration(ctx, sessionID, confirmedAt); err != nil {
 			_, _ = service.MarkFailed(ctx, sessionID, "JOB_ENQUEUE_FAILED")
 			return nil, err
 		}
