@@ -241,7 +241,7 @@ git commit -m "docs: record CI and portable release gates"
 
 **Files:** None
 
-- [ ] **Step 1: Create the repository without generated history**
+- [x] **Step 1: Create the repository without generated history**
 
 ```bash
 gh repo create zhangzqs-vibecoding/agent-card-container \
@@ -271,7 +271,7 @@ gh run watch "$WINDOWS_RUN_ID" \
 Expected: shared CI and Windows portable workflow pass. Diagnose and fix failures with TDD; commit and push each
 independent correction.
 
-- [ ] **Step 4: Download and independently verify Windows ZIP**
+- [x] **Step 4: Download and independently verify Windows ZIP**
 
 ```bash
 WINDOWS_RUN_ID=$(gh run list --repo zhangzqs-vibecoding/agent-card-container \
@@ -286,6 +286,10 @@ pwsh -NoProfile -File packaging/windows/verify-portable-package.ps1 \
 ```
 
 Expected: downloaded artifact passes verification and contains `agent_card_desktop.exe` at archive root.
+
+Verified 2026-07-16 against successful run `29197327358` at remote commit
+`1810f4a22565b08b347fb0925660f32ecc404087`: sidecar SHA-256 passed and
+`agent_card_desktop.exe` was present at the ZIP root. This does not cover the newer unpushed local commits.
 
 - [ ] **Step 5: Final repository audit**
 
