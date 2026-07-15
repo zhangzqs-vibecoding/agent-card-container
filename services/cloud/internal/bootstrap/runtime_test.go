@@ -8,14 +8,19 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/zzq/agent-card-container/services/cloud/internal/bootstrap"
+	"github.com/zzq/agent-card-container/services/cloud/internal/publish"
 )
 
 func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
@@ -44,7 +49,7 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 		})
 	}))
 	defer model.Close()
-	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,12 +69,10 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer apiRuntime.Close()
 	workerRuntime, err := bootstrap.NewFromEnvironment(environment)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer workerRuntime.Close()
 
 	created := requestJSON(t, apiRuntime.Handler(), http.MethodPost, "/v1/generations", map[string]any{
 		"prompt": "生成持久化离线卡片",
@@ -77,6 +80,10 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	})
 	sessionID := created["id"].(string)
 	requestJSON(t, apiRuntime.Handler(), http.MethodPost, "/v1/generations/"+sessionID+"/confirm", nil)
+	jobID, jobStatus := productionJob(t, dsn, sessionID)
+	if jobStatus != "queued" {
+		t.Fatalf("job status = %q, want queued", jobStatus)
+	}
 	if _, err := workerRuntime.RunWorkerOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -96,6 +103,104 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	if len(cards["cards"].([]any)) != 1 {
 		t.Fatalf("cards = %#v", cards)
 	}
+	card := cards["cards"].([]any)[0].(map[string]any)
+	cardID := card["cardId"].(string)
+	latest := card["latestVersion"].(map[string]any)
+	versionID := latest["versionId"].(string)
+	artifactSHA256 := latest["artifactSha256"].(string)
+
+	if err := workerRuntime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := apiRuntime.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := bootstrap.NewFromEnvironment(environment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+
+	restored := requestJSON(t, restarted.Handler(), http.MethodGet, "/v1/generations/"+sessionID, nil)
+	if restored["status"] != "ready" || restored["versionId"] != versionID {
+		t.Fatalf("restored session = %#v", restored)
+	}
+	restoredJobID, restoredJobStatus := productionJob(t, dsn, sessionID)
+	if restoredJobID != jobID || restoredJobStatus != "completed" {
+		t.Fatalf("restored job = (%q, %q), want (%q, completed)", restoredJobID, restoredJobStatus, jobID)
+	}
+	detail := requestJSON(t, restarted.Handler(), http.MethodGet, "/v1/cards/"+cardID, nil)
+	versions := detail["versions"].([]any)
+	if len(versions) != 1 || versions[0].(map[string]any)["versionId"] != versionID {
+		t.Fatalf("restored card = %#v", detail)
+	}
+	download := requestJSON(
+		t,
+		restarted.Handler(),
+		http.MethodGet,
+		"/v1/cards/"+cardID+"/versions/"+versionID+"/artifact",
+		nil,
+	)
+	artifactURL := download["url"].(string)
+	if strings.HasPrefix(artifactURL, "memory://") {
+		t.Fatalf("persistent runtime returned memory URL")
+	}
+	archive := downloadProductionArtifact(t, artifactURL)
+	version := publish.CardVersion{
+		CardID:         cardID,
+		VersionID:      versionID,
+		ArtifactSHA256: artifactSHA256,
+	}
+	if err := verifyVerticalArchive(archive, version, "test-key", publicKey); err != nil {
+		t.Fatalf("verify restored artifact: %v", err)
+	}
+}
+
+func productionJob(t *testing.T, dsn, sessionID string) (string, string) {
+	t.Helper()
+	database, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var id, status string
+	if err := database.QueryRow(
+		`SELECT id, status FROM generation_jobs WHERE session_id = $1`,
+		sessionID,
+	).Scan(&id, &status); err != nil {
+		t.Fatal(err)
+	}
+	return id, status
+}
+
+func downloadProductionArtifact(t *testing.T, rawURL string) []byte {
+	t.Helper()
+	origin, err := url.Parse(rawURL)
+	if err != nil || (origin.Scheme != "http" && origin.Scheme != "https") || origin.Host == "" {
+		t.Fatalf("artifact URL is invalid")
+	}
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(request *http.Request, _ []*http.Request) error {
+			if request.URL.Scheme != origin.Scheme || request.URL.Host != origin.Host {
+				return fmt.Errorf("artifact redirect changed origin")
+			}
+			return nil
+		},
+	}
+	response, err := client.Get(rawURL)
+	if err != nil {
+		t.Fatalf("download artifact: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("download artifact status = %d", response.StatusCode)
+	}
+	archive, err := io.ReadAll(io.LimitReader(response.Body, 8*1024*1024+1))
+	if err != nil || len(archive) == 0 || len(archive) > 8*1024*1024 {
+		t.Fatalf("artifact response size is invalid")
+	}
+	return archive
 }
 
 func TestRuntimeConnectsAPIWorkerModelSigningAndCatalog(t *testing.T) {
