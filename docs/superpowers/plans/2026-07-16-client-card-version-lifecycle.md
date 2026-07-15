@@ -129,15 +129,15 @@ Expected: FAIL，生命周期服务尚不存在。
 
 在 `CardInstallCoordinator` 增加 `downloadAndRegisterCardVersion(cardId, versionId)`，复用现有下载、元数据核对、签名和文件校验，只调用 `registerInstallation` 并返回 `InstalledArtifact`；现有安装新实例流程调用该方法后保持原行为。
 
-- [ ] **Step 4: 实现 prepare/apply**
+- [x] **Step 4: 实现 prepare/apply**
 
 `apply(prepared, decision, approvedGrants)` 再次核对实例当前版本以避免陈旧确认；新增能力/域必须完全被显式批准，批准范围不得超过目标 manifest。schema 相同使用 reuse；不同 schema 只有 reset 或可用备份时 restore。成功返回更新后的 `CardInstance`。
 
-- [ ] **Step 5: 覆盖拒绝、陈旧确认、授权扩大和回滚恢复**
+- [x] **Step 5: 覆盖拒绝、陈旧确认、授权扩大和回滚恢复**
 
 断言所有拒绝路径数据库零变更；旧 grant 只在目标仍覆盖时复制，新增项仅来自本次批准。
 
-- [ ] **Step 6: 格式化、测试并提交**
+- [x] **Step 6: 格式化、测试并提交**
 
 Run: `cd apps/desktop && dart format lib/src/cloud test/cloud && flutter test test/cloud/card_install_coordinator_test.dart test/cloud/card_version_lifecycle_test.dart`
 

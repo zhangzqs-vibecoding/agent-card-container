@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:agent_card_desktop/src/artifacts/artifact_installer.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
+import 'package:agent_card_desktop/src/capabilities/capability.dart';
 import 'package:agent_card_desktop/src/cloud/card_version_lifecycle.dart';
 import 'package:agent_card_desktop/src/contracts/card_definition.dart';
 import 'package:agent_card_desktop/src/storage/local_database.dart';
@@ -74,6 +75,190 @@ void main() {
     );
     expect(database.listInstances().single.versionId, 'ver_card_1');
   });
+
+  test('applies a compatible change with explicit capability approval', () {
+    final current = _definition(
+      versionId: 'ver_card_1',
+      capabilities: const ['network.fetch', 'storage'],
+      domains: const ['api.example.com', 'old.example.com'],
+    );
+    final target = _definition(
+      versionId: 'ver_card_2',
+      capabilities: const ['clipboard.read', 'network.fetch'],
+      domains: const ['api.example.com', 'new.example.com'],
+    );
+    _register(database, current);
+    _register(database, target);
+    database.upsertInstance(_instance('ver_card_1'));
+    database.putState('state-1', 'counter', 7);
+    database.upsertGrant(
+      const PermissionGrant(
+        instanceId: 'instance-1',
+        versionId: 'ver_card_1',
+        capability: 'network.fetch',
+        domains: {'api.example.com', 'old.example.com'},
+      ),
+    );
+    final lifecycle = _lifecycle(database);
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+
+    final switched = lifecycle.apply(
+      prepared,
+      decision: CardVersionDecision.reuseState,
+      approvedGrants: {
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'ver_card_2',
+          capability: 'clipboard.read',
+        ),
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'ver_card_2',
+          capability: 'network.fetch',
+          domains: {'new.example.com'},
+        ),
+      },
+    );
+
+    expect(switched.versionId, 'ver_card_2');
+    expect(switched.stateNamespace, 'state-1');
+    expect(database.readState('state-1'), {'counter': 7});
+    expect(database.grantsForInstance('instance-1'), {
+      const PermissionGrant(
+        instanceId: 'instance-1',
+        versionId: 'ver_card_2',
+        capability: 'clipboard.read',
+      ),
+      const PermissionGrant(
+        instanceId: 'instance-1',
+        versionId: 'ver_card_2',
+        capability: 'network.fetch',
+        domains: {'api.example.com', 'new.example.com'},
+      ),
+    });
+  });
+
+  test('rejects missing approval without changing the instance', () {
+    final current = _definition(versionId: 'ver_card_1');
+    final target = _definition(
+      versionId: 'ver_card_2',
+      capabilities: const ['clipboard.read', 'storage'],
+    );
+    _register(database, current);
+    _register(database, target);
+    database.upsertInstance(_instance('ver_card_1'));
+    final lifecycle = _lifecycle(database);
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+
+    expect(
+      () => lifecycle.apply(prepared, decision: CardVersionDecision.reuseState),
+      throwsA(
+        isA<CardVersionLifecycleException>().having(
+          (error) => error.code,
+          'code',
+          'PERMISSION_APPROVAL_REQUIRED',
+        ),
+      ),
+    );
+    expect(database.listInstances().single.versionId, 'ver_card_1');
+  });
+
+  test('backs up and resets incompatible state only after confirmation', () {
+    final current = _definition(versionId: 'ver_card_1');
+    final target = _definition(versionId: 'ver_card_2', stateSchemaVersion: 2);
+    _register(database, current);
+    _register(database, target);
+    database.upsertInstance(_instance('ver_card_1'));
+    database.putState('state-1', 'counter', 7);
+    final lifecycle = _lifecycle(database);
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+
+    final cancelled = lifecycle.apply(
+      prepared,
+      decision: CardVersionDecision.cancel,
+    );
+    expect(cancelled.versionId, 'ver_card_1');
+    expect(
+      database.stateBackups(instanceId: 'instance-1', versionId: 'ver_card_1'),
+      isEmpty,
+    );
+
+    final switched = lifecycle.apply(
+      prepared,
+      decision: CardVersionDecision.resetState,
+    );
+    expect(switched.versionId, 'ver_card_2');
+    expect(switched.stateNamespace, 'state-2');
+    expect(database.readState('state-2'), isEmpty);
+    expect(
+      database
+          .stateBackups(instanceId: 'instance-1', versionId: 'ver_card_1')
+          .single
+          .snapshot,
+      {'counter': 7},
+    );
+  });
+
+  test('rejects a stale prepared change after the instance moved', () {
+    final current = _definition(versionId: 'ver_card_1');
+    final target = _definition(versionId: 'ver_card_2');
+    _register(database, current);
+    _register(database, target);
+    database.upsertInstance(_instance('ver_card_1'));
+    final lifecycle = _lifecycle(database);
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+    database.switchInstanceVersion('instance-1', 'ver_card_2');
+
+    expect(
+      () => lifecycle.apply(prepared, decision: CardVersionDecision.reuseState),
+      throwsA(
+        isA<CardVersionLifecycleException>().having(
+          (error) => error.code,
+          'code',
+          'VERSION_CHANGE_STALE',
+        ),
+      ),
+    );
+  });
+
+  test('restores the newest compatible backup when rolling back', () {
+    final target = _definition(versionId: 'ver_card_1');
+    final current = _definition(versionId: 'ver_card_2', stateSchemaVersion: 2);
+    _register(database, target);
+    _register(database, current);
+    database.putState('old-v1', 'counter', 4);
+    database.backupState(
+      backupId: 'old-backup',
+      instanceId: 'instance-1',
+      cardId: 'card_1',
+      versionId: 'ver_card_1',
+      stateSchemaVersion: 1,
+      stateNamespace: 'old-v1',
+      createdAt: DateTime.utc(2026, 7, 15),
+    );
+    database.upsertInstance(
+      _instance('ver_card_2', stateNamespace: 'state-v2'),
+    );
+    database.putState('state-v2', 'title', 'current');
+    final lifecycle = _lifecycle(database);
+    final prepared = lifecycle.prepare('instance-1', _artifact(root, target));
+
+    final restored = lifecycle.apply(
+      prepared,
+      decision: CardVersionDecision.restoreState,
+    );
+
+    expect(restored.versionId, 'ver_card_1');
+    expect(restored.stateNamespace, 'state-2');
+    expect(database.readState('state-2'), {'counter': 4});
+    expect(
+      database
+          .stateBackups(instanceId: 'instance-1', versionId: 'ver_card_2')
+          .single
+          .snapshot,
+      {'title': 'current'},
+    );
+  });
 }
 
 CardVersionLifecycle _lifecycle(LocalDatabase database) {
@@ -111,14 +296,14 @@ InstalledArtifact _artifact(Directory root, CardDefinition definition) {
   );
 }
 
-CardInstance _instance(String versionId) {
+CardInstance _instance(String versionId, {String stateNamespace = 'state-1'}) {
   return CardInstance(
     instanceId: 'instance-1',
     cardId: 'card_1',
     versionId: versionId,
     surfaceId: 'workspace-main',
     placement: const CardPlacement(x: 0, y: 0, width: 4, height: 3),
-    stateNamespace: 'state-1',
+    stateNamespace: stateNamespace,
     status: CardInstanceStatus.active,
   );
 }

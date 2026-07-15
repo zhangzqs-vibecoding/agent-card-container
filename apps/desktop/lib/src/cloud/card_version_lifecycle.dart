@@ -1,4 +1,5 @@
 import '../artifacts/artifact_installer.dart';
+import '../capabilities/capability.dart';
 import '../cards/card_instance.dart';
 import '../storage/local_database.dart';
 
@@ -51,6 +52,8 @@ class PreparedCardVersionChange {
   final InstalledArtifact targetArtifact;
   final CardVersionDifference difference;
 }
+
+enum CardVersionDecision { reuseState, resetState, restoreState, cancel }
 
 class CardVersionLifecycle {
   const CardVersionLifecycle({
@@ -128,6 +131,134 @@ class CardVersionLifecycle {
         currentStateSchemaVersion: current.definition.stateSchemaVersion,
         targetStateSchemaVersion: target.definition.stateSchemaVersion,
       ),
+    );
+  }
+
+  CardInstance apply(
+    PreparedCardVersionChange prepared, {
+    required CardVersionDecision decision,
+    Set<PermissionGrant> approvedGrants = const {},
+  }) {
+    final liveInstances = database.listInstances().where(
+      (candidate) => candidate.instanceId == prepared.instance.instanceId,
+    );
+    if (liveInstances.isEmpty) {
+      throw const CardVersionLifecycleException(
+        'INSTANCE_NOT_FOUND',
+        'card instance does not exist',
+      );
+    }
+    final live = liveInstances.single;
+    if (decision == CardVersionDecision.cancel) {
+      return live;
+    }
+    if (live.versionId != prepared.instance.versionId ||
+        live.stateNamespace != prepared.instance.stateNamespace) {
+      throw const CardVersionLifecycleException(
+        'VERSION_CHANGE_STALE',
+        'card instance changed after confirmation was prepared',
+      );
+    }
+
+    final compatible = prepared.difference.stateCompatible;
+    if (compatible && decision != CardVersionDecision.reuseState) {
+      throw const CardVersionLifecycleException(
+        'INVALID_STATE_DECISION',
+        'compatible card versions must reuse state',
+      );
+    }
+    if (!compatible && decision == CardVersionDecision.reuseState) {
+      throw const CardVersionLifecycleException(
+        'INVALID_STATE_DECISION',
+        'incompatible card versions cannot reuse state',
+      );
+    }
+
+    final targetDefinition = prepared.targetInstallation.definition;
+    final targetCapabilities = targetDefinition.capabilities.toSet();
+    final targetDomains = targetDefinition.networkPolicy.domains.toSet();
+    for (final grant in approvedGrants) {
+      if (grant.instanceId != live.instanceId ||
+          grant.versionId != targetDefinition.versionId ||
+          !targetCapabilities.contains(grant.capability) ||
+          !targetDomains.containsAll(grant.domains) ||
+          (grant.capability != 'network.fetch' && grant.domains.isNotEmpty)) {
+        throw const CardVersionLifecycleException(
+          'PERMISSION_APPROVAL_INVALID',
+          'approved grant exceeds the target card manifest',
+        );
+      }
+    }
+    final approvedCapabilities = approvedGrants
+        .map((grant) => grant.capability)
+        .toSet();
+    final approvedDomains = approvedGrants
+        .where((grant) => grant.capability == 'network.fetch')
+        .expand((grant) => grant.domains)
+        .toSet();
+    if (!approvedCapabilities.containsAll(
+          prepared.difference.addedCapabilities,
+        ) ||
+        !approvedDomains.containsAll(prepared.difference.addedDomains)) {
+      throw const CardVersionLifecycleException(
+        'PERMISSION_APPROVAL_REQUIRED',
+        'new card capabilities and domains require explicit approval',
+      );
+    }
+
+    final replacement = <String, Set<String>>{};
+    for (final grant in database.grantsForInstance(live.instanceId)) {
+      if (!targetCapabilities.contains(grant.capability)) continue;
+      replacement
+          .putIfAbsent(grant.capability, () => {})
+          .addAll(grant.domains.intersection(targetDomains));
+    }
+    for (final grant in approvedGrants) {
+      replacement.putIfAbsent(grant.capability, () => {}).addAll(grant.domains);
+    }
+    final replacementGrants = {
+      for (final entry in replacement.entries)
+        PermissionGrant(
+          instanceId: live.instanceId,
+          versionId: targetDefinition.versionId,
+          capability: entry.key,
+          domains: Set.unmodifiable(entry.value),
+        ),
+    };
+
+    CardStateBackup? restoreBackup;
+    var statePolicy = VersionStatePolicy.reuse;
+    if (!compatible) {
+      if (decision == CardVersionDecision.restoreState) {
+        final backups = database.stateBackups(
+          instanceId: live.instanceId,
+          versionId: targetDefinition.versionId,
+        );
+        if (backups.isNotEmpty &&
+            backups.first.stateSchemaVersion ==
+                targetDefinition.stateSchemaVersion) {
+          restoreBackup = backups.first;
+          statePolicy = VersionStatePolicy.restore;
+        } else {
+          statePolicy = VersionStatePolicy.reset;
+        }
+      } else {
+        statePolicy = VersionStatePolicy.reset;
+      }
+    }
+
+    return database.switchInstalledInstanceVersion(
+      instanceId: live.instanceId,
+      targetVersionId: targetDefinition.versionId,
+      statePolicy: statePolicy,
+      currentStateSchemaVersion:
+          prepared.currentInstallation.definition.stateSchemaVersion,
+      targetStateSchemaVersion: targetDefinition.stateSchemaVersion,
+      replacementGrants: replacementGrants,
+      backupId: compatible ? '' : newBackupId(),
+      newStateNamespace: compatible ? '' : newStateNamespace(),
+      createdAt: now().toUtc(),
+      restoreBackup: restoreBackup,
     );
   }
 }
