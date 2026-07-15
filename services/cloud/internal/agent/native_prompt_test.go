@@ -199,6 +199,26 @@ func TestWebPromptDeclaresExactMVPSourceWhitelist(t *testing.T) {
 	}
 }
 
+func TestWebPromptDeclaresTemplateAPIAndOfflineSecurityBoundary(t *testing.T) {
+	t.Parallel()
+
+	request := webModelRequest(promptRequest(), 1, "")
+	for _, required := range []string{
+		"Preact",
+		`import { agentCard } from "./agentcard"`,
+		"self-contained and offline",
+		"Do not call fetch",
+		"eval",
+		"new Function",
+		"dynamic import",
+		"Do not add dependencies",
+	} {
+		if !strings.Contains(request.SystemPrompt, required) {
+			t.Fatalf("web system prompt is missing %q: %q", required, request.SystemPrompt)
+		}
+	}
+}
+
 func TestModelProviderSourceContainsNoAgentCardPrompt(t *testing.T) {
 	t.Parallel()
 

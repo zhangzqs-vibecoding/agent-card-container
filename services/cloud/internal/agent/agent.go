@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 	"github.com/zzq/agent-card-container/services/cloud/internal/modelprovider"
@@ -281,6 +282,9 @@ func requirementPrompt(requirement generation.RequirementSnapshot) string {
 }
 
 func decodeWebSource(content string) (map[string]string, error) {
+	if !utf8.ValidString(content) {
+		return nil, fmt.Errorf("CodeCard source envelope is not valid UTF-8")
+	}
 	var envelope struct {
 		Files map[string]string `json:"files"`
 	}
@@ -312,10 +316,26 @@ func decodeWebSource(content string) (map[string]string, error) {
 		if len(source) > 256*1024 {
 			return nil, fmt.Errorf("CodeCard source file %q is too large", name)
 		}
+		if !validWebSourceText(source) {
+			return nil, fmt.Errorf("CodeCard source file %q contains invalid text", name)
+		}
 		total += len(source)
 	}
 	if total > 512*1024 {
 		return nil, fmt.Errorf("CodeCard source exceeds total size limit")
 	}
 	return envelope.Files, nil
+}
+
+func validWebSourceText(source string) bool {
+	if !utf8.ValidString(source) || strings.ContainsRune(source, '\x00') {
+		return false
+	}
+	const maxLineBytes = 32 * 1024
+	for _, line := range strings.Split(source, "\n") {
+		if len(line) > maxLineBytes {
+			return false
+		}
+	}
+	return true
 }

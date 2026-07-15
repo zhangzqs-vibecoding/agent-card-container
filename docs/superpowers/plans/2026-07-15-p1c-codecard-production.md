@@ -29,14 +29,14 @@
 - Modify: `services/cloud/internal/agent/agent.go`
 - Modify: `services/cloud/internal/agent/agent_test.go`
 - Create: `tooling/codecard-template/src/agentcard.ts`
-- Create: `tooling/codecard-template/src/agentcard.test.ts`
+- Create: `tooling/codecard-template/scripts/agentcard.test.mjs`
 
-- [ ] RED：prompt 未声明可用 Preact API、本地 SDK、禁用模式和完整文件合同；源码包含不可打印字符或非法 UTF-8 时未拒绝。
-- [ ] 增加最小版本化 JS SDK，提供 context、storage 和 capability invoke，不暴露任意 fetch 包装。
-- [ ] prompt 明确离线、自包含、无外部资源、无动态代码、无新增依赖，并给出 API 示例。
-- [ ] 源码 decoder 拒绝非法 UTF-8、NUL、超限行和高风险生成路径。
-- [ ] 修复反馈只保留稳定诊断，继续限制为 2 KiB。
-- [ ] 提交：`feat: define bounded CodeCard source API`。
+- [x] RED：prompt 未声明可用 Preact API、本地 SDK、禁用模式和完整文件合同；源码包含不可打印字符或非法 UTF-8 时未拒绝。
+- [x] 增加最小版本化 JS SDK，提供 context、storage 和 capability invoke，不暴露任意 fetch 包装。
+- [x] prompt 明确离线、自包含、无外部资源、无动态代码、无新增依赖，并给出 API 示例。
+- [x] 源码 decoder 拒绝非法 UTF-8、NUL、超限行和高风险生成路径。
+- [x] 修复反馈只保留稳定诊断，继续限制为 2 KiB。
+- [x] 提交：`feat: define bounded CodeCard source API`。
 
 ## Task 3：固定并验证 builder 镜像供应链
 

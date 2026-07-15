@@ -31,6 +31,12 @@ func webModelRequest(request Request, attempt int, validationFeedback string) mo
 	return modelprovider.Request{
 		SystemPrompt: strings.Join([]string{
 			"You generate AgentCard CodeCard source using the fixed project template.",
+			"The template uses Preact with TypeScript and the automatic JSX runtime; export function Card() from src/card.tsx.",
+			`For local runtime APIs, import { agentCard } from "./agentcard"; use only methods represented by Allowed capabilities.`,
+			"The card must be self-contained and offline: use only bundled source, local state, and the AgentCard runtime API.",
+			"Do not call fetch, XMLHttpRequest, WebSocket, EventSource, Worker, or load remote URLs.",
+			"Do not use eval, new Function, dynamic import, inline executable script, or string-to-code techniques.",
+			"Do not add dependencies or import packages other than preact, preact/hooks, and the template-owned ./agentcard module.",
 			"Return exactly one JSON object whose only top-level field is files.",
 			"Only these source paths are allowed: src/card.tsx, src/card.css, src/card.test.tsx.",
 			"The files value must map allowed paths to complete UTF-8 source text and must include src/card.tsx.",
