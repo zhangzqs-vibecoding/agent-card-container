@@ -14,11 +14,11 @@
 - Create: `services/cloud/internal/agent/codecard_eval_test.go`
 - Create: `services/cloud/internal/agent/codecard_eval.go`
 
-- [ ] RED：fixture 不是精确 20 项、五类不是各 4 项、未知字段、重复 ID、空语义断言或非法能力时失败。
-- [ ] 定义严格 decoder/validator，固定总量、类别、prompt 长度、语义和安全断言。
-- [ ] 定义报告器：16/20、每类 3/4、60 次调用、输入 300k、输出 160k、费用 5 美元和超时门槛。
-- [ ] 单元测试覆盖边界值和“总分通过但单类别失败”。
-- [ ] 提交：`test: freeze CodeCard evaluation contract`。
+- [x] RED：fixture 不是精确 20 项、五类不是各 4 项、未知字段、重复 ID、空语义断言或非法能力时失败。
+- [x] 定义严格 decoder/validator，固定总量、类别、prompt 长度、语义和安全断言。
+- [x] 定义报告器：16/20、每类 3/4、60 次调用、输入 300k、输出 160k、费用 5 美元和超时门槛。
+- [x] 单元测试覆盖边界值和“总分通过但单类别失败”。
+- [x] 提交：`test: freeze CodeCard evaluation contract`。
 
 ## Task 2：强化 CodeCard prompt 与源码合同
 
@@ -116,4 +116,3 @@
 - [ ] 执行敏感信息与构建/容器残留审计。
 - [ ] Linux 范围完整通过后只标记 `HEADLESS PASS / WINDOWS DEVICE NOT RUN`。
 - [ ] 提交：`docs: record P1-C headless evidence`，不 push。
-
