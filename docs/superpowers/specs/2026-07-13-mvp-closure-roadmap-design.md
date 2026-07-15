@@ -47,7 +47,7 @@
 | 工作包 | 当前状态 | 已有交付物 | 下一可交付物 | 完整通过的外部依赖 |
 |---|---|---|---|---|
 | P0-A 真实 DeepSeek NativeCard | **HEADLESS PASS** | 确认快照、catalog 派生语义、严格 validator、有界重试、3/3 签名垂直链路、16/20 真实质量门和脱敏证据 | 保持回归门稳定，等待 P0-C 消费同一协议和制品 | Windows 设备证据属于 P0-C，不反向阻塞 headless 结论 |
-| P0-B 持久化测试环境 | **待独立计划** | PostgreSQL、S3/MinIO adapter 与集成测试 | 固定测试环境部署、`/readyz`、重启恢复、备份恢复和远程制品下载 | 可用测试服务器、数据库和对象存储 |
+| P0-B 持久化测试环境 | **计划已形成，待实施** | PostgreSQL、S3/MinIO adapter、集成测试与 `docs/superpowers/plans/2026-07-15-p0b-persistent-test-environment.md` | 固定测试环境部署、`/readyz`、重启恢复、备份恢复和远程制品下载 | 可用测试服务器、数据库和对象存储 |
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
 | P1-A 工作区与版本生命周期 | **未开始** | 现有 placement、Surface 和版本查询骨架 | 独立设计/计划；完成拖放缩放、实例管理、同卡升级与回滚 | P0-C 暴露的问题已分类 |
 | P1-B worker 可靠性 | **未开始，局部基础已有** | PostgreSQL job store、现有租约与取消边界 | 独立设计/计划；完成 heartbeat、事务一致性、幂等和故障恢复矩阵 | P0-B 持久化环境 |
