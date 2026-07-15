@@ -184,6 +184,7 @@ class WorkspaceController extends ChangeNotifier {
     _cards[index] = card.nativeSpec != null
         ? WorkspaceCard(
             instance: card.instance,
+            displayVersion: card.displayVersion,
             spec: card.spec,
             persistedState: persistedState,
             capabilityBroker: card.capabilityBroker,
@@ -191,6 +192,7 @@ class WorkspaceController extends ChangeNotifier {
           )
         : WorkspaceCard.code(
             instance: card.instance,
+            displayVersion: card.displayVersion,
             codeCard: card.codeCard!,
             persistedState: persistedState,
             capabilityBroker: card.capabilityBroker,
@@ -240,6 +242,7 @@ WorkspaceCard _copyCard(WorkspaceCard card, {required CardInstance instance}) {
   return card.nativeSpec != null
       ? WorkspaceCard(
           instance: instance,
+          displayVersion: card.displayVersion,
           spec: card.spec,
           persistedState: card.persistedState,
           capabilityBroker: card.capabilityBroker,
@@ -247,6 +250,7 @@ WorkspaceCard _copyCard(WorkspaceCard card, {required CardInstance instance}) {
         )
       : WorkspaceCard.code(
           instance: instance,
+          displayVersion: card.displayVersion,
           codeCard: card.codeCard!,
           persistedState: card.persistedState,
           capabilityBroker: card.capabilityBroker,

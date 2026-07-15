@@ -44,16 +44,22 @@ void main() {
     final controller = AgentStudioController(port: port);
     addTearDown(controller.dispose);
 
-    await controller.submit(
-      '增加暂停按钮',
-      baseCardId: 'card_01',
-      baseVersionId: 'ver_01',
+    controller.startFromVersion(
+      cardId: 'card_01',
+      versionId: 'ver_01',
+      displayVersion: '1.0.0',
     );
+    await controller.submit('增加暂停按钮');
 
     expect(port.createdBaseCardId, 'card_01');
     expect(port.createdBaseVersionId, 'ver_01');
+    expect(controller.baseDisplayVersion, '1.0.0');
     expect(controller.session?.baseCardId, 'card_01');
     expect(controller.session?.baseVersionId, 'ver_01');
+
+    controller.reset();
+    expect(controller.baseCardId, isNull);
+    expect(controller.baseVersionId, isNull);
   });
 
   test('invokes ready installation callback once per version', () async {

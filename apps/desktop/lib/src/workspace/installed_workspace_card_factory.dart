@@ -47,6 +47,7 @@ class InstalledWorkspaceCardFactory {
           jsonDecode(payload.readAsStringSync()) as Map<String, Object?>;
       return WorkspaceCard(
         instance: instance,
+        displayVersion: artifact.definition.displayVersion,
         spec: NativeCardSpec.fromJson(decoded),
         persistedState: database.readState(instance.stateNamespace),
         capabilityBroker: capabilityRuntime?.broker,
@@ -86,6 +87,7 @@ class InstalledWorkspaceCardFactory {
     );
     return WorkspaceCard.code(
       instance: instance,
+      displayVersion: artifact.definition.displayVersion,
       codeCard: CodeCardDescriptor(
         session: session,
         entrypoint: '$prefix/${artifact.definition.entrypoint}',

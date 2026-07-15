@@ -103,16 +103,37 @@ class AgentStudioController extends ChangeNotifier {
   bool _disposed = false;
   int _lastEventId = 0;
   String? _handledReadyVersion;
+  String? _baseCardId;
+  String? _baseVersionId;
+  String? _baseDisplayVersion;
 
   AgentStudioPhase get phase => _phase;
   GenerationSession? get session => _session;
   List<GenerationEvent> get events => List.unmodifiable(_events);
   String get errorMessage => _errorMessage;
+  String? get baseCardId => _baseCardId;
+  String? get baseVersionId => _baseVersionId;
+  String? get baseDisplayVersion => _baseDisplayVersion;
 
   bool get canSubmit =>
       _phase == AgentStudioPhase.idle ||
       _phase == AgentStudioPhase.awaitingConfirmation ||
       _phase == AgentStudioPhase.error;
+
+  void startFromVersion({
+    required String cardId,
+    required String versionId,
+    required String displayVersion,
+  }) {
+    if (cardId.isEmpty || versionId.isEmpty || displayVersion.isEmpty) {
+      throw ArgumentError('base card version identity must be complete');
+    }
+    reset();
+    _baseCardId = cardId;
+    _baseVersionId = versionId;
+    _baseDisplayVersion = displayVersion;
+    if (!_disposed) notifyListeners();
+  }
 
   Future<void> submit(
     String prompt, {
@@ -135,8 +156,8 @@ class AgentStudioController extends ChangeNotifier {
               prompt: normalized,
               target: target,
               locale: locale,
-              baseCardId: baseCardId,
-              baseVersionId: baseVersionId,
+              baseCardId: baseCardId ?? _baseCardId,
+              baseVersionId: baseVersionId ?? _baseVersionId,
             )
           : await port.addMessage(current.id, normalized);
       _errorMessage = '';
@@ -220,6 +241,9 @@ class AgentStudioController extends ChangeNotifier {
     _events.clear();
     _lastEventId = 0;
     _handledReadyVersion = null;
+    _baseCardId = null;
+    _baseVersionId = null;
+    _baseDisplayVersion = null;
     _errorMessage = '';
     _setPhase(AgentStudioPhase.idle);
   }

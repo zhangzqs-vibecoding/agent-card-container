@@ -221,21 +221,21 @@ Commit: `feat: expose card upgrade and rollback controls`
 - Modify: `apps/desktop/lib/src/workspace/workspace_screen.dart`
 - Modify: corresponding tests under `apps/desktop/test/generation` and `apps/desktop/test/workspace`
 
-- [ ] **Step 1: 写 base identity controller 测试**
+- [x] **Step 1: 写 base identity controller 测试**
 
 `startFromVersion(cardId, versionId, displayVersion)` 设置成对 base IDs；新建普通卡时清空；确认区显示基线；创建 generation 请求携带字段。
 
-- [ ] **Step 2: 写卡片菜单 widget 测试**
+- [x] **Step 2: 写卡片菜单 widget 测试**
 
 “基于此版本修改”从当前实例打开 Agent Studio，绑定当前 `cardId/versionId`；重复进入不会沿用上一次其他卡片的基线。
 
-- [ ] **Step 3: 运行失败测试并实现最小接线**
+- [x] **Step 3: 运行失败测试并实现最小接线**
 
 Run: `cd apps/desktop && flutter test test/generation test/workspace`
 
 Expected: 先 FAIL，实施后 PASS。
 
-- [ ] **Step 4: 格式化、测试并提交**
+- [x] **Step 4: 格式化、测试并提交**
 
 Run: `cd apps/desktop && dart format lib test && flutter test test/generation test/workspace`
 

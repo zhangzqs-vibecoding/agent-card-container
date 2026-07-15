@@ -209,6 +209,7 @@ class CardInstallCoordinator {
     } else if (nativeSpec != null) {
       workspaceCard = WorkspaceCard(
         instance: instance,
+        displayVersion: installed.definition.displayVersion,
         spec: nativeSpec,
         persistedState: database.readState(instance.stateNamespace),
       );

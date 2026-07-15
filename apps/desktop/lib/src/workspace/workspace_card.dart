@@ -28,6 +28,7 @@ class WorkspaceCard {
   const WorkspaceCard({
     required this.instance,
     required NativeCardSpec spec,
+    this.displayVersion,
     this.persistedState = const {},
     this.capabilityBroker,
     this.cardContext,
@@ -37,12 +38,14 @@ class WorkspaceCard {
   const WorkspaceCard.code({
     required this.instance,
     required this.codeCard,
+    this.displayVersion,
     this.persistedState = const {},
     this.capabilityBroker,
     this.cardContext,
   }) : nativeSpec = null;
 
   final CardInstance instance;
+  final String? displayVersion;
   final NativeCardSpec? nativeSpec;
   final CodeCardDescriptor? codeCard;
   final Map<String, Object?> persistedState;

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_card_desktop/src/adapters/in_app_webview_port.dart';
+import 'package:agent_card_desktop/src/agent_studio/agent_studio_controller.dart';
 import 'package:agent_card_desktop/src/app/agent_card_app.dart';
 import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/capabilities/capability.dart';
@@ -21,6 +22,8 @@ import 'package:agent_card_desktop/src/workspace/workspace_card.dart';
 import 'package:agent_card_desktop/src/workspace/workspace_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/fake_generation_port.dart';
 
 void main() {
   testWidgets('renders the desktop workspace shell', (tester) async {
@@ -620,6 +623,52 @@ void main() {
           .domains,
       {'new.example.com'},
     );
+  });
+
+  testWidgets('starts an Agent iteration from the selected card version', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final agent = AgentStudioController(port: FakeGenerationPort());
+    addTearDown(agent.dispose);
+    final workspace = WorkspaceController([
+      WorkspaceCard(
+        instance: const CardInstance(
+          instanceId: 'instance-iterate',
+          cardId: 'card_01',
+          versionId: 'ver_01',
+          surfaceId: 'workspace-main',
+          placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+          stateNamespace: 'state-iterate',
+          status: CardInstanceStatus.active,
+        ),
+        spec: NativeCardSpec.fromJson({
+          'schemaVersion': 1,
+          'initialState': <String, Object?>{},
+          'root': {'id': 'root', 'type': 'Text'},
+        }),
+        displayVersion: '1.0.0',
+      ),
+    ]);
+    addTearDown(workspace.dispose);
+    await tester.pumpWidget(
+      AgentCardApp(
+        agentStudioController: agent,
+        workspaceController: workspace,
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('surface-menu-instance-iterate')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('基于此版本修改'));
+    await tester.pumpAndSettle();
+
+    expect(agent.baseCardId, 'card_01');
+    expect(agent.baseVersionId, 'ver_01');
+    expect(find.text('基于版本 1.0.0 修改'), findsOneWidget);
+    expect(find.text('描述一张新卡片…'), findsNothing);
+    expect(find.text('描述你要修改的内容…'), findsOneWidget);
   });
 
   testWidgets('fails closed when CodeCard isolation is unavailable', (

@@ -80,6 +80,17 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
     });
   }
 
+  void _iterateCard(WorkspaceCard card) {
+    final controller = widget.agentStudioController;
+    if (controller == null) return;
+    controller.startFromVersion(
+      cardId: card.instance.cardId,
+      versionId: card.instance.versionId,
+      displayVersion: card.displayVersion ?? card.instance.versionId,
+    );
+    _openAgentPanel();
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -171,6 +182,9 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 .toList(growable: false),
         agentPanelOpen: _agentPanelOpen,
         onOpenAgentPanel: _openAgentPanel,
+        onIterateCard: widget.agentStudioController == null
+            ? null
+            : _iterateCard,
         onNativeCardStateChanged: widget.onNativeCardStateChanged,
         onDetachCard: widget.onDetachCard,
         onMoveCardToOverlay: widget.onMoveCardToOverlay,
@@ -866,6 +880,7 @@ class _WorkspaceCanvas extends StatelessWidget {
     required this.runtimeVisible,
     required this.agentPanelOpen,
     required this.onOpenAgentPanel,
+    this.onIterateCard,
     this.onNativeCardStateChanged,
     this.onDetachCard,
     this.onMoveCardToOverlay,
@@ -879,6 +894,7 @@ class _WorkspaceCanvas extends StatelessWidget {
   final bool runtimeVisible;
   final bool agentPanelOpen;
   final VoidCallback onOpenAgentPanel;
+  final void Function(WorkspaceCard card)? onIterateCard;
   final NativeCardStateChanged? onNativeCardStateChanged;
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
@@ -1040,6 +1056,7 @@ class _WorkspaceCanvas extends StatelessWidget {
                   columnWidth: columnWidth,
                   rowHeight: 80,
                   onEditPlacement: onEditPlacement,
+                  onIterateCard: onIterateCard,
                 ),
               ),
             if (layoutErrorMessage case final message?)
@@ -1111,6 +1128,7 @@ class _WorkspaceCardView extends StatefulWidget {
     this.onDetachCard,
     this.onMoveCardToOverlay,
     this.onEditPlacement,
+    this.onIterateCard,
     super.key,
   });
 
@@ -1125,6 +1143,7 @@ class _WorkspaceCardView extends StatefulWidget {
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
   final CardPlacementEdit? onEditPlacement;
+  final void Function(WorkspaceCard card)? onIterateCard;
 
   @override
   State<_WorkspaceCardView> createState() => _WorkspaceCardViewState();
@@ -1334,7 +1353,9 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
                 ),
               ),
             ),
-          if (widget.onDetachCard != null || widget.onMoveCardToOverlay != null)
+          if (widget.onDetachCard != null ||
+              widget.onMoveCardToOverlay != null ||
+              widget.onIterateCard != null)
             Positioned(
               right: 0,
               top: 0,
@@ -1352,6 +1373,11 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
                     const PopupMenuItem(
                       value: _SurfaceAction.overlay,
                       child: Text('移到桌面悬浮层'),
+                    ),
+                  if (widget.onIterateCard != null)
+                    const PopupMenuItem(
+                      value: _SurfaceAction.iterate,
+                      child: Text('基于此版本修改'),
                     ),
                 ],
               ),
@@ -1415,6 +1441,8 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
           instanceId,
           widget.surfacePlacement,
         );
+      case _SurfaceAction.iterate:
+        widget.onIterateCard?.call(widget.card);
     }
   }
 
@@ -1438,7 +1466,7 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
   }
 }
 
-enum _SurfaceAction { detach, overlay }
+enum _SurfaceAction { detach, overlay, iterate }
 
 class _AgentPanel extends StatefulWidget {
   const _AgentPanel({
@@ -1527,6 +1555,17 @@ class _AgentPanelState extends State<_AgentPanel> {
                       label: 'AGENT',
                       body: '描述你想放在桌面上的工具。我会先确认需求，再选择 NativeCard 或 CodeCard。',
                     ),
+                    if (widget.controller?.baseVersionId != null) ...[
+                      const SizedBox(height: 12),
+                      Chip(
+                        key: const Key('agent-base-version'),
+                        avatar: const Icon(Icons.history_rounded, size: 16),
+                        label: Text(
+                          '基于版本 '
+                          '${widget.controller!.baseDisplayVersion} 修改',
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Text(
                       '试试这些',
@@ -1578,7 +1617,10 @@ class _AgentPanelState extends State<_AgentPanel> {
                               maxLines: 4,
                               minLines: 1,
                               decoration: InputDecoration(
-                                hintText: '描述一张新卡片…',
+                                hintText:
+                                    widget.controller?.baseVersionId == null
+                                    ? '描述一张新卡片…'
+                                    : '描述你要修改的内容…',
                                 border: InputBorder.none,
                                 isDense: true,
                               ),
