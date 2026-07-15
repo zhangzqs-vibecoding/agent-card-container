@@ -126,10 +126,13 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 		if contextErr := ctx.Err(); contextErr != nil {
 			return Response{}, fmt.Errorf("model request cancelled: %w", contextErr)
 		}
-		return Response{}, fmt.Errorf("model request failed")
+		return Response{}, newRetryableError("model request failed")
 	}
 	defer httpResponse.Body.Close()
 	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
+		if isRetryableHTTPStatus(httpResponse.StatusCode) {
+			return Response{}, newRetryableError(fmt.Sprintf("model provider returned status %d", httpResponse.StatusCode))
+		}
 		return Response{}, fmt.Errorf("model provider returned status %d", httpResponse.StatusCode)
 	}
 	const maxResponseBytes = 2 * 1024 * 1024
@@ -138,7 +141,7 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 		if contextErr := ctx.Err(); contextErr != nil {
 			return Response{}, fmt.Errorf("read model response cancelled: %w", contextErr)
 		}
-		return Response{}, fmt.Errorf("read model response failed")
+		return Response{}, newRetryableError("read model response failed")
 	}
 	if len(responseBytes) > maxResponseBytes {
 		return Response{}, fmt.Errorf("model response exceeds size limit")
@@ -170,6 +173,9 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 	}
 	choice := decoded.Choices[0]
 	if choice.FinishReason != "stop" {
+		if choice.FinishReason == "insufficient_system_resource" {
+			return response, newRetryableError("model response did not complete successfully")
+		}
 		return response, fmt.Errorf("model response did not complete successfully")
 	}
 	if strings.TrimSpace(choice.Message.Content) == "" {
@@ -177,6 +183,12 @@ func (provider *HTTPProvider) Generate(ctx context.Context, input Request) (Resp
 	}
 	response.Content = choice.Message.Content
 	return response, nil
+}
+
+func isRetryableHTTPStatus(statusCode int) bool {
+	return statusCode == http.StatusRequestTimeout ||
+		statusCode == http.StatusTooManyRequests ||
+		statusCode >= 500 && statusCode <= 599
 }
 
 type chatMessage struct {

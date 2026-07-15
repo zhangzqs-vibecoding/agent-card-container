@@ -29,6 +29,8 @@ type Result struct {
 	OutputTokens int
 }
 
+const maxModelAttempts = 3
+
 type CodingAgent struct {
 	provider   modelprovider.Provider
 	validator  NativeValidator
@@ -89,7 +91,11 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 	}
 	result := Result{Runtime: decision.Runtime, Reason: decision.Reason}
 	var validationError string
-	for attempt := 1; attempt <= 3; attempt++ {
+	providerRetries := 0
+	for attempt := 1; attempt <= maxModelAttempts; attempt++ {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return result, fmt.Errorf("model request cancelled: %w", contextErr)
+		}
 		result.Attempts = attempt
 		startedAt := time.Now()
 		codingAgent.logger.InfoContext(ctx, "model_request_started",
@@ -113,8 +119,16 @@ func (codingAgent *CodingAgent) Generate(ctx context.Context, request Request) (
 				"durationMs", time.Since(startedAt).Milliseconds(),
 				"errorKind", observability.ErrorKind(providerErr),
 			)
+			if modelprovider.IsRetryable(providerErr) && attempt < maxModelAttempts {
+				if waitErr := waitForProviderRetry(ctx, providerRetries); waitErr != nil {
+					return result, fmt.Errorf("model provider retry cancelled: %w", waitErr)
+				}
+				providerRetries++
+				continue
+			}
 			return result, fmt.Errorf("model provider: %w", providerErr)
 		}
+		providerRetries = 0
 		codingAgent.logger.InfoContext(ctx, "model_request_completed",
 			"model", codingAgent.modelName,
 			"sessionId", request.SessionID,
@@ -142,7 +156,11 @@ func (codingAgent *CodingAgent) generateWeb(
 	}
 	result := Result{Runtime: decision.Runtime, Reason: decision.Reason}
 	var validationError string
-	for attempt := 1; attempt <= 3; attempt++ {
+	providerRetries := 0
+	for attempt := 1; attempt <= maxModelAttempts; attempt++ {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return result, fmt.Errorf("model request cancelled: %w", contextErr)
+		}
 		result.Attempts = attempt
 		modelStartedAt := time.Now()
 		codingAgent.logger.InfoContext(ctx, "model_request_started",
@@ -166,8 +184,16 @@ func (codingAgent *CodingAgent) generateWeb(
 				"durationMs", time.Since(modelStartedAt).Milliseconds(),
 				"errorKind", observability.ErrorKind(err),
 			)
+			if modelprovider.IsRetryable(err) && attempt < maxModelAttempts {
+				if waitErr := waitForProviderRetry(ctx, providerRetries); waitErr != nil {
+					return result, fmt.Errorf("model provider retry cancelled: %w", waitErr)
+				}
+				providerRetries++
+				continue
+			}
 			return result, fmt.Errorf("model provider: %w", err)
 		}
+		providerRetries = 0
 		codingAgent.logger.InfoContext(ctx, "model_request_completed",
 			"model", codingAgent.modelName,
 			"sessionId", request.SessionID,
@@ -209,6 +235,21 @@ func (codingAgent *CodingAgent) generateWeb(
 		return result, nil
 	}
 	return result, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
+}
+
+func providerRetryDelay(retry int) time.Duration {
+	return 500 * time.Millisecond << retry
+}
+
+func waitForProviderRetry(ctx context.Context, retry int) error {
+	timer := time.NewTimer(providerRetryDelay(retry))
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func requirementPrompt(requirement generation.RequirementSnapshot) string {
