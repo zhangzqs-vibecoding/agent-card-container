@@ -2,7 +2,7 @@
 
 状态：**执行中，作为后续工作包入口**
 日期：2026-07-15（Asia/Shanghai）  
-适用基线：`develop` / `d8e6da3`
+适用基线：`develop` / `84b4d33`
 上位设计：`docs/superpowers/specs/2026-07-13-mvp-closure-roadmap-design.md`
 
 ## 1. 目标
@@ -22,7 +22,7 @@
 - worker 原子入队、租约 heartbeat、owner fencing、有限重试、取消传播和发布幂等。
 - CodeCard 受控 builder、固定评测合同、Linux Chromium 离线运行、localhost RPC 和签名发布自动化。
 - 工作区 12 列网格、拖动、缩放、碰撞避让、300ms SQLite 持久化、重启恢复和失败回滚。
-- 云端同卡迭代已经完成 `baseCardId`/`baseVersionId` 合同、所有权校验、可信旧制品读取、Agent 基线注入、同 `cardId` 新版本、严格 display version 和 PostgreSQL/MinIO 恢复；客户端升级与回滚仍在实施。
+- 同卡版本生命周期已完成云端可信基线、同 `cardId` 新版本、严格 display version 和 PostgreSQL/MinIO 恢复，以及客户端差异确认、状态备份、授权收缩、原子升级/回滚和 runtime 失败补偿。
 
 这些结论不替代 Windows 实机证据。WebView2、多窗口、悬浮、DPI、中文 IME、多显示器和机器重启恢复仍保持 `DEVICE NOT RUN`。
 
@@ -125,7 +125,7 @@ Agent 应保持以下边界：
 
 | 顺序 | 工作包 | 产出 | 依赖 |
 |---:|---|---|---|
-| 1 | P1-A 客户端升级与回滚 | 能力差异、状态保护、原子切换和回滚 | 已完成的云端同卡迭代 |
+| 1 | P1-A 客户端升级与回滚 | **HEADLESS PASS**：能力差异、状态保护、原子切换和回滚 | 已完成的云端同卡迭代 |
 | 2 | P1-A 实例生命周期 | 复制、删除、卸载及数据保留选择 | 已完成的布局持久化 |
 | 3 | P1-C 真实 CodeCard 质量门 | 20 例真实模型质量和成本证据 | 临时模型凭据与价格配置 |
 | 4 | P0-C/P1-C Windows 设备闸门 | NativeCard、CodeCard、三类 Surface 和离线证据 | 固定测试服务、Windows 设备 |

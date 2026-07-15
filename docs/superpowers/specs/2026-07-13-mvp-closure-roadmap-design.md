@@ -3,7 +3,7 @@
 状态：**已确认，实施中**
 记录日期：2026-07-13（Asia/Shanghai）
 最近核对：2026-07-15（Asia/Shanghai）
-代码基线：`d8e6da3`
+代码基线：`84b4d33`
 
 ## 1. 文档目的
 
@@ -35,7 +35,7 @@
 | 4 | 远程环境仍可能使用内存 repository 和 `memory://` | **LOCAL HEADLESS PASS / REMOTE OPEN** | PostgreSQL/MinIO 持久化、重启、网络下载、成对备份恢复和同卡迭代均通过本地 Docker 门禁；固定远程服务器与 Windows 可达性尚未验收。 |
 | 5 | Windows WebView2、多窗口、悬浮、DPI、IME 和性能 | **开放，设备依赖** | 当前只能保留 `NOT RUN`；必须由 Windows 参考设备生成绑定 commit 的证据。 |
 | 6 | 工作区拖动、缩放、碰撞和布局编辑 | **HEADLESS PASS / DEVICE NOT RUN** | 12 列网格拖缩、first-fit 碰撞避让、300ms 持久化、重启恢复和失败回滚已通过 Flutter/Linux 自动化；Windows DPI、多屏和实际输入仍未执行。 |
-| 7 | 同卡迭代、升级和回滚 | **CLOUD ITERATION HEADLESS PASS / CLIENT OPEN** | 云端已完成基线归属、签名制品读取、Agent 只读上下文、同 `cardId` 不可变新版本、严格 display version 和 PostgreSQL/MinIO 故障恢复；客户端能力差异、状态备份、升级与回滚仍开放。 |
+| 7 | 同卡迭代、升级和回滚 | **VERSION LIFECYCLE HEADLESS PASS / WINDOWS DEVICE NOT RUN** | 云端完成可信基线、同卡不可变新版本和故障恢复；客户端完成差异确认、有界状态备份、grant 收缩、原子升级/回滚、runtime 失败补偿和基于版本继续生成。 |
 | 8 | worker heartbeat、事务、重试与发布幂等 | **HEADLESS PASS** | 原子确认/入队、租约 heartbeat/fencing、稳定发布身份、基础设施有限重试及五阶段部分失败恢复已通过 race 与 PostgreSQL/MinIO 门禁；Windows 消费仍属设备范围。 |
 | 9 | CodeCard 正式 builder 和真实生成链路 | **HEADLESS AUTOMATION PASS / LIVE、DEVICE NOT RUN** | 受控 builder、固定评测合同、Linux Chromium 离线/RPC、签名发布及 PostgreSQL/MinIO 恢复已通过；真实 CodeCard 20 例质量门和 Windows WebView2 仍未执行。 |
 | 10 | Windows/macOS 可信发行 | **开放** | Authenticode、正式安装器、WebView2 缺失引导、macOS 签名和 notarization 归入 P2。 |
@@ -49,7 +49,7 @@
 | P0-A 真实 DeepSeek NativeCard | **HEADLESS PASS** | 确认快照、catalog 派生语义、严格 validator、有界重试、3/3 签名垂直链路、16/20 真实质量门和脱敏证据 | 保持回归门稳定，等待 P0-C 消费同一协议和制品 | Windows 设备证据属于 P0-C，不反向阻塞 headless 结论 |
 | P0-B 持久化测试环境 | **LOCAL HEADLESS PASS / REMOTE NOT RUN** | PostgreSQL/MinIO、`/readyz`、服务与数据依赖重启、网络下载、独立验签和成对备份恢复均通过可重复 Docker 门禁 | 在固定测试服务器复跑并证明 Windows 参考设备网络可达 | 可用测试服务器；Windows 设备消费属于 P0-C |
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
-| P1-A 工作区与版本生命周期 | **工作区布局、云端同卡迭代 HEADLESS PASS；客户端实施中** | 布局编辑与持久化；基线归属/验签/源码注入；同 `cardId` 新版本、严格 display version 和真实 PostgreSQL/MinIO 恢复 | 客户端能力差异、状态备份、升级/回滚；实例复制/删除/卸载与数据选择 | Windows 布局和版本切换体验属设备证据；客户端 headless 工作无外部依赖 |
+| P1-A 工作区与版本生命周期 | **VERSION LIFECYCLE HEADLESS PASS / INSTANCE LIFECYCLE OPEN** | 布局编辑；可信同卡迭代；能力差异；状态备份；原子升级/回滚；runtime 失败补偿；基于版本继续生成 | 实例复制/删除/卸载与数据选择 | Windows 布局和版本切换体验属设备证据 |
 | P1-B worker 可靠性 | **HEADLESS PASS** | 原子确认/入队、90s/30s lease heartbeat、owner fencing、稳定 card/version、1s/2s 基础设施退避、取消传播及真实 PostgreSQL/MinIO crash recovery | 保持回归稳定；Windows 产品消费证据随 P0-C/P1-C 收集 | Linux/headless 不再有外部依赖 |
 | P1-C CodeCard 生产链路 | **HEADLESS AUTOMATION PASS / LIVE、DEVICE NOT RUN** | 受控 builder、20 例固定质量合同、本地 JS SDK、Linux Chromium 离线/RPC、签名发布和真实 PostgreSQL/MinIO 恢复 | 执行真实 CodeCard 质量门；在 Windows 参考设备完成离线 WebView2 矩阵 | 临时模型凭据与价格配置；Windows 11 x64 参考设备 |
 | P2 可信发行与 macOS | **未开始** | 静态安装器/entitlement 结构和跨平台 CI | Windows 签名发行、干净机升级卸载；macOS 签名、notarization 和设备闸门 | P0/P1 功能链路与 Windows M0 设备闸门通过；M4 完整通过是本阶段退出条件 |

@@ -1,7 +1,7 @@
 # M4 acceptance evidence
 
 Overall status: **DEVICE EVIDENCE REQUIRED**  
-Latest automated code commit: `d8e6da3`
+Latest automated code commit: `84b4d33`
 
 Recorded: 2026-07-15 (Asia/Shanghai)
 
@@ -23,7 +23,7 @@ commit.
 | Requirement | Command | Result | Evidence |
 |---|---|---|---|
 | Flutter formatting/static correctness | `cd apps/desktop && flutter analyze` | PASS | No analyzer findings |
-| Flutter unit/widget suite | `cd apps/desktop && flutter test` | PASS | 241 tests passed，1 expected skip |
+| Flutter unit/widget suite | `cd apps/desktop && flutter test` | PASS | 239 tests passed，1 expected skip |
 | Go formatting | `cd services/cloud && test -z "$(gofmt -l .)"` | PASS | Empty formatter diff |
 | Go static analysis | `cd services/cloud && go vet ./...` | PASS | Exit 0 |
 | Go race suite | `cd services/cloud && CGO_ENABLED=1 go test ./... -race` | PASS | All packages passed |
@@ -32,7 +32,8 @@ commit.
 | P1-B worker reliability gate | full Go race suite plus extended P0-B Docker gate | **HEADLESS PASS** | Atomic confirm/enqueue, lease heartbeat and owner fencing, stable publication identity, bounded infrastructure retry, cancellation propagation, published-version/ready-session recovery and real PostgreSQL/MinIO lease-expiry recovery passed at `039c4f2`; Windows device consumption remains `NOT RUN` |
 | P1-C CodeCard production automation | Go/Flutter/Node security gates, Linux Chromium and extended PostgreSQL/MinIO gate | **HEADLESS AUTOMATION PASS / LIVE QUALITY NOT RUN / WINDOWS DEVICE NOT RUN** | Fixed 20-case contract, bounded local SDK, pinned builder, 3/3 Chromium runtime cases and real signed publication recovery passed at `5a6a7fd`; see `docs/verification/p1c-codecard-production.md` |
 | P1-A workspace layout editing | Flutter unit/widget/storage/bootstrap suites plus shared security gate | **WORKSPACE HEADLESS PASS / WINDOWS DEVICE NOT RUN** | 12-column drag/resize, deterministic collision avoidance, 300ms persistence, restart recovery and redacted rollback UX passed at `855e118`; instance lifecycle and client upgrade/rollback remain open |
-| P1-A cloud card iteration | Go race plus extended PostgreSQL/MinIO gate | **CLOUD ITERATION HEADLESS PASS / CLIENT LIFECYCLE OPEN / WINDOWS DEVICE NOT RUN** | Paired base contract, ownership hiding, signed baseline extraction, bounded Agent context, same-card immutable v2, strict patch display version and publish/complete recovery passed at `d8e6da3`; see `docs/verification/p1a-cloud-card-iteration.md` |
+| P1-A cloud card iteration | Go race plus extended PostgreSQL/MinIO gate | **CLOUD ITERATION HEADLESS PASS / CLIENT LIFECYCLE HEADLESS PASS / WINDOWS DEVICE NOT RUN** | Paired base contract, ownership hiding, signed baseline extraction, bounded Agent context, same-card immutable v2, strict patch display version and publish/complete recovery passed at `d8e6da3`; see `docs/verification/p1a-cloud-card-iteration.md` |
+| P1-A client version lifecycle | Flutter unit/widget/storage/bootstrap suites plus shared security gate | **VERSION LIFECYCLE HEADLESS PASS / INSTANCE LIFECYCLE OPEN / WINDOWS DEVICE NOT RUN** | SQLite v5 bounded backups, capability/domain confirmation, grant narrowing, atomic upgrade/rollback, runtime failure compensation and Agent base-version entry passed at `84b4d33`; see `docs/verification/p1a-client-version-lifecycle.md` |
 | Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | TypeScript shared fixtures, Flutter security suite 66 tests, Go race suite, CodeCard dependency/typecheck/tests/build/bundle validation and official npm bulk advisory audit passed; 164 packages, zero high/critical findings |
 | Performance evaluator | `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart` | PASS | Budgets, percentile calculation and minimum sample populations tested |
 | Insufficient performance evidence | `dart tooling/performance/summarize.dart tooling/performance/fixtures/insufficient.json` | PASS (rejected) | Exit 1 with four `:samples` failures and `passed: false` |

@@ -250,28 +250,28 @@ Commit: `feat: iterate cards from installed versions`
 - Modify: `docs/superpowers/specs/2026-07-13-mvp-closure-roadmap-design.md`
 - Modify: `docs/superpowers/specs/2026-07-15-card-version-lifecycle-design.md`
 
-- [ ] **Step 1: 运行 Flutter 全门禁**
+- [x] **Step 1: 运行 Flutter 全门禁**
 
 Run: `cd apps/desktop && dart format --output=none --set-exit-if-changed lib test && flutter analyze && flutter test`
 
 Expected: format 0 changes、analyze 0 issues、全部 headless 测试通过，Windows 专属测试仅允许已有明确 skip。
 
-- [ ] **Step 2: 运行跨项目安全门禁**
+- [x] **Step 2: 运行跨项目安全门禁**
 
 Run: `env -u AGENTCARD_MODEL_API_KEY -u DEEPSEEK_API_KEY sh tooling/security/run-security-gate.sh`
 
 Expected: Go、Dart、TypeScript 合同、离线 CodeCard 和依赖审计全部通过；输出不含密钥。
 
-- [ ] **Step 3: 记录证据和边界**
+- [x] **Step 3: 记录证据和边界**
 
 报告逐项列出 migration、备份上限、兼容切换、不兼容取消/重置、grant 收缩、事务失败回滚、runtime 单次重建、UI 升级/回滚测试。只有全部通过时标记 `P1-A VERSION LIFECYCLE HEADLESS PASS`；Windows 三 Surface、DPI、多屏、IME 继续标记 `DEVICE NOT RUN`。
 
-- [ ] **Step 4: 扫描敏感信息和运行残留**
+- [x] **Step 4: 扫描敏感信息和运行残留**
 
 Run: `git status --short && git grep -nE 'sk-[A-Za-z0-9]{16,}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' -- . ':!docs/superpowers/plans/2026-07-16-client-card-version-lifecycle.md'`
 
 Expected: 无密钥、私钥、数据库、日志或构建产物待提交。
 
-- [ ] **Step 5: 提交验证文档**
+- [x] **Step 5: 提交验证文档**
 
 Commit: `docs: record client version lifecycle evidence`

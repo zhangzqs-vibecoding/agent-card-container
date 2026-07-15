@@ -1,6 +1,6 @@
 # 同卡版本生命周期设计
 
-状态：**已确认，待实施**  
+状态：**Linux/headless 已实施并通过；Windows device 未执行**
 记录日期：2026-07-15（Asia/Shanghai）  
 上位需求：`docs/superpowers/specs/2026-07-13-mvp-closure-roadmap-design.md` P1-A
 
