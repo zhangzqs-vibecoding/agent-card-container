@@ -17,6 +17,7 @@ var (
 	ErrNotFound        = errors.New("card version not found")
 	ErrVersionConflict = errors.New("immutable card version conflict")
 	ErrObjectConflict  = errors.New("object content conflict")
+	ErrRetryable       = errors.New("temporary publish failure")
 )
 
 type CardVersion struct {

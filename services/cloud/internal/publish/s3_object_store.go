@@ -3,7 +3,10 @@ package publish
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -89,16 +92,30 @@ func (store *S3ObjectStore) PutIfAbsent(
 	}
 	response := minio.ToErrorResponse(err)
 	if response.Code != "PreconditionFailed" && response.StatusCode != 412 {
-		return err
+		return classifyS3Error(err)
 	}
 	info, statErr := store.client.StatObject(ctx, store.bucket, key, minio.StatObjectOptions{})
 	if statErr != nil {
-		return statErr
+		return classifyS3Error(statErr)
 	}
 	if info.Size != int64(len(content)) {
 		return ErrObjectConflict
 	}
 	return nil
+}
+
+func classifyS3Error(err error) error {
+	response := minio.ToErrorResponse(err)
+	if response.StatusCode == http.StatusRequestTimeout ||
+		response.StatusCode == http.StatusTooManyRequests ||
+		response.StatusCode >= 500 {
+		return ErrRetryable
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && (networkError.Timeout() || networkError.Temporary()) {
+		return ErrRetryable
+	}
+	return err
 }
 
 func (store *S3ObjectStore) SignedURL(

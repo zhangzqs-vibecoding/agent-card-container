@@ -569,6 +569,71 @@ func TestWorkerFailsSessionAfterAgentValidationFailure(t *testing.T) {
 	}
 }
 
+func TestWorkerRetriesTemporaryPublishFailureWithStableVersion(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	current := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+	repository := generation.NewMemoryRepository()
+	service := generation.NewService(repository, func() string { return "gen_retry_publish" }, func() time.Time { return current })
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "重试发布", Target: generation.TargetNative, Locale: "zh-CN",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewMemoryStore(func() string { return "job_retry_publish" })
+	if _, err := jobStore.Enqueue(ctx, session.ID, current); err != nil {
+		t.Fatal(err)
+	}
+	provider := &captureProvider{}
+	objectStore := &temporaryFailureObjectStore{MemoryObjectStore: publish.NewMemoryObjectStore()}
+	versions := publish.NewMemoryVersionRepository()
+	seed := sha256.Sum256([]byte("retry-publish-key"))
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("retry-key", ed25519.NewKeyFromSeed(seed[:])), objectStore, versions,
+	)
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-retry", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()), Publisher: publisher,
+		NewCardID: func() string { return "card_retry" }, NewVersionID: func() string { return "ver_retry" },
+		Now: func() time.Time { return current },
+	})
+
+	if _, err := runner.RunOnce(ctx); !errors.Is(err, publish.ErrRetryable) {
+		t.Fatalf("first RunOnce() error = %v, want retryable publish error", err)
+	}
+	afterFailure, err := service.Get(ctx, "user", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := jobStore.Get(ctx, "job_retry_publish")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterFailure.Status != generation.StatusValidating || job.Status != jobs.StatusQueued {
+		t.Fatalf("after retry scheduling session=%s job=%s", afterFailure.Status, job.Status)
+	}
+	current = current.Add(time.Second)
+	outcome, err := runner.RunOnce(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome.VersionID != "ver_retry" || len(provider.requests) != 2 {
+		t.Fatalf("outcome=%#v provider calls=%d", outcome, len(provider.requests))
+	}
+	detail, err := publisher.Card(ctx, "user", "card_retry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Versions) != 1 || detail.Versions[0].VersionID != "ver_retry" {
+		t.Fatalf("versions = %#v", detail.Versions)
+	}
+}
+
 func TestWorkerPublishesSandboxedCodeCard(t *testing.T) {
 	t.Parallel()
 
@@ -657,6 +722,21 @@ type captureProvider struct {
 
 type captureObjectStore struct {
 	archive []byte
+}
+
+type temporaryFailureObjectStore struct {
+	*publish.MemoryObjectStore
+	failed bool
+}
+
+func (store *temporaryFailureObjectStore) PutIfAbsent(
+	ctx context.Context, key string, content []byte,
+) error {
+	if !store.failed {
+		store.failed = true
+		return publish.ErrRetryable
+	}
+	return store.MemoryObjectStore.PutIfAbsent(ctx, key, content)
 }
 
 type manifestMetadata struct {

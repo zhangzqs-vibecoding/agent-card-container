@@ -153,7 +153,7 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		return Outcome{JobID: job.ID, SessionID: session.ID, VersionID: existing.VersionID}, nil
 	}
 	if !errors.Is(findErr, publish.ErrNotFound) {
-		return Outcome{}, findErr
+		return Outcome{}, worker.fail(ctx, job, "ARTIFACT_LOOKUP_FAILED", findErr)
 	}
 	if session.Status == generation.StatusReady {
 		return Outcome{}, worker.fail(
@@ -305,6 +305,23 @@ func descriptionFromRequirement(requirement generation.RequirementSnapshot) stri
 func (worker *Worker) fail(ctx context.Context, job *jobs.Job, code string, cause error) error {
 	if errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 		return cause
+	}
+	if isRetryableJobError(cause) && job.Attempts < job.MaxAttempts {
+		now := worker.config.Now().UTC()
+		nextAttemptAt := now.Add(jobRetryDelay(job.Attempts))
+		if err := worker.config.Jobs.Retry(
+			ctx, job.ID, worker.config.WorkerID, now, nextAttemptAt,
+		); err != nil {
+			return fmt.Errorf("schedule generation retry: %w", err)
+		}
+		worker.config.Logger.WarnContext(ctx, "generation_job_retry_scheduled",
+			"jobId", job.ID,
+			"sessionId", job.SessionID,
+			"attempt", job.Attempts,
+			"nextAttemptAt", nextAttemptAt,
+			"errorKind", strings.ToLower(code),
+		)
+		return fmt.Errorf("JOB_RETRY_SCHEDULED: %w", cause)
 	}
 	_, _ = worker.config.Generations.MarkFailed(ctx, job.SessionID, code)
 	_ = worker.config.Jobs.Fail(ctx, job.ID, worker.config.WorkerID, worker.config.Now())
