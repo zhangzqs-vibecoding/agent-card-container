@@ -24,3 +24,7 @@ CGO_ENABLED=1 go test ./... -race
 cd "$ROOT/tooling/codecard-template"
 pnpm run verify
 pnpm run audit:dependencies
+
+cd "$ROOT/tooling/codecard-browser"
+PLAYWRIGHT_HTML_OPEN=never pnpm test
+pnpm run audit:dependencies

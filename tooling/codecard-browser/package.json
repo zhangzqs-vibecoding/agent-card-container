@@ -1,0 +1,14 @@
+{
+  "name": "agent-card-codecard-browser-gate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "audit:dependencies": "node ../codecard-template/scripts/audit-dependencies.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  },
+  "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319"
+}

@@ -79,12 +79,12 @@
 - Create: `tooling/codecard-browser/fixture_server.dart`
 - Modify: `tooling/security/run-security-gate.sh`
 
-- [ ] RED：外部导航、跨随机 origin RPC、缺 token、未声明能力、超限请求、过量调用或 session 关闭后请求未被拒绝。
-- [ ] 用 Dart Runtime Server/测试 adapter 服务真实 bundle，用 Linux Chromium 执行页面和交互断言。
-- [ ] 验证 storage、context、RPC、事件、CSP、外网失败、reload 和云端断开后继续使用。
-- [ ] 验证旧 session/token 在应用级重建后失效，新 session 从持久化状态恢复。
-- [ ] 纳入安全门，固定浏览器/工具版本，所有等待使用条件轮询和总超时。
-- [ ] 提交：`test: prove CodeCard browser offline runtime`。
+- [x] RED：外部导航、跨随机 origin RPC、缺 token、未声明能力、超限请求、过量调用或 session 关闭后请求未被拒绝。
+- [x] 用 Dart Runtime Server/测试 adapter 服务真实 bundle，用 Linux Chromium 执行页面和交互断言。
+- [x] 验证 storage、context、RPC、事件、CSP、外网失败、reload 和云端断开后继续使用。
+- [x] 验证旧 session/token 在应用级重建后失效，新 session 从持久化状态恢复。
+- [x] 纳入安全门，固定浏览器/工具版本，所有等待使用条件轮询和总超时。
+- [x] 提交：`test: prove CodeCard browser offline runtime`。
 
 ## Task 6：真实持久化发布与恢复
 

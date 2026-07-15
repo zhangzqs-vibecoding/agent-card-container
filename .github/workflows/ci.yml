@@ -42,6 +42,8 @@ jobs:
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
           pnpm --dir tooling/codecard-template install --frozen-lockfile
+          pnpm --dir tooling/codecard-browser install --frozen-lockfile
+          pnpm --dir tooling/codecard-browser exec playwright install --with-deps chromium
       - name: Run shared security and contract gate
         shell: bash
         run: sh tooling/security/run-security-gate.sh
