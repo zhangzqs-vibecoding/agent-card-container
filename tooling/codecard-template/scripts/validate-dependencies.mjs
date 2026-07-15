@@ -33,7 +33,7 @@ for (const [name, version] of Object.entries(declared)) {
   }
 }
 
-if (policy.audit?.command !== 'pnpm audit --audit-level high' ||
+if (policy.audit?.command !== 'pnpm run audit:dependencies' ||
     policy.audit?.highOrCriticalVulnerabilities !== 0) {
   throw new Error('Dependency audit policy is not fail-closed');
 }

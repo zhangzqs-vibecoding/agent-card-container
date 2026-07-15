@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "auditedAt": "2026-07-12T00:00:00Z",
+  "auditedAt": "2026-07-15T00:00:00Z",
   "packageManager": "pnpm@10.33.0",
   "productionDependencies": [
     {
@@ -11,7 +11,7 @@
   ],
   "allowedLicenses": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC"],
   "audit": {
-    "command": "pnpm audit --audit-level high",
+    "command": "pnpm run audit:dependencies",
     "highOrCriticalVulnerabilities": 0
   }
 }

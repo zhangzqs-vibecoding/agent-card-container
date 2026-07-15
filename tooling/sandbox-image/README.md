@@ -17,4 +17,4 @@ or object-store credentials into this container.
 
 The image installs dependencies with `pnpm --frozen-lockfile`. Refresh
 `dependency-policy.json` only after the production license list and
-`pnpm audit --prod --audit-level high` both pass review.
+the fail-closed bulk advisory audit both pass review.

@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "audit:dependencies": "node scripts/audit-dependencies.mjs",
     "typecheck": "tsc --noEmit",
     "validate:dependencies": "node scripts/validate-dependencies.mjs",
+    "test:audit": "node --test scripts/audit-dependencies.test.mjs",
     "test": "vitest run --passWithNoTests",
     "build": "vite build",
     "validate:bundle": "node scripts/validate-bundle.mjs",
-    "verify": "pnpm run validate:dependencies && pnpm run typecheck && pnpm test && pnpm run build && pnpm run validate:bundle"
+    "verify": "pnpm run validate:dependencies && pnpm run test:audit && pnpm run typecheck && pnpm test && pnpm run build && pnpm run validate:bundle"
   },
   "dependencies": {
     "preact": "10.26.4"
