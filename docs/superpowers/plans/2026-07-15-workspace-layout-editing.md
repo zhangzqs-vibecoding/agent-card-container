@@ -32,15 +32,15 @@
 - Modify: `apps/desktop/lib/src/workspace/workspace_controller.dart`
 - Modify: `apps/desktop/test/workspace/workspace_controller_test.dart`
 
-- [ ] RED：构造带 `Future<void> Function(instanceId, surfaceId, placement)` 持久化端口的控制器，断言 `editPlacement` 立即更新内存，但在 299ms 前不写入，300ms 后连续更新只写最后值。
-- [ ] 运行 controller 测试，确认缺少 API 的预期失败。
-- [ ] GREEN：注入布局引擎、持久化端口和 debounce；为每个实例维护 timer、revision 和最后成功 placement。
-- [ ] RED：增加持久化失败恢复最后成功 placement、设置稳定 `layoutErrorMessage`，后续成功清错，以及旧异步 revision 完成不覆盖新编辑的测试。
-- [ ] GREEN：实现 revision 检查、失败回滚和错误 getter；不暴露底层异常正文。
-- [ ] RED：增加未知实例、非 workspace 实例、dispose 后 timer 不写入和不通知测试。
-- [ ] GREEN：fail closed 并在 dispose 取消 timer。
-- [ ] 运行 controller 测试和完整 workspace 测试。
-- [ ] 提交：`feat: persist recoverable workspace placement edits`。
+- [x] RED：构造带 `Future<void> Function(instanceId, surfaceId, placement)` 持久化端口的控制器，断言 `editPlacement` 立即更新内存，但在 299ms 前不写入，300ms 后连续更新只写最后值。
+- [x] 运行 controller 测试，确认缺少 API 的预期失败。
+- [x] GREEN：注入布局引擎、持久化端口和 debounce；为每个实例维护 timer、revision 和最后成功 placement。
+- [x] RED：增加持久化失败恢复最后成功 placement、设置稳定 `layoutErrorMessage`，后续成功清错，以及旧异步 revision 完成不覆盖新编辑的测试。
+- [x] GREEN：实现 revision 检查、失败回滚和错误 getter；不暴露底层异常正文。
+- [x] RED：增加未知实例、非 workspace 实例、dispose 后 timer 不写入和不通知测试。
+- [x] GREEN：fail closed 并在 dispose 取消 timer。
+- [x] 运行 controller 测试和完整 workspace 测试。
+- [x] 提交：`feat: persist recoverable workspace placement edits`。
 
 ## Task 3：SQLite 生产端口与重启恢复
 

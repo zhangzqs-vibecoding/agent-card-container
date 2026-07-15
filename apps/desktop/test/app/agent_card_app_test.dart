@@ -356,7 +356,7 @@ void main() {
   testWidgets('adds an installed card to the live workspace', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    final workspace = WorkspaceController();
+    final workspace = WorkspaceController(const []);
     addTearDown(workspace.dispose);
     await tester.pumpWidget(AgentCardApp(workspaceController: workspace));
     expect(find.text('和 Agent 对话，生成你的第一张卡片'), findsOneWidget);
