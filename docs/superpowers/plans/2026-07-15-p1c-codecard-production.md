@@ -94,11 +94,11 @@
 - Modify: `services/cloud/internal/worker/production_recovery_test.go`
 - Modify: `tooling/persistence/run-p0b-gate.sh`
 
-- [ ] RED：真实 CodeCard 构建、上传、版本入库任一点失败会重复版本或改变 artifact hash。
-- [ ] 在 PostgreSQL/MinIO 门禁中生成、构建、签名、上传并远程式下载 CodeCard。
-- [ ] 独立验证 manifest、SHA-256、Ed25519、入口文件和 dependency policy。
-- [ ] lease 过期恢复不得重新调用模型或创建第二个 version。
-- [ ] 提交：`test: prove persistent CodeCard publication recovery`。
+- [x] RED：真实 CodeCard 构建、上传、版本入库任一点失败会重复版本或改变 artifact hash。
+- [x] 在 PostgreSQL/MinIO 门禁中生成、构建、签名、上传并远程式下载 CodeCard。
+- [x] 独立验证 manifest、SHA-256、Ed25519、入口文件和 dependency policy。
+- [x] lease 过期恢复不得重新调用模型或创建第二个 version。
+- [x] 提交：`test: prove persistent CodeCard publication recovery`。
 
 ## Task 7：Windows 执行包与文档收口
 

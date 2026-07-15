@@ -35,6 +35,7 @@ postgres_container="$run_id-postgres"
 minio_container="$run_id-minio"
 postgres_volume="$run_id-postgres-data"
 minio_volume="$run_id-minio-data"
+sandbox_image="$run_id-codecard-builder"
 temporary=$(mktemp -d "${TMPDIR:-/tmp}/agentcard-p0b.XXXXXX")
 backup_id="backup-$(date -u +%Y%m%dT%H%M%SZ)"
 backup_directory="$temporary/$backup_id"
@@ -50,9 +51,17 @@ cleanup() {
   docker rm -f "$postgres_container" "$minio_container" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker volume rm "$postgres_volume" "$minio_volume" >/dev/null 2>&1 || true
+  docker image rm "$sandbox_image" >/dev/null 2>&1 || true
   rm -rf "$temporary"
 }
 trap cleanup EXIT INT TERM
+
+docker build \
+  --tag "$sandbox_image" \
+  --file "$ROOT/tooling/sandbox-image/Dockerfile" \
+  "$ROOT" >/dev/null
+export AGENTCARD_SANDBOX_TEST_IMAGE
+AGENTCARD_SANDBOX_TEST_IMAGE=$(docker image inspect "$sandbox_image" --format '{{.Id}}')
 
 docker network create "$network" >/dev/null
 docker volume create "$postgres_volume" >/dev/null
