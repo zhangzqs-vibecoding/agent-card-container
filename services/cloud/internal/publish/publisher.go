@@ -3,7 +3,10 @@ package publish
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/url"
 	"sort"
 	"sync"
@@ -14,10 +17,12 @@ import (
 )
 
 var (
-	ErrNotFound        = errors.New("card version not found")
-	ErrVersionConflict = errors.New("immutable card version conflict")
-	ErrObjectConflict  = errors.New("object content conflict")
-	ErrRetryable       = errors.New("temporary publish failure")
+	ErrNotFound          = errors.New("card version not found")
+	ErrVersionConflict   = errors.New("immutable card version conflict")
+	ErrObjectConflict    = errors.New("object content conflict")
+	ErrObjectTooLarge    = errors.New("object exceeds read limit")
+	ErrArtifactIntegrity = errors.New("artifact integrity check failed")
+	ErrRetryable         = errors.New("temporary publish failure")
 )
 
 type CardVersion struct {
@@ -50,6 +55,11 @@ type Download struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
+type LoadedArtifact struct {
+	Version CardVersion
+	Archive []byte
+}
+
 type CardSummary struct {
 	CardID        string      `json:"cardId"`
 	Title         string      `json:"title"`
@@ -67,6 +77,10 @@ type CardDetail struct {
 type ObjectStore interface {
 	PutIfAbsent(context.Context, string, []byte) error
 	SignedURL(context.Context, string, time.Duration) (string, time.Time, error)
+}
+
+type ObjectReader interface {
+	Get(context.Context, string, int64) ([]byte, error)
 }
 
 type VersionRepository interface {
@@ -211,6 +225,35 @@ func (publisher *Publisher) Download(
 	}, nil
 }
 
+func (publisher *Publisher) LoadVersionArtifact(
+	ctx context.Context,
+	userID string,
+	cardID string,
+	versionID string,
+	maxBytes int64,
+) (LoadedArtifact, error) {
+	version, err := publisher.versions.Find(ctx, userID, cardID, versionID)
+	if err != nil {
+		return LoadedArtifact{}, err
+	}
+	reader, ok := publisher.objects.(ObjectReader)
+	if !ok {
+		return LoadedArtifact{}, fmt.Errorf("artifact object store is not readable")
+	}
+	archive, err := reader.Get(ctx, version.ArtifactKey, maxBytes)
+	if err != nil {
+		return LoadedArtifact{}, err
+	}
+	digest := sha256.Sum256(archive)
+	if hex.EncodeToString(digest[:]) != version.ArtifactSHA256 {
+		return LoadedArtifact{}, ErrArtifactIntegrity
+	}
+	return LoadedArtifact{
+		Version: cloneVersion(version),
+		Archive: append([]byte(nil), archive...),
+	}, nil
+}
+
 type MemoryObjectStore struct {
 	mu      sync.RWMutex
 	objects map[string][]byte
@@ -255,6 +298,29 @@ func (store *MemoryObjectStore) SignedURL(
 	}
 	expiresAt := store.now().UTC().Add(ttl)
 	return "memory://" + url.PathEscape(key) + "?expires=" + url.QueryEscape(expiresAt.Format(time.RFC3339)), expiresAt, nil
+}
+
+func (store *MemoryObjectStore) Get(
+	ctx context.Context,
+	key string,
+	maxBytes int64,
+) ([]byte, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("object read limit must be positive")
+	}
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	content, exists := store.objects[key]
+	if !exists {
+		return nil, ErrNotFound
+	}
+	if int64(len(content)) > maxBytes {
+		return nil, ErrObjectTooLarge
+	}
+	return append([]byte(nil), content...), nil
 }
 
 type MemoryVersionRepository struct {

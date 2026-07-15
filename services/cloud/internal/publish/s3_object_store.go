@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -106,6 +107,11 @@ func (store *S3ObjectStore) PutIfAbsent(
 
 func classifyS3Error(err error) error {
 	response := minio.ToErrorResponse(err)
+	if response.StatusCode == http.StatusNotFound ||
+		response.Code == "NoSuchKey" ||
+		response.Code == "NoSuchObject" {
+		return ErrNotFound
+	}
 	if response.StatusCode == http.StatusRequestTimeout ||
 		response.StatusCode == http.StatusTooManyRequests ||
 		response.StatusCode >= 500 {
@@ -116,6 +122,36 @@ func classifyS3Error(err error) error {
 		return ErrRetryable
 	}
 	return err
+}
+
+func (store *S3ObjectStore) Get(
+	ctx context.Context,
+	key string,
+	maxBytes int64,
+) ([]byte, error) {
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("object read limit must be positive")
+	}
+	object, err := store.client.GetObject(ctx, store.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, classifyS3Error(err)
+	}
+	defer object.Close()
+	info, err := object.Stat()
+	if err != nil {
+		return nil, classifyS3Error(err)
+	}
+	if info.Size > maxBytes {
+		return nil, ErrObjectTooLarge
+	}
+	content, err := io.ReadAll(io.LimitReader(object, maxBytes+1))
+	if err != nil {
+		return nil, classifyS3Error(err)
+	}
+	if int64(len(content)) > maxBytes {
+		return nil, ErrObjectTooLarge
+	}
+	return content, nil
 }
 
 func (store *S3ObjectStore) SignedURL(

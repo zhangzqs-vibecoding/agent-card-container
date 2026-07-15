@@ -67,16 +67,17 @@
 
 - Modify: `services/cloud/internal/publish/publisher.go`
 - Modify: `services/cloud/internal/publish/s3_object_store.go`
+- Modify: `services/cloud/internal/publish/s3_object_store_integration_test.go`
 - Modify: `services/cloud/internal/publish/publisher_test.go`
 - Create: `services/cloud/internal/agent/base_artifact.go`
 - Create: `services/cloud/internal/agent/base_artifact_test.go`
 
-- [ ] RED：对象存储读取缺失、hash 不符、签名不符、ZIP 非法、文件目录越界或总量超限时失败。
-- [ ] GREEN：为 ObjectStore 增加有界 `Get`；Memory/S3 实现严格大小上限和错误分类。
-- [ ] GREEN：基线解析器复用 artifact canonical/signature 规则，只输出 CardDefinition 和允许的 UTF-8 payload 文件。
-- [ ] RED：不同 card/version manifest 与请求身份不一致时拒绝。
-- [ ] 运行 publish/agent 测试和 MinIO 集成测试。
-- [ ] 提交：`feat: load verified card iteration baselines`。
+- [x] RED：对象存储读取缺失、hash 不符、签名不符、ZIP 非法、文件目录越界或总量超限时失败。
+- [x] GREEN：为对象存储增加有界 `Get`；Memory/S3 实现严格大小上限和错误分类。
+- [x] GREEN：基线解析器复用 artifact canonical/signature 规则，只输出 CardDefinition 和允许的 UTF-8 payload/source 文件。
+- [x] RED：不同 card/version manifest 与请求身份不一致时拒绝。
+- [x] 运行 publish/agent 测试和 MinIO 集成测试。
+- [x] 提交：`feat: load verified card iteration baselines`。
 
 ## Task 5：把基线交给有界 Agent
 

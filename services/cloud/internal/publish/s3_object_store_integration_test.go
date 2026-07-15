@@ -2,6 +2,7 @@ package publish_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -34,6 +35,16 @@ func TestS3ObjectStoreUploadsAndSignsContentAddressedArtifact(t *testing.T) {
 	content := []byte("signed artifact")
 	if err := store.PutIfAbsent(context.Background(), key, content); err != nil {
 		t.Fatal(err)
+	}
+	loaded, err := store.Get(context.Background(), key, int64(len(content)))
+	if err != nil || string(loaded) != string(content) {
+		t.Fatalf("Get() = %q, %v", loaded, err)
+	}
+	if _, err := store.Get(context.Background(), key, int64(len(content)-1)); !errors.Is(err, publish.ErrObjectTooLarge) {
+		t.Fatalf("bounded Get() error = %v", err)
+	}
+	if _, err := store.Get(context.Background(), key+"-missing", 1024); !errors.Is(err, publish.ErrNotFound) {
+		t.Fatalf("missing Get() error = %v", err)
 	}
 	if err := store.PutIfAbsent(context.Background(), key, content); err != nil {
 		t.Fatal(err)

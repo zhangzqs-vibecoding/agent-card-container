@@ -137,6 +137,111 @@ func TestPublisherListsUserCardsAndVersionHistory(t *testing.T) {
 	}
 }
 
+func TestPublisherLoadsOwnedArtifactWithinLimit(t *testing.T) {
+	t.Parallel()
+
+	seed := sha256.Sum256([]byte("publisher-load-key"))
+	objects := publish.NewMemoryObjectStore()
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder("release-key", ed25519.NewKeyFromSeed(seed[:])),
+		objects,
+		publish.NewMemoryVersionRepository(),
+	)
+	if _, err := publisher.Publish(context.Background(), publish.Input{
+		UserID:     "owner",
+		Definition: definition("ver_01"),
+		Files: map[string][]byte{
+			"payload/native.json": []byte(`{"schemaVersion":1,"initialState":{},"root":{"id":"root","type":"Text"}}`),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := publisher.LoadVersionArtifact(
+		context.Background(), "owner", "card_01", "ver_01", 8*1024*1024,
+	)
+	if err != nil {
+		t.Fatalf("LoadVersionArtifact() error = %v", err)
+	}
+	if loaded.Version.VersionID != "ver_01" || len(loaded.Archive) == 0 {
+		t.Fatalf("loaded artifact = %#v", loaded)
+	}
+	loaded.Archive[0] ^= 0xff
+	reloaded, err := publisher.LoadVersionArtifact(
+		context.Background(), "owner", "card_01", "ver_01", 8*1024*1024,
+	)
+	if err != nil || len(reloaded.Archive) == 0 || loaded.Archive[0] == reloaded.Archive[0] {
+		t.Fatalf("stored artifact was not isolated: %#v, %v", reloaded, err)
+	}
+
+	if _, err := publisher.LoadVersionArtifact(
+		context.Background(), "other", "card_01", "ver_01", 8*1024*1024,
+	); !errors.Is(err, publish.ErrNotFound) {
+		t.Fatalf("cross-user LoadVersionArtifact() error = %v", err)
+	}
+	if _, err := publisher.LoadVersionArtifact(
+		context.Background(), "owner", "card_01", "ver_01", 1,
+	); !errors.Is(err, publish.ErrObjectTooLarge) {
+		t.Fatalf("oversized LoadVersionArtifact() error = %v", err)
+	}
+}
+
+func TestMemoryObjectStoreGetRejectsMissingObject(t *testing.T) {
+	t.Parallel()
+
+	store := publish.NewMemoryObjectStore()
+	if _, err := store.Get(context.Background(), "missing", 1024); !errors.Is(err, publish.ErrNotFound) {
+		t.Fatalf("Get() error = %v", err)
+	}
+}
+
+func TestPublisherRejectsArtifactHashMismatch(t *testing.T) {
+	t.Parallel()
+
+	version := publish.CardVersion{
+		UserID:         "owner",
+		CardID:         "card_01",
+		VersionID:      "ver_01",
+		ArtifactKey:    "artifact",
+		ArtifactSHA256: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+	}
+	publisher := publish.NewPublisher(nil, staticObjectStore{content: []byte("tampered")}, staticVersionRepository{version: version})
+	if _, err := publisher.LoadVersionArtifact(
+		context.Background(), "owner", "card_01", "ver_01", 1024,
+	); !errors.Is(err, publish.ErrArtifactIntegrity) {
+		t.Fatalf("LoadVersionArtifact() error = %v", err)
+	}
+}
+
+type staticObjectStore struct {
+	content []byte
+}
+
+func (store staticObjectStore) PutIfAbsent(context.Context, string, []byte) error { return nil }
+func (store staticObjectStore) SignedURL(context.Context, string, time.Duration) (string, time.Time, error) {
+	return "", time.Time{}, nil
+}
+func (store staticObjectStore) Get(context.Context, string, int64) ([]byte, error) {
+	return append([]byte(nil), store.content...), nil
+}
+
+type staticVersionRepository struct {
+	version publish.CardVersion
+}
+
+func (repository staticVersionRepository) Create(context.Context, publish.CardVersion) (publish.CardVersion, error) {
+	return publish.CardVersion{}, nil
+}
+func (repository staticVersionRepository) Find(context.Context, string, string, string) (publish.CardVersion, error) {
+	return repository.version, nil
+}
+func (staticVersionRepository) ListByUser(context.Context, string) ([]publish.CardVersion, error) {
+	return nil, nil
+}
+func (staticVersionRepository) ListByCard(context.Context, string, string) ([]publish.CardVersion, error) {
+	return nil, nil
+}
+
 func definition(versionID string) contracts.CardDefinition {
 	return contracts.CardDefinition{
 		FormatVersion:      1,
