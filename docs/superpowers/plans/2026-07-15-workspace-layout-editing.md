@@ -51,12 +51,12 @@
 - Modify: `apps/desktop/lib/src/app/desktop_bootstrap.dart`
 - Modify: `apps/desktop/test/app/desktop_bootstrap_test.dart`
 
-- [ ] RED：用临时数据库写入 placement、关闭并重开，断言同一实例恢复相同 surface/placement；未知实例更新必须失败而不是静默成功。
-- [ ] GREEN：让 `moveInstance` 检查 SQLite affected rows；不存在时抛稳定 `StateError`。
-- [ ] RED：bootstrap 测试断言工作区 controller 的防抖写入最终进入生产数据库。
-- [ ] GREEN：创建 controller 时注入 `database.moveInstance` 异步包装；SurfaceCoordinator 的外部移动继续使用不防抖的 `moveInstance`，避免回调循环。
-- [ ] 运行 storage/bootstrap 测试。
-- [ ] 提交：`feat: wire workspace placement persistence`。
+- [x] RED：用临时数据库写入 placement、关闭并重开，断言同一实例恢复相同 surface/placement；未知实例更新必须失败而不是静默成功。
+- [x] GREEN：让 `moveInstance` 检查 SQLite affected rows；不存在时抛稳定 `StateError`。
+- [x] RED：bootstrap 测试断言工作区 controller 的防抖写入最终进入生产数据库。
+- [x] GREEN：创建 controller 时注入 `database.moveInstance` 异步包装；SurfaceCoordinator 的外部移动继续使用不防抖的 `moveInstance`，避免回调循环。
+- [x] 运行 storage/bootstrap 测试。
+- [x] 提交：`feat: wire workspace placement persistence`。
 
 ## Task 4：拖动与缩放 Widget
 

@@ -273,6 +273,10 @@ class LocalDatabase {
         instanceId,
       ],
     );
+    final changes = _connection.query('SELECT changes() AS count');
+    if (changes.single['count'] != 1) {
+      throw StateError('card instance does not exist');
+    }
   }
 
   void moveInstanceToSurface({

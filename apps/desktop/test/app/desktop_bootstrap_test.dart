@@ -91,6 +91,15 @@ void main() {
       expect(diagnosticFile.existsSync(), isTrue);
       expect(diagnosticFile.path, contains('diagnostics'));
       expect(diagnosticFile.readAsStringSync(), contains('schemaVersion'));
+
+      runtime.workspaceController.editPlacement(
+        'instance-1',
+        const CardPlacement(x: 5, y: 2, width: 4, height: 3),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      final persisted = runtime.database.listInstances().single;
+      expect(persisted.placement.x, 5);
+      expect(persisted.placement.y, 2);
     },
   );
 

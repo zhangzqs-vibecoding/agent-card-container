@@ -129,6 +129,41 @@ void main() {
       expect(instance.placement.width, 500);
     });
 
+    test('rejects moving an unknown instance', () {
+      expect(
+        () => database.moveInstance(
+          instanceId: 'missing',
+          surfaceId: 'workspace-main',
+          placement: const CardPlacement(x: 1, y: 1, width: 4, height: 3),
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('restores a moved placement after reopening the database', () {
+      final root = Directory.systemTemp.createTempSync('agent-card-layout-');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final path = '${root.path}/layout.sqlite3';
+      final first = LocalDatabase.open(path);
+      first.upsertInstallation(_installation('version-1'));
+      first.upsertSurface(_workspace());
+      first.upsertInstance(_instance());
+      first.moveInstance(
+        instanceId: 'instance-1',
+        surfaceId: 'workspace-main',
+        placement: const CardPlacement(x: 6, y: 4, width: 5, height: 2),
+      );
+      first.close();
+
+      final reopened = LocalDatabase.open(path);
+      addTearDown(reopened.close);
+      final instance = reopened.listInstances().single;
+      expect(instance.placement.x, 6);
+      expect(instance.placement.y, 4);
+      expect(instance.placement.width, 5);
+      expect(instance.placement.height, 2);
+    });
+
     test('persists namespaced JSON state and permission grants', () {
       database.upsertInstallation(_installation('version-1'));
       database.upsertSurface(_workspace());

@@ -312,7 +312,16 @@ abstract final class DesktopBootstrap {
           );
         }
       }
-      final workspaceController = WorkspaceController(cards);
+      final workspaceController = WorkspaceController(
+        cards,
+        persistPlacement: (instanceId, surfaceId, placement) async {
+          database.moveInstance(
+            instanceId: instanceId,
+            surfaceId: surfaceId,
+            placement: placement,
+          );
+        },
+      );
       final snapshotProvider = WorkspaceSurfaceSnapshotProvider(
         cards: () => workspaceController.cards,
         readState: database.readState,
