@@ -98,10 +98,10 @@
 - Modify: `docs/verification/m4-acceptance.md`
 - Modify: `docs/superpowers/plans/2026-07-15-workspace-layout-editing.md`
 
-- [ ] 运行 `dart format --output=none --set-exit-if-changed lib test`。
-- [ ] 运行 `flutter analyze` 和完整 `flutter test`。
-- [ ] 运行 `sh tooling/security/run-security-gate.sh` 和 `git diff --check`。
-- [ ] 审计敏感信息、运行数据、构建和容器残留；测试用故意假凭据必须作为明确 fixture 处理。
-- [ ] 记录精确 commit、测试数量、布局规则和未执行 Windows 项，状态只能是 `P1-A WORKSPACE HEADLESS PASS / WINDOWS DEVICE NOT RUN`。
-- [ ] 更新路线图：仅关闭 P1-A 工作区布局子项，复制/删除/卸载和版本生命周期保持开放。
-- [ ] 提交：`docs: record workspace layout headless evidence`，不 push。
+- [x] 运行 `dart format --output=none --set-exit-if-changed lib test`。
+- [x] 运行 `flutter analyze` 和完整 `flutter test`。
+- [x] 运行 `sh tooling/security/run-security-gate.sh` 和 `git diff --check`。
+- [x] 审计敏感信息、运行数据、构建和容器残留；测试用故意假凭据必须作为明确 fixture 处理。
+- [x] 记录精确 commit、测试数量、布局规则和未执行 Windows 项，状态只能是 `P1-A WORKSPACE HEADLESS PASS / WINDOWS DEVICE NOT RUN`。
+- [x] 更新路线图：仅关闭 P1-A 工作区布局子项，复制/删除/卸载和版本生命周期保持开放。
+- [x] 提交：`docs: record workspace layout headless evidence`，不 push。
