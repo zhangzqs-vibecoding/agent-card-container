@@ -31,6 +31,52 @@ void main() {
     expect(controller.cards.single.persistedState, {'count': 7});
   });
 
+  test('replaces one existing card in place and notifies once', () {
+    final second = _card(instanceId: 'instance-2', cardId: 'card-2');
+    final controller = WorkspaceController([_card(), second]);
+    addTearDown(controller.dispose);
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+
+    controller.replaceInstance(
+      _card(versionId: 'version-2', persistedState: const {'count': 8}),
+    );
+
+    expect(controller.cards.map((card) => card.instance.instanceId), [
+      'instance-1',
+      'instance-2',
+    ]);
+    expect(controller.cards.first.instance.versionId, 'version-2');
+    expect(controller.cards.first.persistedState, {'count': 8});
+    expect(notifications, 1);
+  });
+
+  test('rejects replacing an unknown instance or a different card', () {
+    final controller = WorkspaceController([_card()]);
+    addTearDown(controller.dispose);
+
+    expect(
+      () => controller.replaceInstance(_card(instanceId: 'missing')),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'workspace card instance does not exist',
+        ),
+      ),
+    );
+    expect(
+      () => controller.replaceInstance(_card(cardId: 'different-card')),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'replacement card identity does not match',
+        ),
+      ),
+    );
+  });
+
   test('updates immediately and debounces placement persistence', () async {
     final writes = <CardPlacement>[];
     final controller = WorkspaceController(
@@ -149,12 +195,17 @@ void main() {
   );
 }
 
-WorkspaceCard _card() {
+WorkspaceCard _card({
+  String instanceId = 'instance-1',
+  String cardId = 'card-1',
+  String versionId = 'version-1',
+  Map<String, Object?> persistedState = const {},
+}) {
   return WorkspaceCard(
-    instance: const CardInstance(
-      instanceId: 'instance-1',
-      cardId: 'card-1',
-      versionId: 'version-1',
+    instance: CardInstance(
+      instanceId: instanceId,
+      cardId: cardId,
+      versionId: versionId,
       surfaceId: 'workspace-main',
       placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
       stateNamespace: 'state-1',
@@ -165,5 +216,6 @@ WorkspaceCard _card() {
       'initialState': <String, Object?>{},
       'root': {'id': 'root', 'type': 'Text'},
     }),
+    persistedState: persistedState,
   );
 }

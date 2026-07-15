@@ -57,6 +57,22 @@ class WorkspaceController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void replaceInstance(WorkspaceCard card) {
+    final index = _cards.indexWhere(
+      (candidate) => candidate.instance.instanceId == card.instance.instanceId,
+    );
+    if (index < 0) {
+      throw StateError('workspace card instance does not exist');
+    }
+    if (_cards[index].instance.cardId != card.instance.cardId) {
+      throw StateError('replacement card identity does not match');
+    }
+    _placementTimers.remove(card.instance.instanceId)?.cancel();
+    _cards[index] = card;
+    _committedPlacements[card.instance.instanceId] = card.instance.placement;
+    notifyListeners();
+  }
+
   void moveInstance(
     String instanceId, {
     required String surfaceId,

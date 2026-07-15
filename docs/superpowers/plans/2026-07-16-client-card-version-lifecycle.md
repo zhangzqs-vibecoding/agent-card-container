@@ -153,11 +153,11 @@ Commit: `feat: orchestrate verified card version changes`
 - Modify: `apps/desktop/lib/src/cloud/card_version_lifecycle.dart`
 - Modify: `apps/desktop/test/cloud/card_version_lifecycle_test.dart`
 
-- [ ] **Step 1: 写原位替换测试**
+- [x] **Step 1: 写原位替换测试**
 
 新增 `replaceInstance(WorkspaceCard card)`：必须要求 instanceId 已存在且 cardId 相同，保持列表位置，只通知一次；未知实例或不同 card 抛出稳定 `StateError`。
 
-- [ ] **Step 2: 运行测试确认失败并实现最小方法**
+- [x] **Step 2: 运行测试确认失败并实现最小方法**
 
 Run: `cd apps/desktop && flutter test test/workspace/workspace_controller_test.dart`
 
