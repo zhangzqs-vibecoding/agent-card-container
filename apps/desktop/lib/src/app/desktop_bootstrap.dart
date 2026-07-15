@@ -20,6 +20,7 @@ import '../capabilities/permission_request_controller.dart';
 import '../capabilities/window_capability_handlers.dart';
 import '../cloud/card_install_coordinator.dart';
 import '../cloud/card_catalog_controller.dart';
+import '../cloud/card_version_lifecycle.dart';
 import '../cloud/cloud_api_client.dart';
 import '../cloud/cloud_connection_settings.dart';
 import '../cloud/cloud_settings_repository.dart';
@@ -493,6 +494,18 @@ _cloudConfiguration(
     }
   }
 
+  CardVersionLifecycle? versionLifecycle;
+  if (coordinator != null) {
+    versionLifecycle = CardVersionLifecycle(
+      database: database,
+      newBackupId: () => _randomID('backup_'),
+      newStateNamespace: () => _randomID('state_'),
+      now: DateTime.now,
+      buildWorkspaceCard: workspaceCardFactory.create,
+      replaceWorkspaceCard: workspace.replaceInstance,
+    );
+  }
+
   return (
     client: client,
     controller: AgentStudioController(
@@ -512,6 +525,32 @@ _cloudConfiguration(
     catalog: CardCatalogController(
       port: _CloudCatalogClient(client),
       installVersion: coordinator == null ? null : installCardVersion,
+      activeInstanceForCard: (cardId) => workspace.cards
+          .where((card) => card.instance.cardId == cardId)
+          .map((card) => card.instance)
+          .firstOrNull,
+      prepareVersionChange: coordinator == null || versionLifecycle == null
+          ? null
+          : (instanceId, cardId, targetVersion) async {
+              final artifact = await coordinator!
+                  .downloadAndRegisterCardVersion(
+                    cardId,
+                    targetVersion.versionId,
+                  );
+              final prepared = versionLifecycle!.prepare(instanceId, artifact);
+              return CatalogVersionChangeProposal(
+                instance: prepared.instance,
+                targetVersion: targetVersion,
+                difference: prepared.difference,
+                apply: (decision, approvedGrants) async {
+                  versionLifecycle!.applyAndActivate(
+                    prepared,
+                    decision: decision,
+                    approvedGrants: approvedGrants,
+                  );
+                },
+              );
+            },
     ),
   );
 }

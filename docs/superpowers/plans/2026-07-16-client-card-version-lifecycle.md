@@ -187,25 +187,25 @@ Commit: `feat: replace upgraded card runtime once`
 - Modify: `apps/desktop/lib/src/workspace/workspace_screen.dart`
 - Modify: `apps/desktop/test/workspace/workspace_screen_test.dart`
 
-- [ ] **Step 1: 写 controller 状态测试**
+- [x] **Step 1: 写 controller 状态测试**
 
 选择一个现有同卡实例后，版本历史应区分当前、可升级和可回滚；prepare/apply 期间禁用重复操作；拒绝不视为错误，异常映射为稳定中文恢复提示。
 
-- [ ] **Step 2: 写差异确认 widget 测试**
+- [x] **Step 2: 写差异确认 widget 测试**
 
 对话框展示新增/移除 capability、domain 和 schema 结论。兼容 schema 提供确认/取消；不兼容 schema 只能选择“继续使用当前版本”或“安装并重置”，不得出现“迁移”。
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `cd apps/desktop && flutter test test/cloud/card_catalog_controller_test.dart test/workspace/workspace_screen_test.dart`
 
 Expected: FAIL，现有 UI 只有“安装此版本”。
 
-- [ ] **Step 4: 实现最小 controller/UI 接线**
+- [x] **Step 4: 实现最小 controller/UI 接线**
 
 版本按钮按目标与当前 display version 显示“升级到此版本”或“回滚到此版本”；无同卡实例时保留“安装此版本”。用户确认后才调用 apply，成功 snackbar 显示目标版本，失败保留旧卡。
 
-- [ ] **Step 5: 格式化、测试并提交**
+- [x] **Step 5: 格式化、测试并提交**
 
 Run: `cd apps/desktop && dart format lib/src/cloud lib/src/workspace test/cloud test/workspace && flutter test test/cloud/card_catalog_controller_test.dart test/workspace/workspace_screen_test.dart`
 

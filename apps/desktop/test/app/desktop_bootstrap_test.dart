@@ -251,6 +251,8 @@ void main() {
         environment: const {
           'AGENTCARD_CLOUD_URL': 'https://api.agentcard.example',
           'AGENTCARD_ACCESS_TOKEN': 'ephemeral-test-token',
+          'AGENTCARD_TRUSTED_KEYS_JSON':
+              '{"release-key":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}',
         },
       );
       addTearDown(runtime.close);
@@ -258,6 +260,7 @@ void main() {
       expect(runtime.agentStudioController, isNotNull);
       expect(runtime.cloudClient, isNotNull);
       expect(runtime.cardCatalogController, isNotNull);
+      expect(runtime.cardCatalogController?.versionChangeAvailable, isTrue);
     },
   );
 

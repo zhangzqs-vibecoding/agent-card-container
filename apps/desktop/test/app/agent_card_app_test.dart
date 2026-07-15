@@ -7,6 +7,7 @@ import 'package:agent_card_desktop/src/cards/card_instance.dart';
 import 'package:agent_card_desktop/src/capabilities/capability.dart';
 import 'package:agent_card_desktop/src/capabilities/capability_broker.dart';
 import 'package:agent_card_desktop/src/cloud/card_catalog_controller.dart';
+import 'package:agent_card_desktop/src/cloud/card_version_lifecycle.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_api_client.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_connection_settings.dart';
 import 'package:agent_card_desktop/src/cloud/cloud_settings_controller.dart';
@@ -552,6 +553,75 @@ void main() {
     expect(installed, ['card_01/ver_01']);
   });
 
+  testWidgets('confirms differences before upgrading and resetting state', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final instance = const CardInstance(
+      instanceId: 'instance-1',
+      cardId: 'card_01',
+      versionId: 'ver_01',
+      surfaceId: 'workspace-main',
+      placement: CardPlacement(x: 0, y: 0, width: 4, height: 3),
+      stateNamespace: 'state-1',
+      status: CardInstanceStatus.active,
+    );
+    CardVersionDecision? appliedDecision;
+    Set<PermissionGrant>? approved;
+    final proposal = CatalogVersionChangeProposal(
+      instance: instance,
+      targetVersion: _upgradeCatalogVersion,
+      difference: CardVersionDifference(
+        addedCapabilities: const ['clipboard.read', 'network.fetch'],
+        removedCapabilities: const ['storage'],
+        addedDomains: const ['new.example.com'],
+        removedDomains: const ['old.example.com'],
+        currentStateSchemaVersion: 1,
+        targetStateSchemaVersion: 2,
+      ),
+      apply: (decision, grants) async {
+        appliedDecision = decision;
+        approved = grants;
+      },
+    );
+    final catalog = CardCatalogController(
+      port: _UpgradeCatalogFixture(),
+      activeInstanceForCard: (_) => instance,
+      prepareVersionChange: (_, _, _) async => proposal,
+    );
+    addTearDown(catalog.dispose);
+    await catalog.refresh();
+    await catalog.selectCard('card_01');
+    await tester.pumpWidget(AgentCardApp(cardCatalogController: catalog));
+
+    await tester.tap(find.byIcon(Icons.history_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('升级到此版本'), findsOneWidget);
+    await tester.tap(find.text('升级到此版本'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('版本能力与状态确认'), findsOneWidget);
+    expect(find.textContaining('clipboard.read'), findsOneWidget);
+    expect(find.textContaining('new.example.com'), findsOneWidget);
+    expect(find.textContaining('状态 schema 1 → 2'), findsOneWidget);
+    expect(find.textContaining('迁移'), findsNothing);
+    await tester.tap(find.text('安装并重置'));
+    await tester.pumpAndSettle();
+
+    expect(appliedDecision, CardVersionDecision.resetState);
+    expect(approved?.map((grant) => grant.capability).toSet(), {
+      'clipboard.read',
+      'network.fetch',
+    });
+    expect(
+      approved
+          ?.singleWhere((grant) => grant.capability == 'network.fetch')
+          .domains,
+      {'new.example.com'},
+    );
+  });
+
   testWidgets('fails closed when CodeCard isolation is unavailable', (
     tester,
   ) async {
@@ -721,6 +791,26 @@ class _CatalogFixture implements CloudCatalogPort {
   );
 }
 
+class _UpgradeCatalogFixture implements CloudCatalogPort {
+  @override
+  Future<List<CloudCardSummary>> listCards() async => [
+    CloudCardSummary(
+      cardId: 'card_01',
+      title: '离线番茄钟',
+      description: '无需网络即可计时',
+      latestVersion: _upgradeCatalogVersion,
+    ),
+  ];
+
+  @override
+  Future<CloudCardDetail> getCard(String cardId) async => CloudCardDetail(
+    cardId: cardId,
+    title: '离线番茄钟',
+    description: '无需网络即可计时',
+    versions: [_upgradeCatalogVersion, _catalogVersion],
+  );
+}
+
 final _catalogVersion = CloudCardVersion(
   versionId: 'ver_01',
   cardId: 'card_01',
@@ -736,4 +826,17 @@ final _catalogVersion = CloudCardVersion(
     'reason': '自动选择 NativeCard：只需声明式状态与计时器',
   },
   createdAt: DateTime.utc(2026, 7, 12),
+);
+
+final _upgradeCatalogVersion = CloudCardVersion(
+  versionId: 'ver_02',
+  cardId: 'card_01',
+  runtime: 'native',
+  displayVersion: '1.0.1',
+  title: '离线番茄钟',
+  description: '增加剪贴板能力',
+  artifactSha256: List.filled(64, 'b').join(),
+  keyId: 'key-1',
+  preview: const {},
+  createdAt: DateTime.utc(2026, 7, 13),
 );

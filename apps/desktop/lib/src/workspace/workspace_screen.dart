@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 import '../adapters/in_app_webview_port.dart';
 import '../agent_studio/agent_studio_controller.dart';
 import '../cloud/card_catalog_controller.dart';
+import '../cloud/card_version_lifecycle.dart';
 import '../cloud/cloud_api_client.dart';
 import '../cloud/cloud_settings_controller.dart';
 import '../cloud/cloud_settings_section.dart';
 import '../code_card/code_card_host.dart';
+import '../capabilities/capability.dart';
 import '../native_card/native_card_controller.dart';
 import '../native_card/native_card_renderer.dart';
 import '../runtime/runtime_activity_budget.dart';
@@ -265,6 +267,9 @@ class _VersionHistory extends StatelessWidget {
                     final version = card.versions[index];
                     final installing =
                         catalog.installingVersionId == version.versionId;
+                    final changing =
+                        catalog.changingVersionId == version.versionId;
+                    final action = catalog.actionFor(version);
                     return Card(
                       child: ListTile(
                         contentPadding: const EdgeInsets.all(18),
@@ -283,12 +288,19 @@ class _VersionHistory extends StatelessWidget {
                               child: const Text('预览'),
                             ),
                             FilledButton(
-                              onPressed:
-                                  catalog.installationAvailable &&
-                                      catalog.installingVersionId == null
-                                  ? () => catalog.install(version.versionId)
+                              onPressed: _versionActionEnabled(catalog, action)
+                                  ? () => _handleVersionAction(
+                                      context,
+                                      catalog,
+                                      version,
+                                      action,
+                                    )
                                   : null,
-                              child: Text(installing ? '安装中…' : '安装此版本'),
+                              child: Text(
+                                installing || changing
+                                    ? '处理中…'
+                                    : _versionActionLabel(action),
+                              ),
                             ),
                           ],
                         ),
@@ -300,6 +312,138 @@ class _VersionHistory extends StatelessWidget {
       },
     );
   }
+}
+
+bool _versionActionEnabled(
+  CardCatalogController catalog,
+  CatalogVersionAction action,
+) {
+  if (catalog.installingVersionId != null ||
+      catalog.changingVersionId != null ||
+      action == CatalogVersionAction.current) {
+    return false;
+  }
+  return action == CatalogVersionAction.install
+      ? catalog.installationAvailable
+      : catalog.versionChangeAvailable;
+}
+
+String _versionActionLabel(CatalogVersionAction action) {
+  return switch (action) {
+    CatalogVersionAction.install => '安装此版本',
+    CatalogVersionAction.current => '当前版本',
+    CatalogVersionAction.upgrade => '升级到此版本',
+    CatalogVersionAction.rollback => '回滚到此版本',
+  };
+}
+
+Future<void> _handleVersionAction(
+  BuildContext context,
+  CardCatalogController catalog,
+  CloudCardVersion version,
+  CatalogVersionAction action,
+) async {
+  if (action == CatalogVersionAction.install) {
+    await catalog.install(version.versionId);
+    return;
+  }
+  final proposal = await catalog.prepareChange(version.versionId);
+  if (proposal == null || !context.mounted) return;
+  final decision = await _showVersionChangeDialog(context, proposal, action);
+  if (decision == null) {
+    catalog.cancelChange();
+    return;
+  }
+  await catalog.applyChange(
+    proposal,
+    decision,
+    _approvedDifferenceGrants(proposal),
+  );
+}
+
+Set<PermissionGrant> _approvedDifferenceGrants(
+  CatalogVersionChangeProposal proposal,
+) {
+  final capabilities = proposal.difference.addedCapabilities.toSet();
+  if (proposal.difference.addedDomains.isNotEmpty) {
+    capabilities.add('network.fetch');
+  }
+  return {
+    for (final capability in capabilities)
+      PermissionGrant(
+        instanceId: proposal.instance.instanceId,
+        versionId: proposal.targetVersion.versionId,
+        capability: capability,
+        domains: capability == 'network.fetch'
+            ? proposal.difference.addedDomains.toSet()
+            : const {},
+      ),
+  };
+}
+
+Future<CardVersionDecision?> _showVersionChangeDialog(
+  BuildContext context,
+  CatalogVersionChangeProposal proposal,
+  CatalogVersionAction action,
+) {
+  final difference = proposal.difference;
+  final incompatible = !difference.stateCompatible;
+  final confirmDecision = incompatible
+      ? action == CatalogVersionAction.rollback
+            ? CardVersionDecision.restoreState
+            : CardVersionDecision.resetState
+      : CardVersionDecision.reuseState;
+  final confirmLabel = incompatible
+      ? action == CatalogVersionAction.rollback
+            ? '回滚并恢复状态'
+            : '安装并重置'
+      : action == CatalogVersionAction.rollback
+      ? '确认回滚'
+      : '确认升级';
+  return showDialog<CardVersionDecision>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: const Text('版本能力与状态确认'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _differenceLine('新增能力', difference.addedCapabilities),
+            _differenceLine('移除能力', difference.removedCapabilities),
+            _differenceLine('新增网络域', difference.addedDomains),
+            _differenceLine('移除网络域', difference.removedDomains),
+            const SizedBox(height: 12),
+            Text(
+              '状态 schema ${difference.currentStateSchemaVersion} → '
+              '${difference.targetStateSchemaVersion}',
+            ),
+            const SizedBox(height: 6),
+            Text(incompatible ? '状态结构不兼容；继续后会先备份当前状态。' : '状态结构兼容，将继续使用当前本地状态。'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(incompatible ? '继续使用当前版本' : '取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, confirmDecision),
+          child: Text(confirmLabel),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _differenceLine(String label, List<String> values) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text('$label：${values.isEmpty ? '无' : values.join('、')}'),
+  );
 }
 
 Future<void> _showVersionPreview(
