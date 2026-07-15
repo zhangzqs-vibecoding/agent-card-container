@@ -2,7 +2,9 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 )
 
 const (
@@ -51,6 +55,16 @@ type codeCardEvalReport struct {
 	EstimatedCostUSD  float64
 	CostKnown         bool
 	Duration          time.Duration
+	FailureKinds      map[string]int
+}
+
+type codeCardEvalPricing struct {
+	InputUSDPerMillion  float64
+	OutputUSDPerMillion float64
+}
+
+type codeCardEvalGenerator interface {
+	Generate(context.Context, Request) (Result, error)
 }
 
 func (report codeCardEvalReport) Failures() []string {
@@ -92,7 +106,90 @@ func (report codeCardEvalReport) clone() codeCardEvalReport {
 	for category, successes := range report.CategorySuccesses {
 		cloned.CategorySuccesses[category] = successes
 	}
+	cloned.FailureKinds = make(map[string]int, len(report.FailureKinds))
+	for kind, count := range report.FailureKinds {
+		cloned.FailureKinds[kind] = count
+	}
 	return cloned
+}
+
+func runCodeCardEvalSuite(
+	ctx context.Context,
+	generator codeCardEvalGenerator,
+	cases []codeCardEvalCase,
+	pricing codeCardEvalPricing,
+	logf func(string, ...any),
+) codeCardEvalReport {
+	startedAt := time.Now()
+	report := codeCardEvalReport{
+		Total:             len(cases),
+		CategorySuccesses: make(map[string]int, len(codeCardEvalCategoryCounts)),
+		FailureKinds:      make(map[string]int),
+		CostKnown:         pricing.InputUSDPerMillion > 0 && pricing.OutputUSDPerMillion > 0,
+	}
+	for _, evalCase := range cases {
+		caseStartedAt := time.Now()
+		caseContext, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		result, err := generator.Generate(caseContext, Request{
+			SessionID: "codecard-eval-" + evalCase.ID,
+			Requirement: generation.RequirementSnapshot{
+				InitialPrompt:       evalCase.Prompt,
+				Target:              generation.TargetWeb,
+				Locale:              "zh-CN",
+				AllowedCapabilities: append([]string(nil), evalCase.AllowedCapabilities...),
+			},
+		})
+		cancel()
+		report.ModelCalls += result.Attempts
+		report.InputTokens += result.InputTokens
+		report.OutputTokens += result.OutputTokens
+		kind := ""
+		switch {
+		case ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
+			kind = "cancelled"
+		case err != nil:
+			kind = "generation_failed"
+		case len(result.Files["index.html"]) == 0:
+			kind = "invalid_artifact"
+		default:
+			report.Successes++
+			report.CategorySuccesses[evalCase.Category]++
+		}
+		if kind != "" {
+			report.FailureKinds[kind]++
+		}
+		status := "passed"
+		if kind != "" {
+			status = "failed"
+		}
+		logf(
+			"case id=%s category=%s status=%s attempts=%d inputTokens=%d outputTokens=%d durationMs=%d errorKind=%s",
+			evalCase.ID,
+			evalCase.Category,
+			status,
+			result.Attempts,
+			result.InputTokens,
+			result.OutputTokens,
+			time.Since(caseStartedAt).Milliseconds(),
+			kind,
+		)
+	}
+	report.Duration = time.Since(startedAt)
+	if report.CostKnown {
+		report.EstimatedCostUSD =
+			float64(report.InputTokens)/1_000_000*pricing.InputUSDPerMillion +
+				float64(report.OutputTokens)/1_000_000*pricing.OutputUSDPerMillion
+	}
+	logf(
+		"summary success=%d total=%d modelCalls=%d inputTokens=%d outputTokens=%d durationMs=%d",
+		report.Successes,
+		report.Total,
+		report.ModelCalls,
+		report.InputTokens,
+		report.OutputTokens,
+		report.Duration.Milliseconds(),
+	)
+	return report
 }
 
 func loadCodeCardEvalCasesFile(path string) ([]codeCardEvalCase, error) {

@@ -2,10 +2,17 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/zzq/agent-card-container/services/cloud/internal/generation"
 )
 
 const codeCardEvalFixturePath = "testdata/codecard_eval_cases.v1.json"
@@ -166,4 +173,130 @@ func TestCodeCardEvalReportEnforcesQualityAndBudgets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCodeCardEvalRunnerIsSerialBoundedAndDoesNotLeakContent(t *testing.T) {
+	t.Parallel()
+
+	cases, err := loadCodeCardEvalCasesFile(codeCardEvalFixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	generator := &fakeCodeCardEvalGenerator{failSession: "codecard-eval-game-tic-tac-toe"}
+	var lines []string
+	report := runCodeCardEvalSuite(
+		context.Background(),
+		generator,
+		cases,
+		codeCardEvalPricing{InputUSDPerMillion: 0.1, OutputUSDPerMillion: 0.2},
+		func(format string, arguments ...any) { lines = append(lines, fmt.Sprintf(format, arguments...)) },
+	)
+
+	if report.Total != 20 || report.Successes != 19 || report.ModelCalls != 20 || report.InputTokens != 2000 || report.OutputTokens != 1000 {
+		t.Fatalf("report = %#v", report)
+	}
+	if generator.maxActive != 1 || len(generator.sessions) != 20 || report.FailureKinds["generation_failed"] != 1 {
+		t.Fatalf("generator=%#v failures=%#v", generator, report.FailureKinds)
+	}
+	if !report.CostKnown || report.EstimatedCostUSD <= 0 {
+		t.Fatalf("cost = known:%t value:%f", report.CostKnown, report.EstimatedCostUSD)
+	}
+	output := strings.Join(lines, "\n")
+	for _, forbidden := range []string{
+		cases[0].Prompt,
+		"sensitive generated source",
+		"provider-sensitive-marker",
+		"AGENTCARD_MODEL_API_KEY",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("runner output leaked %q: %s", forbidden, output)
+		}
+	}
+	if !strings.Contains(output, "id=canvas-free-draw") || !strings.Contains(output, "summary success=19 total=20") {
+		t.Fatalf("runner output is incomplete: %s", output)
+	}
+}
+
+func TestCodeCardEvalRunnerRequiresKnownPositivePricing(t *testing.T) {
+	t.Parallel()
+
+	cases, err := loadCodeCardEvalCasesFile(codeCardEvalFixturePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report := runCodeCardEvalSuite(
+		context.Background(),
+		&fakeCodeCardEvalGenerator{},
+		cases,
+		codeCardEvalPricing{},
+		func(string, ...any) {},
+	)
+	if report.CostKnown || !containsString(report.Failures(), "cost:unknown") {
+		t.Fatalf("report = %#v failures=%v", report, report.Failures())
+	}
+}
+
+func TestDeepSeekLiveWorkflowContainsExplicitBoundedCodeCardGate(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join("..", "..", "..", "..", ".github", "workflows", "deepseek-live.yml")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(content)
+	for _, required := range []string{
+		"confirm_codecard_paid_test",
+		"timeout-minutes: 100",
+		"TestDeepSeekLiveCodeCardQualityGate",
+		"AGENTCARD_CODECARD_LIVE: '1'",
+		"AGENTCARD_SANDBOX_TEST_IMAGE",
+		"AGENTCARD_MODEL_INPUT_USD_PER_MILLION",
+		"AGENTCARD_MODEL_OUTPUT_USD_PER_MILLION",
+	} {
+		if !strings.Contains(source, required) {
+			t.Fatalf("workflow is missing %q", required)
+		}
+	}
+}
+
+type fakeCodeCardEvalGenerator struct {
+	active      int
+	maxActive   int
+	sessions    []string
+	failSession string
+}
+
+func (generator *fakeCodeCardEvalGenerator) Generate(_ context.Context, request Request) (Result, error) {
+	generator.active++
+	defer func() { generator.active-- }()
+	if generator.active > generator.maxActive {
+		generator.maxActive = generator.active
+	}
+	generator.sessions = append(generator.sessions, request.SessionID)
+	result := Result{
+		Runtime:      RuntimeWeb,
+		Attempts:     1,
+		InputTokens:  100,
+		OutputTokens: 50,
+		Files: map[string][]byte{
+			"index.html": []byte("sensitive generated source"),
+		},
+	}
+	if request.Requirement.Target != generation.TargetWeb {
+		return result, errors.New("target drift")
+	}
+	if request.SessionID == generator.failSession {
+		return result, errors.New("provider-sensitive-marker")
+	}
+	return result, nil
+}
+
+func containsString(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }

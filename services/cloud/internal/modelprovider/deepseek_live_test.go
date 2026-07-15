@@ -58,7 +58,7 @@ func (provider *countingProvider) Generate(
 	return provider.delegate.Generate(ctx, request)
 }
 
-func TestDeepSeekLiveWorkflowRunsSingleBoundedQualityGate(t *testing.T) {
+func TestDeepSeekLiveWorkflowRunsBoundedQualityGates(t *testing.T) {
 	t.Parallel()
 
 	workflowPath := filepath.Join("..", "..", "..", "..", ".github", "workflows", "deepseek-live.yml")
@@ -79,16 +79,15 @@ func TestDeepSeekLiveWorkflowRunsSingleBoundedQualityGate(t *testing.T) {
 		}
 	}
 	if strings.Count(source, "go test ./internal/modelprovider") != 1 ||
-		strings.Count(source, "${{ secrets.AGENTCARD_MODEL_API_KEY }}") != 1 {
-		t.Fatalf("workflow must run one paid suite with one secret env binding")
+		strings.Count(source, "go test ./internal/agent") != 1 ||
+		strings.Count(source, "${{ secrets.AGENTCARD_MODEL_API_KEY }}") != 2 {
+		t.Fatalf("workflow must run two bounded paid suites with one secret env binding each")
 	}
-	runIndex := strings.Index(source, "        run: |")
-	if runIndex < 0 {
-		t.Fatal("workflow has no run block")
-	}
-	runBlock := source[runIndex:]
-	if strings.Contains(runBlock, "secrets.") {
-		t.Fatal("workflow run script references a secret directly")
+	for _, line := range strings.Split(source, "\n") {
+		if strings.Contains(line, "secrets.") &&
+			!strings.Contains(line, "AGENTCARD_MODEL_API_KEY:") {
+			t.Fatalf("workflow references a secret outside its env binding: %q", line)
+		}
 	}
 }
 

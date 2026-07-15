@@ -8,6 +8,11 @@ on:
         type: boolean
         required: true
         default: false
+      confirm_codecard_paid_test:
+        description: Confirm the paid 20-case DeepSeek CodeCard quality gate
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -43,4 +48,46 @@ jobs:
             -run '^TestDeepSeekLiveNativeCardQualityGate$' \
             -count=1 \
             -timeout=35m \
+            -v
+
+  codecard:
+    if: inputs.confirm_codecard_paid_test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    environment: deepseek-live
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: '1.26.x'
+          cache-dependency-path: services/cloud/go.sum
+      - name: Build the pinned CodeCard sandbox
+        shell: bash
+        run: |
+          docker build \
+            --tag agent-card-codecard-live:local \
+            --file tooling/sandbox-image/Dockerfile .
+          image=$(docker image inspect agent-card-codecard-live:local --format '{{.Id}}')
+          case "$image" in sha256:*) ;; *) exit 1 ;; esac
+          echo "AGENTCARD_SANDBOX_TEST_IMAGE=$image" >> "$GITHUB_ENV"
+      - name: Run the paid CodeCard quality gate with DeepSeek
+        working-directory: services/cloud
+        shell: bash
+        env:
+          AGENTCARD_DEEPSEEK_LIVE: '1'
+          AGENTCARD_CODECARD_LIVE: '1'
+          AGENTCARD_MODEL_BASE_URL: https://api.deepseek.com
+          AGENTCARD_MODEL: ${{ vars.AGENTCARD_MODEL }}
+          AGENTCARD_MODEL_API_KEY: ${{ secrets.AGENTCARD_MODEL_API_KEY }}
+          AGENTCARD_MODEL_INPUT_USD_PER_MILLION: ${{ vars.AGENTCARD_MODEL_INPUT_USD_PER_MILLION }}
+          AGENTCARD_MODEL_OUTPUT_USD_PER_MILLION: ${{ vars.AGENTCARD_MODEL_OUTPUT_USD_PER_MILLION }}
+        run: |
+          test -n "$AGENTCARD_MODEL"
+          test -n "$AGENTCARD_MODEL_API_KEY"
+          test -n "$AGENTCARD_MODEL_INPUT_USD_PER_MILLION"
+          test -n "$AGENTCARD_MODEL_OUTPUT_USD_PER_MILLION"
+          go test ./internal/agent \
+            -run '^TestDeepSeekLiveCodeCardQualityGate$' \
+            -count=1 \
+            -timeout=95m \
             -v

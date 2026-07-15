@@ -59,15 +59,15 @@
 
 **文件：**
 
-- Create: `services/cloud/internal/modelprovider/codecard_live_test.go`
+- Create: `services/cloud/internal/agent/codecard_live_test.go`
 - Modify: `.github/workflows/deepseek-live.yml`
 
-- [ ] RED：付费 gate 可无限调用、缺少明确确认、未绑定 secret env 或能绕过固定 fixture 时失败。
-- [ ] 复用生产 CodingAgent 和真实 Docker builder，逐例输出非敏感统计。
-- [ ] 强制 3 calls/case、60 calls/suite、token、费用和 90 分钟上限；不得自动无限重跑。
-- [ ] 报告失败类别只使用稳定枚举，不保存 prompt、源码或上游正文。
+- [x] RED：付费 gate 可无限调用、缺少明确确认、未绑定 secret env 或能绕过固定 fixture 时失败。
+- [x] 复用生产 CodingAgent 和真实 Docker builder，逐例输出非敏感统计。
+- [x] 强制 3 calls/case、60 calls/suite、token、费用和 90 分钟上限；不得自动无限重跑。
+- [x] 报告失败类别只使用稳定枚举，不保存 prompt、源码或上游正文。
 - [ ] 在明确临时环境变量下注入真实模型凭据运行一次；没有凭据时保持 opt-in skip。
-- [ ] 提交：`test: add bounded live CodeCard quality gate`。
+- [x] 提交：`test: add bounded live CodeCard quality gate`。
 
 ## Task 5：Linux Chromium 的运行时与离线门禁
 
