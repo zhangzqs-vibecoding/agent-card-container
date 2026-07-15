@@ -349,6 +349,52 @@ void main() {
     expect(moved.y, 3);
   });
 
+  testWidgets('restores layout and shows a redacted persistence error', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final workspace = WorkspaceController(
+      [_workspaceTestCard()],
+      persistPlacement: (_, _, _) async =>
+          throw Exception('private database path'),
+    );
+    addTearDown(workspace.dispose);
+    await tester.pumpWidget(AgentCardApp(workspaceController: workspace));
+
+    await tester.drag(
+      find.byKey(const Key('card-drag-instance-layout')),
+      const Offset(100, 80),
+    );
+    await tester.pump(const Duration(milliseconds: 301));
+    await tester.pump();
+
+    expect(workspace.cards.single.instance.placement.x, 0);
+    expect(find.text('布局保存失败，已恢复上次位置'), findsOneWidget);
+    expect(find.textContaining('private database path'), findsNothing);
+    await tester.tap(find.byKey(const Key('dismiss-layout-error')));
+    await tester.pump();
+    expect(find.text('布局保存失败，已恢复上次位置'), findsNothing);
+  });
+
+  testWidgets('opens and focuses Agent Studio from the empty workspace', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const AgentCardApp());
+    await tester.tap(find.byKey(const Key('collapse-agent-panel')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('generate-card-empty-state')));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('agent-prompt-field')),
+    );
+    expect(field.focusNode?.hasFocus, isTrue);
+  });
+
   testWidgets('NativeCard invokes host abilities through its attached broker', (
     tester,
   ) async {

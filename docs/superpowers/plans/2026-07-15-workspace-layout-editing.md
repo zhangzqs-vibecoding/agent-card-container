@@ -82,12 +82,12 @@
 - Modify: `apps/desktop/lib/src/workspace/workspace_screen.dart`
 - Modify: `apps/desktop/test/app/agent_card_app_test.dart`
 
-- [ ] RED：模拟持久化失败，断言 Widget 回到旧位置，显示“布局保存失败，已恢复上次位置”，且不包含注入的数据库异常正文。
-- [ ] GREEN：工作区监听 controller 稳定错误并提供关闭按钮；关闭只清 UI 错误，不改 placement。
-- [ ] RED：空工作区点击 `generate-card-empty-state` 后 Agent Studio 从折叠状态展开并聚焦 prompt 输入框。
-- [ ] GREEN：把空状态按钮接到现有 `onOpenAgentPanel`，删除空回调。
-- [ ] 运行相关 widget test。
-- [ ] 提交：`fix: surface recoverable workspace edit failures`。
+- [x] RED：模拟持久化失败，断言 Widget 回到旧位置，显示“布局保存失败，已恢复上次位置”，且不包含注入的数据库异常正文。
+- [x] GREEN：工作区监听 controller 稳定错误并提供关闭按钮；关闭只清 UI 错误，不改 placement。
+- [x] RED：空工作区点击 `generate-card-empty-state` 后 Agent Studio 从折叠状态展开并聚焦 prompt 输入框。
+- [x] GREEN：把空状态按钮接到现有 `onOpenAgentPanel`，删除空回调。
+- [x] 运行相关 widget test。
+- [x] 提交：`fix: surface recoverable workspace edit failures`。
 
 ## Task 6：验收与文档收口
 

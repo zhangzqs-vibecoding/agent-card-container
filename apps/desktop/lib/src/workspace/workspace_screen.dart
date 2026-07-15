@@ -61,6 +61,22 @@ class WorkspaceScreen extends StatefulWidget {
 class _WorkspaceScreenState extends State<WorkspaceScreen> {
   bool _agentPanelOpen = true;
   int _selectedDestination = 0;
+  final FocusNode _agentPromptFocusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _agentPromptFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _openAgentPanel() {
+    if (!_agentPanelOpen) {
+      setState(() => _agentPanelOpen = true);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _agentPromptFocusNode.requestFocus();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,6 +119,7 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                       child: _agentPanelOpen
                           ? _AgentPanel(
                               controller: widget.agentStudioController,
+                              promptFocusNode: _agentPromptFocusNode,
                               onCollapse: () {
                                 setState(() => _agentPanelOpen = false);
                               },
@@ -151,13 +168,13 @@ class _WorkspaceScreenState extends State<WorkspaceScreen> {
                 .where((card) => card.instance.surfaceId == 'workspace-main')
                 .toList(growable: false),
         agentPanelOpen: _agentPanelOpen,
-        onOpenAgentPanel: () {
-          setState(() => _agentPanelOpen = true);
-        },
+        onOpenAgentPanel: _openAgentPanel,
         onNativeCardStateChanged: widget.onNativeCardStateChanged,
         onDetachCard: widget.onDetachCard,
         onMoveCardToOverlay: widget.onMoveCardToOverlay,
         onEditPlacement: widget.workspaceController?.editPlacement,
+        layoutErrorMessage: widget.workspaceController?.layoutErrorMessage,
+        onDismissLayoutError: widget.workspaceController?.clearLayoutError,
       ),
     );
   }
@@ -709,6 +726,8 @@ class _WorkspaceCanvas extends StatelessWidget {
     this.onDetachCard,
     this.onMoveCardToOverlay,
     this.onEditPlacement,
+    this.layoutErrorMessage,
+    this.onDismissLayoutError,
   });
 
   final InAppWebViewPortFactory webViewPortFactory;
@@ -720,6 +739,8 @@ class _WorkspaceCanvas extends StatelessWidget {
   final CardSurfaceAction? onDetachCard;
   final CardSurfaceAction? onMoveCardToOverlay;
   final CardPlacementEdit? onEditPlacement;
+  final String? layoutErrorMessage;
+  final VoidCallback? onDismissLayoutError;
 
   @override
   Widget build(BuildContext context) {
@@ -831,7 +852,8 @@ class _WorkspaceCanvas extends StatelessWidget {
                       ),
                       const SizedBox(height: 24),
                       FilledButton.icon(
-                        onPressed: () {},
+                        key: const Key('generate-card-empty-state'),
+                        onPressed: onOpenAgentPanel,
                         icon: const Icon(Icons.add_rounded, size: 18),
                         label: const Text('生成卡片'),
                         style: FilledButton.styleFrom(
@@ -874,6 +896,44 @@ class _WorkspaceCanvas extends StatelessWidget {
                   columnWidth: columnWidth,
                   rowHeight: 80,
                   onEditPlacement: onEditPlacement,
+                ),
+              ),
+            if (layoutErrorMessage case final message?)
+              Positioned(
+                left: 28,
+                right: 28,
+                top: 68,
+                child: Material(
+                  color: colors.errorContainer,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.restore_rounded,
+                          size: 18,
+                          color: colors.onErrorContainer,
+                        ),
+                        const SizedBox(width: 9),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(color: colors.onErrorContainer),
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('dismiss-layout-error'),
+                          tooltip: '关闭提示',
+                          onPressed: onDismissLayoutError,
+                          icon: const Icon(Icons.close_rounded, size: 18),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             if (!agentPanelOpen)
@@ -1237,9 +1297,14 @@ class _WorkspaceCardViewState extends State<_WorkspaceCardView> {
 enum _SurfaceAction { detach, overlay }
 
 class _AgentPanel extends StatefulWidget {
-  const _AgentPanel({required this.onCollapse, this.controller});
+  const _AgentPanel({
+    required this.onCollapse,
+    required this.promptFocusNode,
+    this.controller,
+  });
 
   final VoidCallback onCollapse;
+  final FocusNode promptFocusNode;
   final AgentStudioController? controller;
 
   @override
@@ -1364,6 +1429,7 @@ class _AgentPanelState extends State<_AgentPanel> {
                           Expanded(
                             child: TextField(
                               key: const Key('agent-prompt-field'),
+                              focusNode: widget.promptFocusNode,
                               controller: _promptController,
                               maxLines: 4,
                               minLines: 1,
