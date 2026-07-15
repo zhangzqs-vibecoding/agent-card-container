@@ -3,7 +3,7 @@
 状态：**已确认，实施中**
 记录日期：2026-07-13（Asia/Shanghai）
 最近核对：2026-07-15（Asia/Shanghai）
-代码基线：`b77b677`
+代码基线：`039c4f2`
 
 ## 1. 文档目的
 
@@ -36,7 +36,7 @@
 | 5 | Windows WebView2、多窗口、悬浮、DPI、IME 和性能 | **开放，设备依赖** | 当前只能保留 `NOT RUN`；必须由 Windows 参考设备生成绑定 commit 的证据。 |
 | 6 | 工作区拖动、缩放、碰撞和布局编辑 | **开放** | 归入 P1-A，不在 P0-A/P0-B 中提前扩展。 |
 | 7 | 同卡迭代、升级和回滚 | **开放** | 归入 P1-A；需要 `baseCardId`/`baseVersionId`、能力差异、同 schema 状态复用及异 schema 备份/重置流程。MVP 不执行 Agent 生成的状态迁移。 |
-| 8 | worker heartbeat、事务、重试与发布幂等 | **开放，局部关闭** | P0-A 已完成模型调用的有界可重试错误分类；完整租约、事务、发布幂等和部分失败恢复仍属于 P1-B。 |
+| 8 | worker heartbeat、事务、重试与发布幂等 | **HEADLESS PASS** | 原子确认/入队、租约 heartbeat/fencing、稳定发布身份、基础设施有限重试及五阶段部分失败恢复已通过 race 与 PostgreSQL/MinIO 门禁；Windows 消费仍属设备范围。 |
 | 9 | CodeCard 正式 builder 和真实生成链路 | **开放** | 沙箱 adapter 自动化已通过，P1-C 才启用受控镜像、真实 Agent 生成和 Windows WebView2 闸门。 |
 | 10 | Windows/macOS 可信发行 | **开放** | Authenticode、正式安装器、WebView2 缺失引导、macOS 签名和 notarization 归入 P2。 |
 
@@ -50,7 +50,7 @@
 | P0-B 持久化测试环境 | **LOCAL HEADLESS PASS / REMOTE NOT RUN** | PostgreSQL/MinIO、`/readyz`、服务与数据依赖重启、网络下载、独立验签和成对备份恢复均通过可重复 Docker 门禁 | 在固定测试服务器复跑并证明 Windows 参考设备网络可达 | 可用测试服务器；Windows 设备消费属于 P0-C |
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
 | P1-A 工作区与版本生命周期 | **未开始** | 现有 placement、Surface 和版本查询骨架 | 独立设计/计划；完成拖放缩放、实例管理、同卡升级与回滚 | P0-C 暴露的问题已分类 |
-| P1-B worker 可靠性 | **计划已形成，待实施** | PostgreSQL job store、现有租约与取消边界、`docs/superpowers/plans/2026-07-15-p1b-worker-reliability.md` | heartbeat、事务一致性、稳定发布身份、有限重试和故障恢复矩阵 | P0-B 本地持久化门禁已满足开发前置；固定远程复验不阻塞 headless 实现 |
+| P1-B worker 可靠性 | **HEADLESS PASS** | 原子确认/入队、90s/30s lease heartbeat、owner fencing、稳定 card/version、1s/2s 基础设施退避、取消传播及真实 PostgreSQL/MinIO crash recovery | 保持回归稳定；Windows 产品消费证据随 P0-C/P1-C 收集 | Linux/headless 不再有外部依赖 |
 | P1-C CodeCard 生产链路 | **未开始，沙箱基础已有** | 本地 Runtime Server、RPC、受限 OCI 沙箱和自动化安全门 | 受控 builder 镜像、CodeCard 固定评测、真实生成及 Windows 离线 WebView2 证据 | P0-A、P0-B、P1-B |
 | P2 可信发行与 macOS | **未开始** | 静态安装器/entitlement 结构和跨平台 CI | Windows 签名发行、干净机升级卸载；macOS 签名、notarization 和设备闸门 | P0/P1 功能链路与 Windows M0 设备闸门通过；M4 完整通过是本阶段退出条件 |
 
@@ -338,7 +338,7 @@ MVP 先使用现有结构化日志、聚合查询和少量指标端点；在单�
 P0-A 已完成 Linux/headless 范围的独立实施计划，状态为 `HEADLESS PASS`。当前按“关键路径 + 并行泳道”继续推进：
 
 1. P0-B 已达到 `LOCAL HEADLESS PASS`；在固定测试服务器复跑相同门禁并证明 Windows 参考设备可达后，才更新为远程 `PASS`。
-2. 立即启动 P1-B 的非设备工作，优先关闭 heartbeat、确认/入队事务、发布幂等和部分失败恢复；本地持久化门禁已经满足其开发前置条件。
+2. P1-B 已达到 `HEADLESS PASS`；保持扩展后的持久化门禁稳定，Windows 消费证据不反向替代或扩大该结论。
 3. P0-B 为 `PASS` 后，在 Windows 11 x64 参考设备执行 P0-C。此前 Windows 安装、交互、状态保留和断网重启保持 `DEVICE NOT RUN`。
 4. P1-A 的具体修正由 P0-C 设备结果排序；没有 Windows 设备证据时只推进与平台无关的 controller、repository 和布局算法测试。
 5. P1-C 必须等待 P0-A、P0-B 和 P1-B 的关键安全与可靠性边界稳定；P2 的进入与退出条件按第 5.7 节执行。
@@ -356,6 +356,9 @@ P0-B、P0-C 和所有 P1/P2 工作分别在其前置条件满足后创建独立�
 | `docs/verification/p0a-real-deepseek-nativecard.md` | P0-A 真实模型、签名制品和未执行设备项证据 | live gate 或相关审计实际运行后 |
 | `docs/superpowers/plans/2026-07-15-p0b-persistent-test-environment.md` | P0-B 的 TDD 实施任务与可重复门禁 | 每个任务有实际测试证据后 |
 | `docs/verification/p0b-persistent-test-environment.md` | P0-B 重启、readiness、下载、验签和备份恢复证据 | 本地或固定远程环境复验后 |
+| `docs/superpowers/plans/2026-07-15-p1b-worker-reliability.md` | P1-B 的 TDD、heartbeat、幂等和故障恢复任务 | worker 可靠性行为改变后 |
+| `docs/verification/p1b-worker-reliability.md` | P1-B race、事务、租约、重试、取消和 crash recovery 证据 | worker 或持久化门禁复验后 |
+| `docs/superpowers/specs/2026-07-15-next-stage-product-roadmap.md` | 下一阶段产品优先级、Agent 边界和实施顺序 | 阶段目标、依赖或产品边界改变后 |
 | `docs/verification/m3-production-integration.md` | PostgreSQL、S3 和 sandbox adapter 集成证据 | P0-B 固定环境复验后 |
 | `docs/verification/m4-acceptance.md` | 跨里程碑总验收与 release withheld 决策 | 新的自动化、设备或发行证据产生后 |
 | `docs/verification/windows-m0-m4-evidence-template.md` | Windows 设备矩阵证据模板 | P0-C/P2 真实设备执行时 |
