@@ -132,7 +132,7 @@ cd "$ROOT/services/cloud"
 go test ./internal/generation -run Postgres -count=1
 go test ./internal/jobs -run Postgres -count=1
 go test ./internal/publish -run 'Postgres|S3' -count=1
-go test ./internal/bootstrap -run 'ProductionRuntimes|ProductionReadiness' -count=1
+go test -v ./internal/bootstrap -run 'ProductionRuntimes|ProductionReadiness' -count=1
 echo "P0-B persistence, restart and readiness matrix: PASS"
 
 docker restart "$postgres_container" "$minio_container" >/dev/null

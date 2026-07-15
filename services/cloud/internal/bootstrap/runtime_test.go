@@ -153,6 +153,10 @@ func TestProductionRuntimesSharePostgresJobsAndS3Artifacts(t *testing.T) {
 	if err := verifyVerticalArchive(archive, version, "test-key", publicKey); err != nil {
 		t.Fatalf("verify restored artifact: %v", err)
 	}
+	t.Logf(
+		"P0-B artifact evidence: session=%s job=%s card=%s version=%s sha256=%s keyId=%s",
+		sessionID, jobID, cardID, versionID, artifactSHA256, "test-key",
+	)
 }
 
 func TestProductionPersistenceRestoredSnapshot(t *testing.T) {
