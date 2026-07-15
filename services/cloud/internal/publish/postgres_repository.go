@@ -58,13 +58,28 @@ func (repository *PostgresVersionRepository) Create(
 	existing, err := repository.Find(ctx, version.UserID, version.CardID, version.VersionID)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
+			var displayExists bool
+			if queryErr := repository.database.QueryRowContext(
+				ctx,
+				`SELECT EXISTS (
+				  SELECT 1 FROM card_versions
+				  WHERE user_id = $1 AND card_id = $2 AND display_version = $3
+				)`,
+				version.UserID, version.CardID, version.DisplayVersion,
+			).Scan(&displayExists); queryErr != nil {
+				return CardVersion{}, queryErr
+			}
+			if displayExists {
+				return CardVersion{}, ErrDisplayVersionConflict
+			}
 			return CardVersion{}, ErrVersionConflict
 		}
 		return CardVersion{}, err
 	}
 	if existing.ArtifactSHA256 != version.ArtifactSHA256 ||
 		existing.CardID != version.CardID ||
-		existing.UserID != version.UserID {
+		existing.UserID != version.UserID ||
+		existing.DisplayVersion != version.DisplayVersion {
 		return CardVersion{}, ErrVersionConflict
 	}
 	return existing, nil

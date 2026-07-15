@@ -59,6 +59,12 @@ func TestPostgresVersionRepositoryPreservesImmutableVersions(t *testing.T) {
 	if err != nil || len(versions) != 1 {
 		t.Fatalf("versions = %#v, error = %v", versions, err)
 	}
+	duplicateDisplay := version
+	duplicateDisplay.VersionID = "ver_postgres_2"
+	duplicateDisplay.ArtifactSHA256 = "def"
+	if _, err := repository.Create(context.Background(), duplicateDisplay); err != publish.ErrDisplayVersionConflict {
+		t.Fatalf("duplicate display version error = %v", err)
+	}
 }
 
 func resetPublishPostgres(t *testing.T, database *sql.DB) {

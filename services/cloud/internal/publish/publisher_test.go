@@ -137,6 +137,61 @@ func TestPublisherListsUserCardsAndVersionHistory(t *testing.T) {
 	}
 }
 
+func TestPublisherComputesStrictNextPatchDisplayVersion(t *testing.T) {
+	t.Parallel()
+
+	repository := publish.NewMemoryVersionRepository()
+	publisher := publish.NewPublisher(nil, publish.NewMemoryObjectStore(), repository)
+	for index, displayVersion := range []string{"1.0.0", "1.0.1", "0.99.99"} {
+		if _, err := repository.Create(context.Background(), publish.CardVersion{
+			VersionID: "ver_" + displayVersion,
+			CardID:    "card_01", UserID: "owner", DisplayVersion: displayVersion,
+			ArtifactSHA256: string(rune('a' + index)),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	next, err := publisher.NextDisplayVersion(context.Background(), "owner", "card_01")
+	if err != nil || next != "1.0.2" {
+		t.Fatalf("NextDisplayVersion() = %q, %v", next, err)
+	}
+}
+
+func TestPublisherRejectsInvalidDisplayVersionHistory(t *testing.T) {
+	t.Parallel()
+
+	repository := publish.NewMemoryVersionRepository()
+	if _, err := repository.Create(context.Background(), publish.CardVersion{
+		VersionID: "ver_invalid", CardID: "card_01", UserID: "owner",
+		DisplayVersion: "v1", ArtifactSHA256: "hash",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	publisher := publish.NewPublisher(nil, publish.NewMemoryObjectStore(), repository)
+	if _, err := publisher.NextDisplayVersion(context.Background(), "owner", "card_01"); !errors.Is(err, publish.ErrInvalidDisplayVersion) {
+		t.Fatalf("NextDisplayVersion() error = %v", err)
+	}
+}
+
+func TestMemoryVersionRepositoryRejectsDuplicateDisplayVersion(t *testing.T) {
+	t.Parallel()
+
+	repository := publish.NewMemoryVersionRepository()
+	first := publish.CardVersion{
+		VersionID: "ver_01", CardID: "card_01", UserID: "owner",
+		DisplayVersion: "1.0.0", ArtifactSHA256: "hash-1",
+	}
+	if _, err := repository.Create(context.Background(), first); err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.VersionID = "ver_02"
+	second.ArtifactSHA256 = "hash-2"
+	if _, err := repository.Create(context.Background(), second); !errors.Is(err, publish.ErrDisplayVersionConflict) {
+		t.Fatalf("duplicate display version error = %v", err)
+	}
+}
+
 func TestPublisherLoadsOwnedArtifactWithinLimit(t *testing.T) {
 	t.Parallel()
 

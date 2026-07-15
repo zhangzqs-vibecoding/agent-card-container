@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,12 +19,14 @@ import (
 )
 
 var (
-	ErrNotFound          = errors.New("card version not found")
-	ErrVersionConflict   = errors.New("immutable card version conflict")
-	ErrObjectConflict    = errors.New("object content conflict")
-	ErrObjectTooLarge    = errors.New("object exceeds read limit")
-	ErrArtifactIntegrity = errors.New("artifact integrity check failed")
-	ErrRetryable         = errors.New("temporary publish failure")
+	ErrNotFound               = errors.New("card version not found")
+	ErrVersionConflict        = errors.New("immutable card version conflict")
+	ErrObjectConflict         = errors.New("object content conflict")
+	ErrObjectTooLarge         = errors.New("object exceeds read limit")
+	ErrArtifactIntegrity      = errors.New("artifact integrity check failed")
+	ErrInvalidDisplayVersion  = errors.New("invalid card display version")
+	ErrDisplayVersionConflict = errors.New("card display version conflict")
+	ErrRetryable              = errors.New("temporary publish failure")
 )
 
 type CardVersion struct {
@@ -182,6 +186,66 @@ func (publisher *Publisher) Card(ctx context.Context, userID, cardID string) (Ca
 		Description: versions[0].Description,
 		Versions:    versions,
 	}, nil
+}
+
+func (publisher *Publisher) NextDisplayVersion(
+	ctx context.Context,
+	userID string,
+	cardID string,
+) (string, error) {
+	versions, err := publisher.versions.ListByCard(ctx, userID, cardID)
+	if err != nil {
+		return "", err
+	}
+	if len(versions) == 0 {
+		return "", ErrNotFound
+	}
+	var highest [3]uint64
+	for index, version := range versions {
+		parsed, err := parseDisplayVersion(version.DisplayVersion)
+		if err != nil {
+			return "", err
+		}
+		if index == 0 || compareDisplayVersion(parsed, highest) > 0 {
+			highest = parsed
+		}
+	}
+	if highest[2] == ^uint64(0) {
+		return "", ErrInvalidDisplayVersion
+	}
+	highest[2]++
+	return fmt.Sprintf("%d.%d.%d", highest[0], highest[1], highest[2]), nil
+}
+
+func parseDisplayVersion(value string) ([3]uint64, error) {
+	parts := strings.Split(value, ".")
+	if len(parts) != 3 {
+		return [3]uint64{}, ErrInvalidDisplayVersion
+	}
+	var parsed [3]uint64
+	for index, part := range parts {
+		if part == "" || len(part) > 1 && part[0] == '0' {
+			return [3]uint64{}, ErrInvalidDisplayVersion
+		}
+		value, err := strconv.ParseUint(part, 10, 64)
+		if err != nil {
+			return [3]uint64{}, ErrInvalidDisplayVersion
+		}
+		parsed[index] = value
+	}
+	return parsed, nil
+}
+
+func compareDisplayVersion(left, right [3]uint64) int {
+	for index := range left {
+		if left[index] < right[index] {
+			return -1
+		}
+		if left[index] > right[index] {
+			return 1
+		}
+	}
+	return 0
 }
 
 func (publisher *Publisher) FindVersion(
@@ -348,6 +412,13 @@ func (repository *MemoryVersionRepository) Create(
 			return CardVersion{}, ErrVersionConflict
 		}
 		return cloneVersion(existing), nil
+	}
+	for _, existing := range repository.versions {
+		if existing.UserID == version.UserID &&
+			existing.CardID == version.CardID &&
+			existing.DisplayVersion == version.DisplayVersion {
+			return CardVersion{}, ErrDisplayVersionConflict
+		}
 	}
 	repository.versions[version.VersionID] = cloneVersion(version)
 	return cloneVersion(version), nil
