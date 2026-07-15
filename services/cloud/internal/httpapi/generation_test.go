@@ -187,6 +187,29 @@ func TestGenerationAPIFreezesPairedBaseVersion(t *testing.T) {
 	}, http.StatusBadRequest)
 }
 
+func TestGenerationAPIHidesUnauthorizedBaseVersion(t *testing.T) {
+	t.Parallel()
+
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_hidden" },
+		time.Now,
+		generation.WithBaseVersionCatalog(ownedBaseCatalog{owned: false}),
+	)
+	handler := httpapi.NewGenerationHandler(httpapi.GenerationHandlerConfig{
+		Service: service,
+		Authenticator: httpapi.StaticBearerAuthenticator{
+			"token-owner": "user-owner",
+		},
+		NewRequestID: func() string { return "req_hidden" },
+	})
+	doJSON(t, handler, http.MethodPost, "/v1/generations", "token-owner", map[string]any{
+		"prompt":        "修改其他用户卡片",
+		"baseCardId":    "card_private",
+		"baseVersionId": "ver_private",
+	}, http.StatusNotFound)
+}
+
 type streamingRecorder struct {
 	*httptest.ResponseRecorder
 	flushed chan struct{}
@@ -229,6 +252,7 @@ func generationHandler() http.Handler {
 		generation.NewMemoryRepository(),
 		func() string { return "gen_01" },
 		func() time.Time { return time.Date(2026, 7, 12, 10, 0, 0, 0, time.UTC) },
+		generation.WithBaseVersionCatalog(ownedBaseCatalog{owned: true}),
 	)
 	return httpapi.NewGenerationHandler(httpapi.GenerationHandlerConfig{
 		ServiceName: "agent-card-cloud",
@@ -239,6 +263,17 @@ func generationHandler() http.Handler {
 		},
 		NewRequestID: func() string { return "req_01" },
 	})
+}
+
+type ownedBaseCatalog struct{ owned bool }
+
+func (catalog ownedBaseCatalog) OwnsVersion(
+	context.Context,
+	string,
+	string,
+	string,
+) (bool, error) {
+	return catalog.owned, nil
 }
 
 func doJSON(

@@ -80,6 +80,20 @@ func TestPublisherRejectsVersionMutationAndCrossUserRead(t *testing.T) {
 	if _, err := publisher.Download(context.Background(), "other", "card_01", "ver_01", time.Minute); !errors.Is(err, publish.ErrNotFound) {
 		t.Fatalf("cross-user Download() error = %v", err)
 	}
+	owned, err := publisher.OwnsVersion(context.Background(), "owner", "card_01", "ver_01")
+	if err != nil || !owned {
+		t.Fatalf("OwnsVersion(owner) = %v, %v", owned, err)
+	}
+	for _, identity := range [][3]string{
+		{"other", "card_01", "ver_01"},
+		{"owner", "card_other", "ver_01"},
+		{"owner", "card_01", "ver_other"},
+	} {
+		owned, err := publisher.OwnsVersion(context.Background(), identity[0], identity[1], identity[2])
+		if err != nil || owned {
+			t.Fatalf("OwnsVersion(%v) = %v, %v", identity, owned, err)
+		}
+	}
 }
 
 func TestPublisherListsUserCardsAndVersionHistory(t *testing.T) {

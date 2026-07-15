@@ -217,6 +217,74 @@ func TestServiceEnforcesOwnershipAndConflicts(t *testing.T) {
 	}
 }
 
+func TestServiceAuthorizesIterationBaseVersionBeforeCreate(t *testing.T) {
+	t.Parallel()
+
+	catalog := &baseVersionCatalog{owned: true}
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_iteration" },
+		time.Now,
+		generation.WithBaseVersionCatalog(catalog),
+	)
+	session, err := service.Create(context.Background(), "owner", generation.CreateRequest{
+		Prompt:        "增加暂停按钮",
+		Target:        generation.TargetNative,
+		BaseCardID:    "card_01",
+		BaseVersionID: "ver_01",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if session.BaseCardID != "card_01" || catalog.userID != "owner" {
+		t.Fatalf("session/catalog = %#v/%#v", session, catalog)
+	}
+
+	catalog.owned = false
+	if _, err := service.Create(context.Background(), "owner", generation.CreateRequest{
+		Prompt:        "修改不存在版本",
+		BaseCardID:    "card_missing",
+		BaseVersionID: "ver_missing",
+	}); !errors.Is(err, generation.ErrNotFound) {
+		t.Fatalf("Create(missing base) error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestServiceFailsClosedWithoutIterationCatalog(t *testing.T) {
+	t.Parallel()
+
+	service := generation.NewService(
+		generation.NewMemoryRepository(),
+		func() string { return "gen_iteration" },
+		time.Now,
+	)
+	if _, err := service.Create(context.Background(), "owner", generation.CreateRequest{
+		Prompt:        "增加暂停按钮",
+		BaseCardID:    "card_01",
+		BaseVersionID: "ver_01",
+	}); !errors.Is(err, generation.ErrNotFound) {
+		t.Fatalf("Create() error = %v, want ErrNotFound", err)
+	}
+}
+
+type baseVersionCatalog struct {
+	owned     bool
+	err       error
+	userID    string
+	cardID    string
+	versionID string
+}
+
+func (catalog *baseVersionCatalog) OwnsVersion(
+	_ context.Context,
+	userID, cardID, versionID string,
+) (bool, error) {
+	catalog.userID = userID
+	catalog.cardID = cardID
+	catalog.versionID = versionID
+	return catalog.owned, catalog.err
+}
+
 func TestServiceCancelsQueuedSessionIdempotently(t *testing.T) {
 	t.Parallel()
 

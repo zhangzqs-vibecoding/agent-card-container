@@ -39,12 +39,12 @@
 - Modify: `services/cloud/internal/bootstrap/runtime.go`
 - Modify: `services/cloud/internal/bootstrap/runtime_test.go`
 
-- [ ] RED：创建迭代会话时，缺失版本、card/version 不匹配和其他用户版本统一返回 `generation.ErrNotFound`；归属正确才创建。
-- [ ] GREEN：引入窄 `BaseVersionCatalog.FindOwnedVersion` 端口并由现有 Publisher adapter 实现；普通新卡不查询目录。
-- [ ] RED：HTTP 测试证明未授权基线只返回 404 `NOT_FOUND`，不泄露存在性。
-- [ ] GREEN：bootstrap 将 publisher 作为目录注入 generation service。
-- [ ] 运行 generation/httpapi/bootstrap 测试。
-- [ ] 提交：`feat: authorize card iteration baselines`。
+- [x] RED：创建迭代会话时，缺失版本、card/version 不匹配和其他用户版本统一返回 `generation.ErrNotFound`；归属正确才创建。
+- [x] GREEN：引入窄 `BaseVersionCatalog.OwnsVersion` 端口并由现有 Publisher adapter 实现；普通新卡不查询目录。
+- [x] RED：HTTP 测试证明未授权基线只返回 404 `NOT_FOUND`，不泄露存在性。
+- [x] GREEN：bootstrap 将 publisher 作为目录注入 generation service。
+- [x] 运行 generation/httpapi/bootstrap 测试。
+- [x] 提交：`feat: authorize card iteration baselines`。
 
 ## Task 3：PostgreSQL 持久化基线
 

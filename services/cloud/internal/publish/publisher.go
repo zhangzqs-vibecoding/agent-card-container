@@ -177,6 +177,17 @@ func (publisher *Publisher) FindVersion(
 	return publisher.versions.Find(ctx, userID, cardID, versionID)
 }
 
+func (publisher *Publisher) OwnsVersion(
+	ctx context.Context,
+	userID, cardID, versionID string,
+) (bool, error) {
+	_, err := publisher.versions.Find(ctx, userID, cardID, versionID)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (publisher *Publisher) Download(
 	ctx context.Context,
 	userID string,

@@ -17,13 +17,18 @@ type CreateRequest struct {
 }
 
 type Service struct {
-	repository Repository
-	newID      func() string
-	now        func() time.Time
-	jobQueue   JobQueue
-	newJobID   func() string
-	streamMu   sync.Mutex
-	streams    map[string]map[*eventStream]struct{}
+	repository   Repository
+	newID        func() string
+	now          func() time.Time
+	jobQueue     JobQueue
+	newJobID     func() string
+	streamMu     sync.Mutex
+	streams      map[string]map[*eventStream]struct{}
+	baseVersions BaseVersionCatalog
+}
+
+type BaseVersionCatalog interface {
+	OwnsVersion(context.Context, string, string, string) (bool, error)
 }
 
 type eventStream struct {
@@ -51,6 +56,12 @@ func WithJobQueue(queue JobQueue) ServiceOption {
 func WithAtomicJobID(newID func() string) ServiceOption {
 	return func(service *Service) {
 		service.newJobID = newID
+	}
+}
+
+func WithBaseVersionCatalog(catalog BaseVersionCatalog) ServiceOption {
+	return func(service *Service) {
+		service.baseVersions = catalog
 	}
 }
 
@@ -86,6 +97,23 @@ func (service *Service) Create(ctx context.Context, userID string, request Creat
 	})
 	if err != nil {
 		return nil, err
+	}
+	if session.BaseCardID != "" {
+		if service.baseVersions == nil {
+			return nil, ErrNotFound
+		}
+		owned, err := service.baseVersions.OwnsVersion(
+			ctx,
+			userID,
+			session.BaseCardID,
+			session.BaseVersionID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if !owned {
+			return nil, ErrNotFound
+		}
 	}
 	session.Summary = summarizeRequirement(session.Prompt, session.Messages[1:], session.Locale)
 	if _, err := session.Transition(StatusAwaitingConfirmation, Transition{

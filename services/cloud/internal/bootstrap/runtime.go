@@ -73,17 +73,18 @@ func NewFromEnvironmentWithLogger(environment map[string]string, logger *slog.Lo
 		}
 	}()
 	jobStore := repositories.jobs
+	publisher := publish.NewPublisher(
+		artifact.NewBuilder(keyID, privateKey),
+		repositories.objects,
+		repositories.versions,
+	)
 	generations := generation.NewService(
 		repositories.generations,
 		func() string { return randomID("gen_") },
 		time.Now,
 		generation.WithJobQueue(jobs.NewGenerationQueue(jobStore)),
 		generation.WithAtomicJobID(func() string { return randomID("job_") }),
-	)
-	publisher := publish.NewPublisher(
-		artifact.NewBuilder(keyID, privateKey),
-		repositories.objects,
-		repositories.versions,
+		generation.WithBaseVersionCatalog(publisher),
 	)
 	agentOptions := make([]agent.Option, 0, 1)
 	if image := environment["AGENTCARD_SANDBOX_IMAGE"]; image != "" {
