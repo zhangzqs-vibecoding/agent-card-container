@@ -50,7 +50,7 @@
 | P0-B 持久化测试环境 | **LOCAL HEADLESS PASS / REMOTE NOT RUN** | PostgreSQL/MinIO、`/readyz`、服务与数据依赖重启、网络下载、独立验签和成对备份恢复均通过可重复 Docker 门禁 | 在固定测试服务器复跑并证明 Windows 参考设备网络可达 | 可用测试服务器；Windows 设备消费属于 P0-C |
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
 | P1-A 工作区与版本生命周期 | **未开始** | 现有 placement、Surface 和版本查询骨架 | 独立设计/计划；完成拖放缩放、实例管理、同卡升级与回滚 | P0-C 暴露的问题已分类 |
-| P1-B worker 可靠性 | **未开始，局部基础已有** | PostgreSQL job store、现有租约与取消边界 | 独立设计/计划；完成 heartbeat、事务一致性、幂等和故障恢复矩阵 | P0-B 持久化环境 |
+| P1-B worker 可靠性 | **计划已形成，待实施** | PostgreSQL job store、现有租约与取消边界、`docs/superpowers/plans/2026-07-15-p1b-worker-reliability.md` | heartbeat、事务一致性、稳定发布身份、有限重试和故障恢复矩阵 | P0-B 本地持久化门禁已满足开发前置；固定远程复验不阻塞 headless 实现 |
 | P1-C CodeCard 生产链路 | **未开始，沙箱基础已有** | 本地 Runtime Server、RPC、受限 OCI 沙箱和自动化安全门 | 受控 builder 镜像、CodeCard 固定评测、真实生成及 Windows 离线 WebView2 证据 | P0-A、P0-B、P1-B |
 | P2 可信发行与 macOS | **未开始** | 静态安装器/entitlement 结构和跨平台 CI | Windows 签名发行、干净机升级卸载；macOS 签名、notarization 和设备闸门 | P0/P1 功能链路与 Windows M0 设备闸门通过；M4 完整通过是本阶段退出条件 |
 
