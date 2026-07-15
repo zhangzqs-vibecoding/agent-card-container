@@ -1,6 +1,6 @@
 # Agent Card Container 顶层设计
 
-状态：设计基线，等待文档审阅  
+状态：设计基线，已确认并实施中
 日期：2026-07-12  
 目标版本：Windows-first MVP
 
@@ -486,7 +486,7 @@ MVP 为一个 Go 模块、两个启动模式：
 4. Agent 只能读取模板、修改工作区、运行允许的 build/test/validate 命令。
 5. NativeCard 产出 schema JSON；CodeCard 产出 TypeScript/Preact 源码并在沙箱构建。
 6. CodeCard 依次通过类型检查、单元测试、生产构建、依赖许可与漏洞检查、隔离浏览器加载、控制台错误和外部请求检查。
-7. 验证失败时最多自动修复三轮。
+7. 每个任务总共最多调用模型三次：首次生成一次，验证失败后最多自动修复两次。
 8. 通过所有门禁后生成预览、manifest、文件 hash 和签名制品。
 9. 发布不可变 CardVersion，并通知桌面端可安装。
 
@@ -678,7 +678,7 @@ manifest 使用规范化 JSON。签名算法为 Ed25519，覆盖去除 signature
 
 - 生成状态机和 SSE 重连。
 - 任务领取、租约恢复、取消和幂等发布。
-- NativeCard 验证失败、CodeCard 构建失败和三轮修复上限。
+- NativeCard 验证失败、CodeCard 构建失败和单任务三次模型调用上限。
 - 沙箱无网络、无秘密、资源限制和白名单输出。
 - 签名、篡改检测、短期下载地址和版本不可变。
 

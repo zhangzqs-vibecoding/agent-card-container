@@ -1,7 +1,7 @@
 # P0-A Real DeepSeek NativeCard Verification
 
 Date: 2026-07-15
-Worktree baseline: `53579d8` plus the unstaged P0-A Task 7/8 changes described by this record
+Implementation commits: `808b435`, `0a11ef3`, `41f9894`
 Provider base domain: `api.deepseek.com`
 Model: `deepseek-v4-pro`
 Case sets: `p0a-headless-vertical-v1`, `native_eval_cases.v1.json`
@@ -74,6 +74,18 @@ The serial fixed evaluation passed exactly at its predefined threshold:
 There were no selector rejections, contract assertion failures, timeouts,
 cancellations or internal errors. The three provider failures exhausted the
 same bounded three-call policy; the suite was not automatically retried.
+
+## P0-A requirement audit
+
+| Requirement | Status | Evidence |
+|---|---|---|
+| Frozen confirmed requirement reaches the Agent | PASS | Unit/repository tests plus all three vertical cases verify both additions before and after worker execution |
+| Contract-derived prompt and strict validator | PASS | Generated catalog gate, cross-language contract gate and strict NativeCard validation in every signed artifact |
+| At least 16/20 fixed real-model cases | PASS | 16/20 with bounded calls and the statistics above |
+| Three representative signed artifacts | `HEADLESS PASS` | Timer, dashboard and form/list hashes above; download, ZIP, canonical signature and payload verification passed |
+| Safe provider/validation errors | PASS | Retry classification and safe diagnostic tests; live output contains only stable categories and counts |
+| Ephemeral credential with no repository leakage | PASS | Interactive-only injection; exact-key and credential-shape scans returned clean |
+| Windows install, interaction and offline restart | `DEVICE NOT RUN` | Requires a Windows 11 x64 reference device and is not implied by this record |
 
 ## Repeatable automated command
 

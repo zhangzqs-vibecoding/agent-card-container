@@ -383,25 +383,25 @@ Expected: unit tests pass and live evaluation reports SKIP.
 - Modify: `services/cloud/internal/bootstrap/runtime_test.go`
 - Create: `docs/verification/p0a-real-deepseek-nativecard.md`
 
-- [ ] **Step 1: Write an opt-in vertical integration test**
+- [x] **Step 1: Write an opt-in vertical integration test**
 
 Compose the real runtime with an in-memory repository, deterministic test-only Ed25519 seed, test bearer token, real model provider, and `httptest.Server`. Through HTTP: create a generation, add two messages, confirm it, run one worker iteration, fetch the ready session/card/artifact, and verify ZIP hash, manifest signature, NativeCard strict validation, and the presence of both additions in the frozen snapshot.
 
-- [ ] **Step 2: Keep credentials out of test artifacts**
+- [x] **Step 2: Keep credentials out of test artifacts**
 
 Read only `AGENTCARD_MODEL_API_KEY`, `AGENTCARD_MODEL_BASE_URL`, and `AGENTCARD_MODEL` from the process environment. Skip without the live flag. Never print the environment, HTTP Authorization, system/user prompts, model content, or artifact payload.
 
-- [ ] **Step 3: Run targeted real smoke with ephemeral injection**
+- [x] **Step 3: Run targeted real smoke with ephemeral injection**
 
 Start an interactive shell, disable terminal echo while reading the key, export it only inside that process, run the single vertical test, then unset the key and exit the shell. Do not place the key in an `exec_command` argument, script, file, shell history, documentation, or log.
 
 Expected: ready session and verified signed NativeCard artifact. If the provider rejects the configured model, query official provider metadata/documentation without exposing the key and rerun with the supported model supplied through `AGENTCARD_MODEL`.
 
-- [ ] **Step 4: Run the 20-case live quality gate**
+- [x] **Step 4: Run the 20-case live quality gate**
 
 Use the same ephemeral shell and limits. Expected: at least 16/20 strict-validator successes, with only safe aggregate statistics emitted.
 
-- [ ] **Step 5: Record redacted evidence**
+- [x] **Step 5: Record redacted evidence**
 
 Document date, commit/worktree state, provider base domain, model name, case-set version, success count, attempt distribution, token totals, duration, artifact hash, and commands with credential placeholders only. Explicitly state that Windows device evidence remains `NOT RUN`.
 
@@ -411,7 +411,7 @@ Document date, commit/worktree state, provider base domain, model name, case-set
 - Modify: `docs/verification/m4-acceptance.md`
 - Modify: `docs/superpowers/plans/2026-07-13-real-deepseek-nativecard-closure.md`
 
-- [ ] **Step 1: Run all affected quality gates**
+- [x] **Step 1: Run all affected quality gates**
 
 Run:
 
@@ -428,18 +428,18 @@ git diff --check
 
 Expected: all pass. A transient external package audit failure must be distinguished from a code failure and retried only within the security gate's bounded policy.
 
-- [ ] **Step 2: Scan for credential leakage**
+- [x] **Step 2: Scan for credential leakage**
 
 Scan tracked and untracked repository files for the exact supplied credential and common private-key/token patterns without printing matching secret values. The scan must return no match outside deliberate redaction fixtures.
 
-- [ ] **Step 3: Audit every P0-A requirement**
+- [x] **Step 3: Audit every P0-A requirement**
 
 Map the roadmap P0-A requirements to current code/tests/evidence: complete frozen context, catalog-derived prompt, strict validator, 20-case threshold, three signed/installable representative artifacts where Linux/headless can prove them, safe errors, and ephemeral credentials. Mark Windows install/offline evidence `NOT RUN`, not PASS.
 
-- [ ] **Step 4: Update plan checkboxes and acceptance evidence**
+- [x] **Step 4: Update plan checkboxes and acceptance evidence**
 
 Mark only executed items complete. Do not claim the full P0-A Windows criterion until a real Windows device verifies it.
 
-- [ ] **Step 5: Leave a clean handoff**
+- [x] **Step 5: Leave a clean handoff**
 
 Report modified files, tests, live-call cost/usage totals, remaining Windows-only evidence, and whether a commit/push is awaiting user authorization. Do not automatically commit or push.

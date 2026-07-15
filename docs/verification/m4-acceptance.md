@@ -1,9 +1,9 @@
 # M4 acceptance evidence
 
 Overall status: **DEVICE EVIDENCE REQUIRED**  
-Latest automated code commit: `55cbbbe974bbe18331e126f860bf23ec66f38a44`
+Latest automated code commit: `41f9894`
 
-Recorded: 2026-07-12 (Asia/Shanghai)
+Recorded: 2026-07-15 (Asia/Shanghai)
 
 The desktop cloud-settings extension is governed by
 `docs/superpowers/specs/2026-07-12-desktop-cloud-settings-design.md`. Its local
@@ -27,11 +27,12 @@ commit.
 | Go formatting | `cd services/cloud && test -z "$(gofmt -l .)"` | PASS | Empty formatter diff |
 | Go static analysis | `cd services/cloud && go vet ./...` | PASS | Exit 0 |
 | Go race suite | `cd services/cloud && CGO_ENABLED=1 go test ./... -race` | PASS | All packages passed |
-| Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | TypeScript shared fixtures, Flutter security suite 66 tests, Go race suite, CodeCard dependency/typecheck/tests/build/bundle validation and `pnpm audit` passed |
+| Real DeepSeek NativeCard headless gate | opt-in three-case vertical test plus 20-case fixed evaluation | **HEADLESS PASS** | Commits `808b435`, `0a11ef3`, `41f9894`; 3/3 signed artifacts verified and 16/20 fixed cases passed; Windows device work remains `NOT RUN` |
+| Malicious artifact/runtime gate | `sh tooling/security/run-security-gate.sh` | PASS | TypeScript shared fixtures, Flutter security suite 66 tests, Go race suite, CodeCard dependency/typecheck/tests/build/bundle validation and official npm bulk advisory audit passed; 164 packages, zero high/critical findings |
 | Performance evaluator | `cd apps/desktop && flutter test test/diagnostics/performance_sample_test.dart` | PASS | Budgets, percentile calculation and minimum sample populations tested |
 | Insufficient performance evidence | `dart tooling/performance/summarize.dart tooling/performance/fixtures/insufficient.json` | PASS (rejected) | Exit 1 with four `:samples` failures and `passed: false` |
 | Repository whitespace | `git diff --check` | PASS | No findings |
-| Credential scan | `rg -l 'sk-[A-Za-z0-9]{20,}|BEGIN ... PRIVATE KEY|Authorization: Bearer ...' ...` | PASS | No files matched |
+| Credential scan | exact live key plus common token/private-key shapes across tracked and untracked files | PASS | Exact-key and credential-shape scans returned clean without printing secret values |
 | GitHub workflow policy | `dart tooling/security/validate-workflows_test.dart` and `actionlint` | PASS | Four workflows use immutable action SHAs, bounded permissions/timeouts, PR secret isolation and verified Windows uploads |
 | Windows portable-package logic | `pwsh packaging/windows/test-portable-package.ps1` in the official PowerShell container | PASS | Valid archive round trip passed; missing DLL/README, hidden `.env` and traversal entries were rejected |
 | GitHub hosted platform execution | GitHub Actions after public repository push | PASS | Run `29193727198`: quality, Linux release and macOS release passed for `55cbbbe` |

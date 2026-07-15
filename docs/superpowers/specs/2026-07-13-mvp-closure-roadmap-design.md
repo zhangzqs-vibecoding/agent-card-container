@@ -2,6 +2,8 @@
 
 状态：**已确认，实施中**
 记录日期：2026-07-13（Asia/Shanghai）
+最近核对：2026-07-15（Asia/Shanghai）
+代码基线：`41f9894`
 
 ## 1. 文档目的
 
@@ -9,7 +11,9 @@
 
 本文档不新增 M5，也不改变现有 NativeCard、CodeCard、Capability Broker、Flutter 桌面端或 Go 模块化单体的顶层架构。`2026-07-12-agent-card-container-design.md` 仍是架构事实来源；本路线图只安排尚未闭环的 M0–M4 工作。若实施中需要改变安全边界、卡片协议或运行时选择，必须先更新顶层设计。
 
-路线图采用“真实闭环优先”：先证明真实模型能够生成、签名、下载、安装并离线运行一张 NativeCard，再完成持久化、Windows 实机闸门、任务可靠性、版本生命周期和 CodeCard 生产链路。不得以 CI 编译成功、fake adapter 测试或一次性容器测试代替真实用户链路验收。
+路线图采用“真实闭环优先”：第一波并行证明真实模型能在 Linux/headless 环境生成、校验、签名和下载 NativeCard 制品，以及持久化测试环境能稳定发布网络可达制品；第二波再在 Windows 实机完成下载、验签、安装、交互和离线重启。随后关闭任务可靠性、版本生命周期、CodeCard 生产链路和可信发行。不得以 CI 编译成功、fake adapter 测试或一次性容器测试代替真实用户链路验收。
+
+顶层设计要求先通过 M0 Windows 技术闸门再继续完整实现，但当前仓库已经在缺少 M0 设备证据的情况下形成了 M1–M4 自动化骨架。本路线图是对这一历史偏差的补救，不追认 M0 已通过：P0-C 完成前，不再以现有自动化结果批准新的平台依赖型扩展，也不得作出发布就绪结论。
 
 ## 2. 当前基线
 
@@ -21,20 +25,34 @@
 - Windows、Linux、macOS CI，Windows portable ZIP，以及 Go、Dart、TypeScript 跨语言安全门禁。
 - stdout JSON 结构化日志和 journald 部署验证。
 
-现有证据同时明确了以下缺口：
+截至最近核对，原始缺口的状态如下。这里的“已关闭”只表示对应代码或自动化缺口已经关闭，不代表包含 Windows 实机证据的完整产品闸门通过。
 
-1. 真实 DeepSeek 调用仍未形成产品验收证据；当前测试服务器未配置真实模型凭据。
-2. 用户在确认前追加的需求只进入会话消息，worker 仍以初始 `Prompt` 调用 Agent，补充需求可能被忽略。
-3. 模型 system prompt 没有完整提供 NativeCard 组件属性、动作语义、Capability 规则和 CodeCard 模板 API，生成质量尚不可量化。
-4. 未配置 PostgreSQL/S3 时后端回退到内存 repository；重启会丢失会话和版本，`memory://` 制品不能被远程桌面客户端正常下载。
-5. Windows WebView2、离线 CodeCard、多窗口、透明悬浮、混合 DPI、中文 IME、休眠/拔屏和真实性能矩阵仍有大量 `NOT RUN`。
-6. 工作区当前以静态 placement 展示为主，拖动、缩放、碰撞处理和完整布局编辑体验尚未闭环。
-7. 每次生成默认创建新的 card/version，`displayVersion` 固定为 `1.0.0`，尚不支持基于已有卡片的真正迭代、升级和回滚。
-8. job 租约短于 CodeCard 最长构建时间且没有 heartbeat；确认与入队、发布与状态更新之间还缺少完整事务和幂等恢复语义。
-9. CodeCard 沙箱 adapter 已验证，但测试服务器尚未启用正式 builder 镜像和真实模型生成链路。
-10. Windows Authenticode、正式安装器、WebView2 缺失流程、macOS 签名与 notarization 尚未完成。
+| # | 缺口 | 状态 | 当前事实与下一闸门 |
+|---:|---|---|---|
+| 1 | 真实 DeepSeek 产品验收证据 | **HEADLESS PASS** | `808b435`、`0a11ef3`、`41f9894` 已形成脱敏的 3/3 签名垂直链路和 16/20 真实质量门证据；Windows 产品链路仍属 P0-C。 |
+| 2 | 补充需求可能未进入 worker | **已关闭（headless）** | `394660b` 已持久化不可变确认需求快照，三例真实垂直测试证明两条追加需求在 worker 前后保持一致。 |
+| 3 | NativeCard 上下文不完整、质量不可量化 | **已关闭（headless）** | catalog 派生语义、严格校验、Prompt/传输边界、有界重试和固定质量门均已通过自动化及真实模型验证。 |
+| 4 | 远程环境仍可能使用内存 repository 和 `memory://` | **开放** | 生产 adapter 已存在，但 P0-B 的 PostgreSQL/MinIO 持久化部署、重启恢复和远程下载尚未验收。 |
+| 5 | Windows WebView2、多窗口、悬浮、DPI、IME 和性能 | **开放，设备依赖** | 当前只能保留 `NOT RUN`；必须由 Windows 参考设备生成绑定 commit 的证据。 |
+| 6 | 工作区拖动、缩放、碰撞和布局编辑 | **开放** | 归入 P1-A，不在 P0-A/P0-B 中提前扩展。 |
+| 7 | 同卡迭代、升级和回滚 | **开放** | 归入 P1-A；需要 `baseCardId`/`baseVersionId`、能力差异、同 schema 状态复用及异 schema 备份/重置流程。MVP 不执行 Agent 生成的状态迁移。 |
+| 8 | worker heartbeat、事务、重试与发布幂等 | **开放，局部关闭** | P0-A 已完成模型调用的有界可重试错误分类；完整租约、事务、发布幂等和部分失败恢复仍属于 P1-B。 |
+| 9 | CodeCard 正式 builder 和真实生成链路 | **开放** | 沙箱 adapter 自动化已通过，P1-C 才启用受控镜像、真实 Agent 生成和 Windows WebView2 闸门。 |
+| 10 | Windows/macOS 可信发行 | **开放** | Authenticode、正式安装器、WebView2 缺失引导、macOS 签名和 notarization 归入 P2。 |
 
 因此，当前状态应描述为“自动化骨架和安全边界基本成形，MVP 真实闭环尚未通过”，不能描述为发布就绪。
+
+### 2.1 阶段执行看板
+
+| 工作包 | 当前状态 | 已有交付物 | 下一可交付物 | 完整通过的外部依赖 |
+|---|---|---|---|---|
+| P0-A 真实 DeepSeek NativeCard | **HEADLESS PASS** | 确认快照、catalog 派生语义、严格 validator、有界重试、3/3 签名垂直链路、16/20 真实质量门和脱敏证据 | 保持回归门稳定，等待 P0-C 消费同一协议和制品 | Windows 设备证据属于 P0-C，不反向阻塞 headless 结论 |
+| P0-B 持久化测试环境 | **待独立计划** | PostgreSQL、S3/MinIO adapter 与集成测试 | 固定测试环境部署、`/readyz`、重启恢复、备份恢复和远程制品下载 | 可用测试服务器、数据库和对象存储 |
+| P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
+| P1-A 工作区与版本生命周期 | **未开始** | 现有 placement、Surface 和版本查询骨架 | 独立设计/计划；完成拖放缩放、实例管理、同卡升级与回滚 | P0-C 暴露的问题已分类 |
+| P1-B worker 可靠性 | **未开始，局部基础已有** | PostgreSQL job store、现有租约与取消边界 | 独立设计/计划；完成 heartbeat、事务一致性、幂等和故障恢复矩阵 | P0-B 持久化环境 |
+| P1-C CodeCard 生产链路 | **未开始，沙箱基础已有** | 本地 Runtime Server、RPC、受限 OCI 沙箱和自动化安全门 | 受控 builder 镜像、CodeCard 固定评测、真实生成及 Windows 离线 WebView2 证据 | P0-A、P0-B、P1-B |
+| P2 可信发行与 macOS | **未开始** | 静态安装器/entitlement 结构和跨平台 CI | Windows 签名发行、干净机升级卸载；macOS 签名、notarization 和设备闸门 | P0/P1 功能链路与 Windows M0 设备闸门通过；M4 完整通过是本阶段退出条件 |
 
 主要事实依据：
 
@@ -92,7 +110,7 @@
 
 ## 5. 分阶段路线图
 
-### 5.1 P0-A：真实 DeepSeek NativeCard 生成闭环
+### 5.1 P0-A：真实 DeepSeek NativeCard Linux/headless 闸门
 
 这是下一份实施计划的唯一首要目标。
 
@@ -100,30 +118,32 @@
 
 1. 客户端创建生成会话。
 2. 用户追加的每条消息进入会话事实记录。
-3. 确认操作生成不可变的“确认需求快照”，其中包含初始需求、补充消息、target、locale 和允许能力。
+3. 确认操作生成不可变的“确认需求快照”，其中包含初始需求、补充消息、target、locale 和服务端固定能力候选集。
 4. worker 只读取该快照，不再只读取初始 `Prompt`。
 5. Agent 根据 runtime 使用由 contracts 派生的精简协议说明、组件目录、动作目录和安全规则调用模型。
-6. 模型输出进入现有确定性 validator；失败时最多进行三次带结构化校验反馈的修复。
-7. 成功结果进入制品构建、签名、持久化发布和客户端安装流程。
+6. 模型输出进入现有确定性 validator；单个任务最多调用模型三次，即首次生成加最多两次携带稳定校验错误类别的修复。
+7. 成功结果生成不可变签名制品，通过下载接口交给独立 headless 验证器复核 hash、manifest、签名和 NativeCard 内容。
 
 #### Agent 决策
 
-- MVP 保留现有 `modelprovider.Provider` 和三轮“生成—校验—修复”循环，不引入新的 Agent 框架。
+- MVP 保留现有 `modelprovider.Provider` 和有界“生成—校验—修复”循环，总调用上限为三次，不引入新的 Agent 框架。
 - runtime 选择继续遵循 NativeCard 优先原则。选择器必须输出稳定理由，不能让模型直接决定安全边界。
 - 模型输入中的卡片协议必须从 contracts 或同一份受控目录派生，不能在 provider 中维护另一份可能漂移的协议事实。
-- capabilities 由受控策略根据确认需求推导；模型只能在候选范围内请求，不能自行扩大权限。
+- P0-A 使用服务端固定能力候选集，当前为 `storage` 和 `window.manageSelf`；模型只能在确认快照的候选范围内请求，不能自行扩大权限。按需求动态推导能力及其授权 UX 不在 P0-A 内实现，后续必须先形成独立策略和测试再放宽。
 
 #### 质量评测
 
-建立至少 20 个固定评测需求，覆盖计时器、待办、信息面板、简单表单、统计卡片、离线状态和明确禁止能力。评测记录只保存非敏感测试需求、结果类别、attempt、耗时、token 数和校验错误，不保存真实用户内容。
+建立至少 20 个固定评测需求，覆盖计时器、待办、信息面板、简单表单、统计卡片、离线状态和明确禁止能力。评测记录只保存非敏感测试需求、结果类别、attempt、耗时、token 数和稳定校验错误类别，不保存真实用户内容。
 
-P0-A 通过条件：
+P0-A 的 `HEADLESS PASS` 条件：
 
 - 追加需求在单元测试和真实模型请求中均可证明生效。
-- 20 个固定 NativeCard 需求中至少 16 个能在三次以内生成合法结果。
-- 至少 3 个代表性卡片完成真实“生成—签名—下载—Windows 安装—断网重启”链路。
-- 失败时客户端收到可理解的稳定错误，不暴露上游响应、模型输出或凭据。
+- 20 个固定 NativeCard 需求中至少 16 个能在最多三次模型调用内生成合法结果。
+- 至少 3 个代表性卡片完成真实“生成—确定性校验—签名—下载—headless 独立复核”链路。
+- 失败时 API 或测试消费者收到可理解的稳定错误，不暴露上游响应、模型输出或凭据。
 - 真实模型凭据只通过临时进程环境注入，不进入仓库、环境文件、脚本、命令参数、日志或测试证据。
+
+P0-A 不包含 Windows 安装、交互、状态保留或离线重启；这些项目在 P0-C 完成前统一标记为 `DEVICE NOT RUN`。
 
 ### 5.2 P0-B：持久化测试环境
 
@@ -134,7 +154,7 @@ P0-B 可以与 P0-A 的本地 TDD 并行，但必须在远程 Windows 端到端�
 测试环境必须具备：
 
 - PostgreSQL 持久化 generation session、message、job、card 和 version 元数据。
-- MinIO/S3 持久化签名制品，并提供 Windows 客户端可达的 HTTPS 或受控局域网下载地址。
+- MinIO/S3 持久化签名制品，并提供 Windows 参考设备所在网络可达的 HTTPS 或受控局域网下载地址。
 - 稳定的签名 key ID；私钥由服务器安全配置提供，不进入仓库或日志。
 - 服务重启、数据库重启和对象存储重启后的恢复验证。
 - 最小备份与恢复演练，至少证明元数据和制品可以成对恢复。
@@ -142,17 +162,18 @@ P0-B 可以与 P0-A 的本地 TDD 并行，但必须在远程 Windows 端到端�
 P0-B 通过条件：
 
 - Go 服务重启后生成会话、job、卡片和版本仍可查询。
-- Windows 客户端能下载制品并通过 SHA-256、manifest 和 Ed25519 校验。
+- 独立验证器能从远程 URL 下载制品，并通过 SHA-256、manifest 和 Ed25519 校验；Windows 客户端行为留给 P0-C。
 - 数据库与对象存储任一不可用时 `/readyz` 失败，但进程 `/healthz` 仍能表达存活状态。
 - 不再向远程客户端返回 `memory://` 制品 URL。
 
 ### 5.3 P0-C：Windows NativeCard 实机闸门
 
-在指定 Windows 11 x64 参考设备上运行真实产品链路，而不是仅运行 widget test 或 fake adapter。
+P0-A 达到 `HEADLESS PASS` 且 P0-B 通过后，在指定 Windows 11 x64 参考设备上运行真实产品链路，而不是仅运行 widget test 或 fake adapter。
 
 必须验证：
 
 - Agent Studio 从设置好的云端创建、补充、确认和跟踪生成会话。
+- 客户端从 P0-B 环境下载制品并通过 SHA-256、manifest 和 Ed25519 校验；篡改或未签名制品必须拒绝。
 - 生成结果可预览并明确安装；失败、取消和 SSE 重连均有用户反馈。
 - NativeCard 能放入主工作区、独立窗口和悬浮层。
 - 卡片状态、窗口位置和布局在应用重启、云端断开和机器重启后保留。
@@ -176,7 +197,9 @@ P0-C 的证据必须绑定精确 commit、Windows/Flutter/WebView2 版本和设�
 - Agent 读取上一版声明或源码与本次修改要求。
 - 保持稳定 `cardId`，生成新的 `versionId` 和递增显示版本。
 - 安装新版前展示能力差异、状态 schema 兼容性和回滚点。
-- 版本切换、状态迁移和权限更新必须作为一个可恢复操作；失败后旧版本继续可用。
+- `stateSchemaVersion` 相同时复用原实例状态；版本不同时先备份旧状态，再让用户选择保留旧版或安装新版并重置状态。MVP 不执行 Agent 生成的状态迁移。
+- 版本切换和权限更新必须作为一个可恢复操作；失败后旧版本及其状态继续可用。
+- 如需超出 P0-A 固定能力候选集，先独立定义需求到 capability 的服务端策略、安装授权 UX 和拒绝/回退测试，模型本身仍无权扩大候选集。
 
 ### 5.5 P1-B：worker 可靠性与幂等
 
@@ -202,13 +225,14 @@ CodeCard 复用现有无网络、只读 root、非 root、资源限制和固定�
 - builder 镜像由受控 CI 构建、扫描并发布到受控 registry，运行配置固定到 digest。
 - Agent 获得精简的 CodeCard 模板 API、允许文件列表和依赖策略。
 - 至少覆盖自由画板、小游戏、可视化、复杂交互和纯离线工具五类固定评测。
+- CodeCard 独立设计必须在实施前锁定评测用例总数、通过率、单例调用上限和费用上限；没有预先确定的门槛不得宣称质量通过。
 - 产物在 Windows WebView2 中通过随机 localhost 子域加载，本地 JavaScript、storage 和 RPC 正常运行。
 - 断网和应用重启后继续可用，WebView 崩溃只影响单卡并触发现有恢复/隔离策略。
 - 重跑导航、私网访问、RPC 越权、ZIP、制品篡改和资源超限攻击矩阵。
 
 ### 5.7 P2：可信发行和第二平台
 
-只有 P0/P1 的用户链路与 Windows 风险关闭后，才推进：
+只有 P0/P1 功能链路和 Windows M0 平台设备闸门通过、M4 自动化基线可用后，才推进。Windows M4 完整验收是 P2 的退出条件，不是进入条件：
 
 - 修复性能采样对象和场景，使其测量真实 Flutter 进程、OS Surface 和 WebView，而不是测试壳或 PowerShell 进程。
 - 完成 Windows Authenticode、Inno Setup、WebView2 Evergreen 缺失引导、升级和卸载清理。
@@ -216,17 +240,19 @@ CodeCard 复用现有无网络、只读 root、非 root、资源限制和固定�
 - 增加 macOS 运行时 capability probe，启用真实 WKWebView adapter，完成 App Sandbox entitlement、签名、notarization 和窗口行为闸门。
 - Linux 继续只承诺普通窗口；托盘、热键或悬浮能力不可用时必须按 feature 降级，不能阻止主窗口启动。
 
-## 6. 依赖与执行顺序
+## 6. 关键路径与并行波次
 
-| 顺序 | 工作包 | 前置条件 | 可并行项 | 相对工作量 |
+| 波次 | 工作包 | 前置条件 | 可并行项 | 相对工作量 |
 |---:|---|---|---|---|
-| 1 | P0-A 真实 DeepSeek NativeCard | 用户提供临时凭据 | P0-B 基础部署 | M |
-| 2 | P0-B PostgreSQL/MinIO | 测试服务器资源 | P0-A 本地 TDD | S–M |
-| 3 | P0-C Windows NativeCard 闸门 | P0-A、P0-B | 无 | M–L |
-| 4 | P1-A 工作区与版本生命周期 | P0-C 暴露的问题已分类 | P1-B | L |
-| 5 | P1-B worker 可靠性 | PostgreSQL 测试环境 | P1-A | M–L |
-| 6 | P1-C CodeCard 生产链路 | P0-A、P0-B、P1-B | 部分 Windows UI 工作 | M–L |
-| 7 | P2 发行与 macOS | Windows M0/M4 通过 | macOS 与发行可部分并行 | L |
+| 1 | P0-A 真实 DeepSeek NativeCard | 临时模型凭据 | P0-B | M |
+| 1 | P0-B PostgreSQL/MinIO | 测试服务器资源 | P0-A | S–M |
+| 2 | P0-C Windows NativeCard 闸门 | P0-A `HEADLESS PASS`、P0-B `PASS` | P1-B | M–L |
+| 3 | P1-A 工作区与版本生命周期 | P0-C 暴露的问题已分类 | P1-B | L |
+| 2 | P1-B worker 可靠性 | P0-B `PASS` | P0-C、P1-A | M–L |
+| 4 | P1-C CodeCard 生产链路 | P0-A、P0-B、P1-B | 部分 P1-A Windows UI 工作 | M–L |
+| 5 | P2 发行与 macOS | P0/P1 功能链路、Windows M0 设备闸门、M4 自动化基线 | Windows 发行与 macOS 闸门可并行 | L |
+
+波次表示关键依赖，不表示所有工作必须串行。P0-A 与 P0-B 从第一波并行；P1-B 在 P0-B 通过后即可开始，并可与 P0-C/P1-A 并行。只有明确列出的前置条件全部满足，工作包才可形成通过结论。
 
 每个工作包必须拥有独立实施计划、TDD 红绿证据、受影响测试、部署或设备证据和小步提交。不得创建一份跨越全部工作包的一次性实现计划。
 
@@ -302,13 +328,34 @@ MVP 先使用现有结构化日志、聚合查询和少量指标端点；在单�
 3. PostgreSQL/S3 持久化、备份恢复和远程制品下载通过。
 4. Windows NativeCard、CodeCard、主工作区、独立窗口、悬浮层、离线重启和状态保留通过。
 5. job heartbeat、重试、幂等、取消和部分失败恢复通过。
-6. 同卡版本迭代、能力差异确认、状态迁移、升级和回滚通过。
+6. 同卡版本迭代、能力差异确认、同 schema 状态复用、异 schema 备份/重置选择、升级和回滚通过；MVP 不执行 Agent 生成的状态迁移。
 7. Windows 设备安全矩阵和真实性能预算通过。
 8. 签名安装器、WebView2 缺失引导、升级和卸载清理通过。
 9. 所有证据绑定同一候选 release commit；没有被错误标记为 PASS 的 `NOT RUN` 项。
 
 ## 13. 下一步
 
-用户确认本文档后，下一步只为 P0-A 编写独立实施计划。该计划应先以 TDD 修复确认需求快照和模型上下文，再增加合同派生提示、固定评测与临时凭据 live gate，最后部署到持久化测试环境并执行 Windows NativeCard 垂直链路。
+P0-A 已完成 Linux/headless 范围的独立实施计划，状态为 `HEADLESS PASS`。当前按“关键路径 + 并行泳道”继续推进：
+
+1. 为 P0-B 单独编写并确认实施计划，部署 PostgreSQL/MinIO 持久化测试环境，完成重启、备份恢复、`/readyz` 和远程制品下载验收。
+2. P0-B 通过后立即启动 P1-B 的非设备工作，优先关闭 heartbeat、确认/入队事务、发布幂等和部分失败恢复。
+3. P0-B 为 `PASS` 后，在 Windows 11 x64 参考设备执行 P0-C。此前 Windows 安装、交互、状态保留和断网重启保持 `DEVICE NOT RUN`。
+4. P1-A 的具体修正由 P0-C 设备结果排序；没有 Windows 设备证据时只推进与平台无关的 controller、repository 和布局算法测试。
+5. P1-C 必须等待 P0-A、P0-B 和 P1-B 的关键安全与可靠性边界稳定；P2 的进入与退出条件按第 5.7 节执行。
 
 P0-B、P0-C 和所有 P1/P2 工作分别在其前置条件满足后创建独立设计补充或实施计划，不在 P0-A 计划中提前实现。
+
+当前不引入 Eino、Claude Agent SDK、复杂多 Agent 编排、消息中间件、微服务拆分、市场或计费系统。只有现有 provider + 有界修复循环被可复现证据证明无法满足质量或可靠性目标时，才重新评估 Agent 框架；评估前必须先写决策记录，不能在实现中静默迁移。
+
+## 14. 证据与执行文档索引
+
+| 文档 | 职责 | 更新时机 |
+|---|---|---|
+| `docs/superpowers/specs/2026-07-12-agent-card-container-design.md` | 顶层架构、安全边界和运行时事实来源 | 仅当协议、安全边界或运行时选择改变时 |
+| `docs/superpowers/plans/2026-07-13-real-deepseek-nativecard-closure.md` | P0-A 的 TDD 实施任务与命令 | 每个任务有实际测试证据后 |
+| `docs/verification/p0a-real-deepseek-nativecard.md` | P0-A 真实模型、签名制品和未执行设备项证据 | live gate 或相关审计实际运行后 |
+| `docs/verification/m3-production-integration.md` | PostgreSQL、S3 和 sandbox adapter 集成证据 | P0-B 固定环境复验后 |
+| `docs/verification/m4-acceptance.md` | 跨里程碑总验收与 release withheld 决策 | 新的自动化、设备或发行证据产生后 |
+| `docs/verification/windows-m0-m4-evidence-template.md` | Windows 设备矩阵证据模板 | P0-C/P2 真实设备执行时 |
+
+证据文档只记录实际执行结果：`NOT RUN`、`FAIL` 和 `PASS` 必须严格区分。设计完成、代码存在、CI 编译成功、fake provider 或 Linux/headless 结果均不能替代 Windows 设备证据。任何阶段状态变化都必须能从上述计划或验证文档追溯到命令、commit 和脱敏结果。
