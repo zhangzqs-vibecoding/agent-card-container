@@ -208,6 +208,174 @@ void main() {
       expect(instance.placement.width, 500);
     });
 
+    test('reuses state and narrows grants for a compatible version', () {
+      database.upsertInstallation(_installation('version-1'));
+      database.upsertInstallation(_installation('version-2'));
+      database.upsertSurface(_workspace());
+      database.upsertInstance(_instance());
+      database.putState('state-1', 'counter', 7);
+      database.upsertGrant(
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'version-1',
+          capability: 'network.fetch',
+          domains: {'api.example.com', 'removed.example.com'},
+        ),
+      );
+      database.upsertGrant(
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'version-1',
+          capability: 'clipboard.read',
+        ),
+      );
+
+      final switched = database.switchInstalledInstanceVersion(
+        instanceId: 'instance-1',
+        targetVersionId: 'version-2',
+        statePolicy: VersionStatePolicy.reuse,
+        currentStateSchemaVersion: 1,
+        targetStateSchemaVersion: 1,
+        replacementGrants: {
+          const PermissionGrant(
+            instanceId: 'instance-1',
+            versionId: 'version-2',
+            capability: 'network.fetch',
+            domains: {'api.example.com'},
+          ),
+        },
+        backupId: 'unused',
+        newStateNamespace: 'unused',
+        createdAt: DateTime.utc(2026, 7, 16),
+      );
+
+      expect(switched.versionId, 'version-2');
+      expect(switched.stateNamespace, 'state-1');
+      expect(database.readState('state-1'), {'counter': 7});
+      expect(database.grantsForInstance('instance-1'), {
+        const PermissionGrant(
+          instanceId: 'instance-1',
+          versionId: 'version-2',
+          capability: 'network.fetch',
+          domains: {'api.example.com'},
+        ),
+      });
+      expect(
+        database.stateBackups(instanceId: 'instance-1', versionId: 'version-1'),
+        isEmpty,
+      );
+    });
+
+    test('backs up and resets state for an incompatible version', () {
+      database.upsertInstallation(_installation('version-1'));
+      database.upsertInstallation(_installation('version-2'));
+      database.upsertSurface(_workspace());
+      database.upsertInstance(_instance());
+      database.putState('state-1', 'counter', 7);
+
+      final switched = database.switchInstalledInstanceVersion(
+        instanceId: 'instance-1',
+        targetVersionId: 'version-2',
+        statePolicy: VersionStatePolicy.reset,
+        currentStateSchemaVersion: 1,
+        targetStateSchemaVersion: 2,
+        replacementGrants: const {},
+        backupId: 'backup-v1',
+        newStateNamespace: 'state-2',
+        createdAt: DateTime.utc(2026, 7, 16),
+      );
+
+      expect(switched.versionId, 'version-2');
+      expect(switched.stateNamespace, 'state-2');
+      expect(database.readState('state-2'), isEmpty);
+      final backup = database
+          .stateBackups(instanceId: 'instance-1', versionId: 'version-1')
+          .single;
+      expect(backup.snapshot, {'counter': 7});
+      expect(backup.stateSchemaVersion, 1);
+    });
+
+    test('restores a target version backup while backing up current state', () {
+      database.upsertInstallation(_installation('version-1'));
+      database.upsertInstallation(_installation('version-2'));
+      database.upsertSurface(_workspace());
+      database.upsertInstance(_instance());
+      database.putState('old-v1', 'counter', 3);
+      database.backupState(
+        backupId: 'previous-v1',
+        instanceId: 'instance-1',
+        cardId: 'card-1',
+        versionId: 'version-1',
+        stateSchemaVersion: 1,
+        stateNamespace: 'old-v1',
+        createdAt: DateTime.utc(2026, 7, 15),
+      );
+      database.switchInstanceVersion('instance-1', 'version-2');
+      database.putState('state-1', 'title', 'v2 state');
+
+      final restored = database.switchInstalledInstanceVersion(
+        instanceId: 'instance-1',
+        targetVersionId: 'version-1',
+        statePolicy: VersionStatePolicy.restore,
+        currentStateSchemaVersion: 2,
+        targetStateSchemaVersion: 1,
+        replacementGrants: const {},
+        backupId: 'backup-v2',
+        newStateNamespace: 'restored-v1',
+        createdAt: DateTime.utc(2026, 7, 16),
+        restoreBackup: database
+            .stateBackups(instanceId: 'instance-1', versionId: 'version-1')
+            .single,
+      );
+
+      expect(restored.stateNamespace, 'restored-v1');
+      expect(database.readState('restored-v1'), {'counter': 3});
+      expect(
+        database
+            .stateBackups(instanceId: 'instance-1', versionId: 'version-2')
+            .single
+            .snapshot,
+        {'title': 'v2 state'},
+      );
+    });
+
+    test('rolls back every version switch write after a grant failure', () {
+      database.upsertInstallation(_installation('version-1'));
+      database.upsertInstallation(_installation('version-2'));
+      database.upsertSurface(_workspace());
+      database.upsertInstance(_instance());
+      database.putState('state-1', 'counter', 7);
+
+      expect(
+        () => database.switchInstalledInstanceVersion(
+          instanceId: 'instance-1',
+          targetVersionId: 'version-2',
+          statePolicy: VersionStatePolicy.reset,
+          currentStateSchemaVersion: 1,
+          targetStateSchemaVersion: 2,
+          replacementGrants: {
+            const PermissionGrant(
+              instanceId: 'wrong-instance',
+              versionId: 'version-2',
+              capability: 'storage',
+            ),
+          },
+          backupId: 'backup-v1',
+          newStateNamespace: 'state-2',
+          createdAt: DateTime.utc(2026, 7, 16),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
+
+      expect(database.listInstances().single.versionId, 'version-1');
+      expect(database.listInstances().single.stateNamespace, 'state-1');
+      expect(database.readState('state-1'), {'counter': 7});
+      expect(
+        database.stateBackups(instanceId: 'instance-1', versionId: 'version-1'),
+        isEmpty,
+      );
+    });
+
     test('rejects moving an unknown instance', () {
       expect(
         () => database.moveInstance(

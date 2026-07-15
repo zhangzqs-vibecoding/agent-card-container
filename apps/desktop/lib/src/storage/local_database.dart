@@ -28,6 +28,8 @@ class CardStateBackup {
   final DateTime createdAt;
 }
 
+enum VersionStatePolicy { reuse, reset, restore }
+
 class LocalDatabase {
   LocalDatabase._(this._connection) {
     _migrate();
@@ -323,6 +325,112 @@ class LocalDatabase {
     );
   }
 
+  CardInstance switchInstalledInstanceVersion({
+    required String instanceId,
+    required String targetVersionId,
+    required VersionStatePolicy statePolicy,
+    required int currentStateSchemaVersion,
+    required int targetStateSchemaVersion,
+    required Set<PermissionGrant> replacementGrants,
+    required String backupId,
+    required String newStateNamespace,
+    required DateTime createdAt,
+    CardStateBackup? restoreBackup,
+  }) {
+    final instanceRows = _connection.query(
+      'SELECT * FROM card_instances WHERE instance_id = ?',
+      [instanceId],
+    );
+    if (instanceRows.isEmpty) {
+      throw StateError('card instance does not exist');
+    }
+    final current = _instanceFromRow(instanceRows.single);
+    final targetRows = _connection.query(
+      '''
+      SELECT card_id, verified
+      FROM card_installations
+      WHERE version_id = ?
+      ''',
+      [targetVersionId],
+    );
+    if (targetRows.isEmpty ||
+        targetRows.single['card_id'] != current.cardId ||
+        targetRows.single['verified'] != 1) {
+      throw StateError('target card version is not a verified installation');
+    }
+    if (currentStateSchemaVersion < 1 || targetStateSchemaVersion < 1) {
+      throw ArgumentError('state schema versions must be positive');
+    }
+    if (statePolicy == VersionStatePolicy.reuse &&
+        currentStateSchemaVersion != targetStateSchemaVersion) {
+      throw ArgumentError('incompatible state schemas cannot reuse state');
+    }
+    if (statePolicy != VersionStatePolicy.reuse &&
+        currentStateSchemaVersion == targetStateSchemaVersion) {
+      throw ArgumentError('compatible state schemas must reuse state');
+    }
+    if (statePolicy == VersionStatePolicy.restore && restoreBackup == null) {
+      throw ArgumentError('restore policy requires a state backup');
+    }
+    if (restoreBackup != null &&
+        (restoreBackup.instanceId != instanceId ||
+            restoreBackup.cardId != current.cardId ||
+            restoreBackup.versionId != targetVersionId ||
+            restoreBackup.stateSchemaVersion != targetStateSchemaVersion)) {
+      throw ArgumentError('state backup does not match the target version');
+    }
+
+    return _connection.transaction(() {
+      var stateNamespace = current.stateNamespace;
+      if (statePolicy != VersionStatePolicy.reuse) {
+        backupState(
+          backupId: backupId,
+          instanceId: instanceId,
+          cardId: current.cardId,
+          versionId: current.versionId,
+          stateSchemaVersion: currentStateSchemaVersion,
+          stateNamespace: current.stateNamespace,
+          createdAt: createdAt,
+        );
+        stateNamespace = newStateNamespace;
+        _replaceStateRows(
+          stateNamespace,
+          statePolicy == VersionStatePolicy.restore
+              ? restoreBackup!.snapshot
+              : const {},
+        );
+      }
+
+      _connection.execute(
+        '''
+        UPDATE card_instances
+        SET version_id = ?, state_namespace = ?
+        WHERE instance_id = ?
+        ''',
+        [targetVersionId, stateNamespace, instanceId],
+      );
+      _connection.execute(
+        'DELETE FROM permission_grants WHERE instance_id = ?',
+        [instanceId],
+      );
+      for (final grant in replacementGrants) {
+        if (grant.instanceId != instanceId ||
+            grant.versionId != targetVersionId) {
+          throw ArgumentError(
+            'replacement grant does not match the target instance version',
+          );
+        }
+        upsertGrant(grant);
+      }
+      return _instanceFromRow(
+        _connection.query(
+          'SELECT * FROM card_instances WHERE instance_id = ?',
+          [instanceId],
+        ).single,
+      );
+    });
+  }
+
   void putState(String namespace, String key, Object? value) {
     _connection.execute(
       '''
@@ -338,22 +446,26 @@ class LocalDatabase {
   void replaceState(String namespace, Map<String, Object?> state) {
     _connection.execute('BEGIN IMMEDIATE');
     try {
-      _connection.execute('DELETE FROM card_state WHERE namespace = ?', [
-        namespace,
-      ]);
-      for (final entry in state.entries) {
-        _connection.execute(
-          '''
-          INSERT INTO card_state (namespace, state_key, value_json)
-          VALUES (?, ?, ?)
-          ''',
-          [namespace, entry.key, jsonEncode(entry.value)],
-        );
-      }
+      _replaceStateRows(namespace, state);
       _connection.execute('COMMIT');
     } catch (_) {
       _connection.execute('ROLLBACK');
       rethrow;
+    }
+  }
+
+  void _replaceStateRows(String namespace, Map<String, Object?> state) {
+    _connection.execute('DELETE FROM card_state WHERE namespace = ?', [
+      namespace,
+    ]);
+    for (final entry in state.entries) {
+      _connection.execute(
+        '''
+        INSERT INTO card_state (namespace, state_key, value_json)
+        VALUES (?, ?, ?)
+        ''',
+        [namespace, entry.key, jsonEncode(entry.value)],
+      );
     }
   }
 

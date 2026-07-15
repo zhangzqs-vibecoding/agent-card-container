@@ -75,29 +75,29 @@ Commit: `feat: persist bounded card state backups`
 - Modify: `apps/desktop/lib/src/storage/local_database.dart`
 - Modify: `apps/desktop/test/storage/local_database_test.dart`
 
-- [ ] **Step 1: 写兼容 schema 切换失败测试**
+- [x] **Step 1: 写兼容 schema 切换失败测试**
 
 准备同卡 v1/v2、实例状态和 v1 grants，调用 `switchInstalledInstanceVersion`。断言 version 改为 v2、namespace/state 不变，并且只有目标仍声明的 capability/domain 被复制为 v2 grant。
 
-- [ ] **Step 2: 写不兼容 schema 重置及恢复测试**
+- [x] **Step 2: 写不兼容 schema 重置及恢复测试**
 
 断言切换前产生 v1 备份、新 namespace 为空、旧 grants 清除；随后回滚 v1 时优先恢复最近 v1 备份。取消决策不得调用数据库入口，因此不产生任何变更。
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `cd apps/desktop && flutter test test/storage/local_database_test.dart`
 
 Expected: FAIL，事务入口尚不存在。
 
-- [ ] **Step 4: 实现单一事务入口**
+- [x] **Step 4: 实现单一事务入口**
 
 新增 `VersionStatePolicy.reuse/reset/restore` 和 `switchInstalledInstanceVersion(...)`。入口必须验证实例、当前/目标安装均存在且 `card_id` 一致；在一个 `_connection.transaction` 内完成备份、目标 namespace 状态写入、实例 version/namespace 更新及该实例 grants 全量替换。任何异常必须回滚。
 
-- [ ] **Step 5: 注入中途失败并证明回滚**
+- [x] **Step 5: 注入中途失败并证明回滚**
 
 测试传入无效 grant 或故意冲突 namespace，使事务在备份后失败；断言 instance、state、grants 和 backups 均保持原样。
 
-- [ ] **Step 6: 格式化、测试并提交**
+- [x] **Step 6: 格式化、测试并提交**
 
 Run: `cd apps/desktop && dart format lib/src/storage/local_database.dart test/storage/local_database_test.dart && flutter test test/storage/local_database_test.dart`
 
