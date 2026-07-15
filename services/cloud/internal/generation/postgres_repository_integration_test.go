@@ -88,6 +88,58 @@ func TestPostgresConfirmAndEnqueueAreAtomic(t *testing.T) {
 	})
 }
 
+func TestPostgresRepositoryPersistsPairedBaseVersion(t *testing.T) {
+	database := openPostgres(t)
+	resetPostgres(t, database)
+	repository := generation.NewPostgresRepository(database)
+	now := time.Date(2026, 7, 15, 16, 0, 0, 0, time.UTC)
+	session, err := generation.NewSession(generation.CreateInput{
+		ID:            "gen_iteration_persisted",
+		UserID:        "owner",
+		Prompt:        "增加暂停按钮",
+		Target:        generation.TargetNative,
+		Locale:        "zh-CN",
+		BaseCardID:    "card_01",
+		BaseVersionID: "ver_01",
+		CreatedAt:     now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := session.Transition(generation.StatusAwaitingConfirmation, generation.Transition{At: now}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Create(context.Background(), session); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repository.Update(context.Background(), "owner", session.ID, func(candidate *generation.Session) error {
+		_, confirmErr := candidate.Confirm([]string{"storage"}, now.Add(time.Minute))
+		return confirmErr
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.BaseCardID != "card_01" ||
+		stored.ConfirmedRequirement.BaseVersionID != "ver_01" {
+		t.Fatalf("stored iteration = %#v", stored)
+	}
+	reloaded, err := repository.Get(context.Background(), "owner", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.BaseVersionID != "ver_01" ||
+		reloaded.ConfirmedRequirement.BaseCardID != "card_01" {
+		t.Fatalf("reloaded iteration = %#v", reloaded)
+	}
+
+	if _, err := database.Exec(
+		`UPDATE generation_sessions SET base_version_id = NULL WHERE id = $1`,
+		session.ID,
+	); err == nil {
+		t.Fatal("unpaired base version update error = nil")
+	}
+}
+
 func newAtomicConfirmationService(
 	database *sql.DB,
 	sessionID, jobID string,

@@ -55,11 +55,11 @@
 - Modify: `services/cloud/internal/generation/postgres_repository_test.go`
 - Modify: `services/cloud/internal/generation/postgres_repository_integration_test.go`
 
-- [ ] RED：repository round-trip 测试证明 draft 与 confirmed snapshot 重启后仍保留 base IDs。
-- [ ] GREEN：migration 增加 nullable 两列及成对 CHECK；insert/select/scan 全部接线。
-- [ ] RED：数据库直接写入单边 base 字段必须被约束拒绝。
-- [ ] 运行 migration、repository 单元与 PostgreSQL 集成测试。
-- [ ] 提交：`feat: persist generation base versions`。
+- [x] RED：repository round-trip 测试证明 draft 与 confirmed snapshot 重启后仍保留 base IDs。
+- [x] GREEN：migration 增加 nullable 两列及成对 CHECK；insert/select/scan 全部接线。
+- [x] RED：数据库直接写入单边 base 字段必须被约束拒绝。
+- [x] 运行 migration、repository 单元与 PostgreSQL 集成测试。
+- [x] 提交：`feat: persist generation base versions`。
 
 ## Task 4：读取并验证上一版制品
 

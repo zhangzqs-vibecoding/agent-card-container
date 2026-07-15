@@ -218,8 +218,10 @@ func insertSession(ctx context.Context, executor sqlExecutor, session *Session) 
 		ctx,
 		`INSERT INTO generation_sessions (
 		  id, user_id, prompt, target, locale, status, summary_json,
-		  confirmed_requirement_json, version_id, created_at, updated_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11)`,
+		  confirmed_requirement_json, version_id, base_card_id, base_version_id,
+		  created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''),
+		          NULLIF($10, ''), NULLIF($11, ''), $12, $13)`,
 		session.ID,
 		session.UserID,
 		session.Prompt,
@@ -229,6 +231,8 @@ func insertSession(ctx context.Context, executor sqlExecutor, session *Session) 
 		summary,
 		confirmedRequirement,
 		session.VersionID,
+		session.BaseCardID,
+		session.BaseVersionID,
 		session.CreatedAt.UTC(),
 		session.UpdatedAt.UTC(),
 	)
@@ -300,7 +304,8 @@ func loadSession(
 ) (*Session, error) {
 	query := `SELECT id, user_id, prompt, target, locale, status,
 	                 summary_json, confirmed_requirement_json,
-	                 version_id, created_at, updated_at
+	                 version_id, base_card_id, base_version_id,
+	                 created_at, updated_at
 	          FROM generation_sessions WHERE id = $1`
 	arguments := []any{sessionID}
 	if userID != "" {
@@ -314,6 +319,8 @@ func loadSession(
 	var summary []byte
 	var confirmedRequirement []byte
 	var versionID sql.NullString
+	var baseCardID sql.NullString
+	var baseVersionID sql.NullString
 	if err := executor.QueryRowContext(ctx, query, arguments...).Scan(
 		&session.ID,
 		&session.UserID,
@@ -324,6 +331,8 @@ func loadSession(
 		&summary,
 		&confirmedRequirement,
 		&versionID,
+		&baseCardID,
+		&baseVersionID,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	); err != nil {
@@ -343,6 +352,8 @@ func loadSession(
 		session.ConfirmedRequirement = requirement
 	}
 	session.VersionID = versionID.String
+	session.BaseCardID = baseCardID.String
+	session.BaseVersionID = baseVersionID.String
 	messages, err := loadMessages(ctx, executor, session.ID)
 	if err != nil {
 		return nil, err
@@ -446,6 +457,10 @@ func validateConfirmedRequirement(requirement *RequirementSnapshot) error {
 	}
 	if strings.TrimSpace(requirement.Locale) == "" {
 		return fmt.Errorf("locale is required")
+	}
+	if (strings.TrimSpace(requirement.BaseCardID) == "") !=
+		(strings.TrimSpace(requirement.BaseVersionID) == "") {
+		return fmt.Errorf("baseCardId and baseVersionId must be provided together")
 	}
 	if requirement.AllowedCapabilities == nil {
 		return fmt.Errorf("allowedCapabilities is required")

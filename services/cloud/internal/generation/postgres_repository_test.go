@@ -23,6 +23,17 @@ func TestValidateConfirmedRequirement(t *testing.T) {
 		wantError   bool
 	}{
 		{name: "valid empty lists", requirement: valid},
+		{name: "valid base version", requirement: func() *RequirementSnapshot {
+			requirement := valid()
+			requirement.BaseCardID = "card_01"
+			requirement.BaseVersionID = "ver_01"
+			return requirement
+		}},
+		{name: "unpaired base card", requirement: func() *RequirementSnapshot {
+			requirement := valid()
+			requirement.BaseCardID = "card_01"
+			return requirement
+		}, wantError: true},
 		{name: "empty prompt", requirement: func() *RequirementSnapshot {
 			requirement := valid()
 			requirement.InitialPrompt = " "
