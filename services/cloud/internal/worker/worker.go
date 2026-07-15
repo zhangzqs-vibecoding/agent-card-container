@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,17 +21,18 @@ import (
 )
 
 type Config struct {
-	WorkerID          string
-	Jobs              jobs.Store
-	Generations       *generation.Service
-	Agent             *agent.CodingAgent
-	Publisher         *publish.Publisher
-	NewCardID         func() string
-	NewVersionID      func() string
-	Now               func() time.Time
-	Logger            *slog.Logger
-	LeaseDuration     time.Duration
-	HeartbeatInterval time.Duration
+	WorkerID            string
+	Jobs                jobs.Store
+	Generations         *generation.Service
+	Agent               *agent.CodingAgent
+	Publisher           *publish.Publisher
+	NewCardID           func() string
+	NewVersionID        func() string
+	Now                 func() time.Time
+	Logger              *slog.Logger
+	TrustedArtifactKeys map[string]ed25519.PublicKey
+	LeaseDuration       time.Duration
+	HeartbeatInterval   time.Duration
 }
 
 type Worker struct {
@@ -58,6 +60,7 @@ func New(config Config) *Worker {
 		config.HeartbeatInterval*2 >= config.LeaseDuration {
 		panic("worker heartbeat interval must be less than half the lease duration")
 	}
+	config.TrustedArtifactKeys = cloneTrustedKeys(config.TrustedArtifactKeys)
 	return &Worker{config: config}
 }
 
@@ -120,16 +123,43 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		)
 	}
 	requirement := cloneRequirementSnapshot(*session.ConfirmedRequirement)
+	var baseArtifact *agent.BaseArtifact
+	cardIDCandidate := ""
+	if requirement.BaseCardID != "" {
+		loaded, err := worker.config.Publisher.LoadVersionArtifact(
+			ctx, session.UserID, requirement.BaseCardID, requirement.BaseVersionID, 8*1024*1024,
+		)
+		if err != nil {
+			return Outcome{}, worker.fail(ctx, job, "BASE_ARTIFACT_LOAD_FAILED", err)
+		}
+		parsed, err := agent.ParseBaseArtifact(loaded.Archive, agent.BaseArtifactExpectation{
+			CardID: requirement.BaseCardID, VersionID: requirement.BaseVersionID, KeyID: loaded.Version.KeyID,
+		}, worker.config.TrustedArtifactKeys)
+		if err != nil {
+			return Outcome{}, worker.fail(ctx, job, "BASE_ARTIFACT_INVALID", err)
+		}
+		baseArtifact = &parsed
+		cardIDCandidate = requirement.BaseCardID
+	} else {
+		cardIDCandidate = worker.config.NewCardID()
+	}
 	publication, err := worker.config.Jobs.ReservePublication(
 		ctx,
 		job.ID,
 		worker.config.WorkerID,
-		worker.config.NewCardID(),
+		cardIDCandidate,
 		worker.config.NewVersionID(),
 		now,
 	)
 	if err != nil {
 		return Outcome{}, err
+	}
+	if baseArtifact != nil &&
+		(publication.CardID != requirement.BaseCardID || publication.VersionID == requirement.BaseVersionID) {
+		return Outcome{}, worker.fail(
+			ctx, job, "GENERATION_STATE_INVALID",
+			fmt.Errorf("reserved iteration publication identity is invalid"),
+		)
 	}
 	existing, findErr := worker.config.Publisher.FindVersion(
 		ctx, session.UserID, publication.CardID, publication.VersionID,
@@ -161,9 +191,17 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 			fmt.Errorf("ready generation publication is missing"),
 		)
 	}
+	displayVersion := "1.0.0"
+	if baseArtifact != nil {
+		displayVersion, err = worker.config.Publisher.NextDisplayVersion(ctx, session.UserID, publication.CardID)
+		if err != nil {
+			return Outcome{}, worker.fail(ctx, job, "VERSION_HISTORY_INVALID", err)
+		}
+	}
 	result, err := worker.config.Agent.Generate(ctx, agent.Request{
-		SessionID:   session.ID,
-		Requirement: requirement,
+		SessionID:    session.ID,
+		Requirement:  requirement,
+		BaseArtifact: baseArtifact,
 	})
 	if err != nil {
 		return Outcome{}, worker.fail(ctx, job, "VALIDATION_FAILED", err)
@@ -196,6 +234,9 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		for name, content := range result.Files {
 			artifactFiles["payload/web/"+name] = content
 		}
+		for name, source := range result.Sources {
+			artifactFiles["source/web/"+name] = []byte(source)
+		}
 	} else {
 		artifactFiles["payload/native.json"] = []byte(result.Content)
 	}
@@ -204,7 +245,7 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		MinHostVersion:     "1.0.0",
 		CardID:             cardID,
 		VersionID:          versionID,
-		DisplayVersion:     "1.0.0",
+		DisplayVersion:     displayVersion,
 		Runtime:            runtime,
 		StateSchemaVersion: 1,
 		Title:              titleFromPrompt(requirement.InitialPrompt),
@@ -217,6 +258,18 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		Capabilities:       append([]string(nil), requirement.AllowedCapabilities...),
 		NetworkPolicy:      contracts.NetworkPolicy{Mode: "none", Domains: []string{}},
 		CreatedAt:          job.CreatedAt,
+	}
+	if baseArtifact != nil {
+		definition.Runtime = baseArtifact.Definition.Runtime
+		definition.StateSchemaVersion = baseArtifact.Definition.StateSchemaVersion
+		definition.MinHostVersion = baseArtifact.Definition.MinHostVersion
+		definition.Entrypoint = baseArtifact.Definition.Entrypoint
+		definition.CatalogVersion = baseArtifact.Definition.CatalogVersion
+		definition.MinSize = baseArtifact.Definition.MinSize
+		definition.PreferredSize = baseArtifact.Definition.PreferredSize
+		definition.MaxSize = baseArtifact.Definition.MaxSize
+		definition.Capabilities = append([]string(nil), baseArtifact.Definition.Capabilities...)
+		definition.NetworkPolicy = cloneNetworkPolicy(baseArtifact.Definition.NetworkPolicy)
 	}
 	publishStartedAt := time.Now()
 	worker.config.Logger.InfoContext(ctx, "artifact_publish_started",
@@ -237,6 +290,20 @@ func (worker *Worker) RunOnce(ctx context.Context) (outcome Outcome, runErr erro
 		},
 		CreatedAt: job.CreatedAt,
 	})
+	if errors.Is(err, publish.ErrDisplayVersionConflict) && baseArtifact != nil {
+		displayVersion, nextErr := worker.config.Publisher.NextDisplayVersion(ctx, session.UserID, publication.CardID)
+		if nextErr != nil {
+			return Outcome{}, worker.fail(ctx, job, "VERSION_HISTORY_INVALID", nextErr)
+		}
+		definition.DisplayVersion = displayVersion
+		version, err = worker.config.Publisher.Publish(ctx, publish.Input{
+			UserID: session.UserID, Definition: definition, Files: artifactFiles,
+			Preview: map[string]any{
+				"title": definition.Title, "runtime": string(result.Runtime), "reason": result.Reason,
+			},
+			CreatedAt: job.CreatedAt,
+		})
+	}
 	if err != nil {
 		worker.config.Logger.WarnContext(ctx, "artifact_publish_failed",
 			"jobId", job.ID,
@@ -287,6 +354,19 @@ func cloneRequirementSnapshot(requirement generation.RequirementSnapshot) genera
 	requirement.AdditionalMessages = append([]generation.Message(nil), requirement.AdditionalMessages...)
 	requirement.AllowedCapabilities = append([]string(nil), requirement.AllowedCapabilities...)
 	return requirement
+}
+
+func cloneTrustedKeys(input map[string]ed25519.PublicKey) map[string]ed25519.PublicKey {
+	output := make(map[string]ed25519.PublicKey, len(input))
+	for keyID, publicKey := range input {
+		output[keyID] = append(ed25519.PublicKey(nil), publicKey...)
+	}
+	return output
+}
+
+func cloneNetworkPolicy(input contracts.NetworkPolicy) contracts.NetworkPolicy {
+	input.Domains = append([]string(nil), input.Domains...)
+	return input
 }
 
 func descriptionFromRequirement(requirement generation.RequirementSnapshot) string {

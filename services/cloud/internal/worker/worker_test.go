@@ -434,6 +434,102 @@ func TestWorkerUsesPublicationIdentityReservedByEarlierAttempt(t *testing.T) {
 	}
 }
 
+func TestWorkerPublishesVerifiedIterationOnExistingCard(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	now := time.Date(2026, 7, 15, 17, 0, 0, 0, time.UTC)
+	seed := sha256.Sum256([]byte("iteration-worker-key"))
+	privateKey := ed25519.NewKeyFromSeed(seed[:])
+	publicKey := privateKey.Public().(ed25519.PublicKey)
+	objects := publish.NewMemoryObjectStore()
+	versions := publish.NewMemoryVersionRepository()
+	publisher := publish.NewPublisher(artifact.NewBuilder("iteration-key", privateKey), objects, versions)
+	baseDefinition := contracts.CardDefinition{
+		FormatVersion: 1, MinHostVersion: "1.0.0", CardID: "card_existing", VersionID: "ver_base",
+		DisplayVersion: "1.0.0", Runtime: contracts.CardRuntimeNative, StateSchemaVersion: 3,
+		Title: "旧版", Entrypoint: "payload/native.json", CatalogVersion: "1",
+		MinSize: contracts.Size{Width: 200, Height: 120}, PreferredSize: contracts.Size{Width: 420, Height: 260},
+		MaxSize: contracts.Size{Width: 900, Height: 700}, Capabilities: []string{"storage"},
+		NetworkPolicy: contracts.NetworkPolicy{Mode: "none", Domains: []string{}}, CreatedAt: now.Add(-time.Hour),
+	}
+	if _, err := publisher.Publish(ctx, publish.Input{
+		UserID: "owner", Definition: baseDefinition, CreatedAt: baseDefinition.CreatedAt,
+		Files: map[string][]byte{
+			"payload/native.json": []byte(`{"schemaVersion":1,"initialState":{"count":1},"root":{"id":"root","type":"Text"}}`),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	service := generation.NewService(
+		generation.NewMemoryRepository(), func() string { return "gen_iteration" }, func() time.Time { return now },
+		generation.WithBaseVersionCatalog(publisher),
+	)
+	session, err := service.Create(ctx, "owner", generation.CreateRequest{
+		Prompt: "增加重置按钮", Target: generation.TargetNative, Locale: "zh-CN",
+		BaseCardID: "card_existing", BaseVersionID: "ver_base",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "owner", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewMemoryStore(func() string { return "job_iteration" })
+	if _, err := jobStore.Enqueue(ctx, session.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	provider := &captureProvider{}
+	newCardCalls := 0
+	runner := worker.New(worker.Config{
+		WorkerID: "worker-iteration", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()), Publisher: publisher,
+		TrustedArtifactKeys: map[string]ed25519.PublicKey{"iteration-key": publicKey},
+		NewCardID:           func() string { newCardCalls++; return "card_wrong" },
+		NewVersionID:        func() string { return "ver_next" }, Now: func() time.Time { return now },
+	})
+	outcome, err := runner.RunOnce(ctx)
+	if err != nil {
+		t.Fatalf("RunOnce() error = %v", err)
+	}
+	if outcome.VersionID != "ver_next" || newCardCalls != 0 || len(provider.requests) != 1 {
+		t.Fatalf("outcome=%#v newCardCalls=%d providerCalls=%d", outcome, newCardCalls, len(provider.requests))
+	}
+	if !strings.Contains(provider.requests[0].UserPrompt, "Existing signed base version") ||
+		!strings.Contains(provider.requests[0].UserPrompt, `\"count\":1`) {
+		t.Fatalf("iteration prompt = %q", provider.requests[0].UserPrompt)
+	}
+	detail, err := publisher.Card(ctx, "owner", "card_existing")
+	if err != nil || len(detail.Versions) != 2 {
+		t.Fatalf("card detail = %#v, %v", detail, err)
+	}
+	var next publish.CardVersion
+	for _, version := range detail.Versions {
+		if version.VersionID == "ver_next" {
+			next = version
+		}
+	}
+	if next.DisplayVersion != "1.0.1" {
+		t.Fatalf("next version = %#v", next)
+	}
+	loaded, err := publisher.LoadVersionArtifact(ctx, "owner", "card_existing", "ver_next", 8*1024*1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := agent.ParseBaseArtifact(loaded.Archive, agent.BaseArtifactExpectation{
+		CardID: "card_existing", VersionID: "ver_next", KeyID: "iteration-key",
+	}, map[string]ed25519.PublicKey{"iteration-key": publicKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Definition.Runtime != baseDefinition.Runtime ||
+		parsed.Definition.StateSchemaVersion != baseDefinition.StateSchemaVersion ||
+		!slices.Equal(parsed.Definition.Capabilities, baseDefinition.Capabilities) ||
+		parsed.Definition.NetworkPolicy.Mode != baseDefinition.NetworkPolicy.Mode {
+		t.Fatalf("iteration definition did not inherit baseline: %#v", parsed.Definition)
+	}
+}
+
 func TestWorkerCompletesVersionPublishedBeforePreviousAttemptCrashed(t *testing.T) {
 	t.Parallel()
 
@@ -910,8 +1006,9 @@ func TestWorkerPublishesSandboxedCodeCard(t *testing.T) {
 		t.Fatal(err)
 	}
 	seed := sha256.Sum256([]byte("web-key"))
+	privateKey := ed25519.NewKeyFromSeed(seed[:])
 	publisher := publish.NewPublisher(
-		artifact.NewBuilder("key", ed25519.NewKeyFromSeed(seed[:])),
+		artifact.NewBuilder("key", privateKey),
 		publish.NewMemoryObjectStore(),
 		publish.NewMemoryVersionRepository(),
 	)
@@ -940,6 +1037,19 @@ func TestWorkerPublishesSandboxedCodeCard(t *testing.T) {
 	}
 	if card.Versions[0].Runtime != "web" {
 		t.Fatalf("runtime = %q, want web", card.Versions[0].Runtime)
+	}
+	loaded, err := publisher.LoadVersionArtifact(context.Background(), "user", "card_web", "ver_web", 8*1024*1024)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := agent.ParseBaseArtifact(loaded.Archive, agent.BaseArtifactExpectation{
+		CardID: "card_web", VersionID: "ver_web", KeyID: "key",
+	}, map[string]ed25519.PublicKey{"key": privateKey.Public().(ed25519.PublicKey)})
+	if err != nil {
+		t.Fatalf("published CodeCard source is not reusable: %v", err)
+	}
+	if parsed.Sources["src/card.tsx"] == "" {
+		t.Fatalf("published CodeCard sources = %#v", parsed.Sources)
 	}
 }
 

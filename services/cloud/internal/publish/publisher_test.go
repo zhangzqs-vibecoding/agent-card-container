@@ -192,6 +192,42 @@ func TestMemoryVersionRepositoryRejectsDuplicateDisplayVersion(t *testing.T) {
 	}
 }
 
+func TestMemoryVersionRepositorySerializesConcurrentDisplayVersionClaims(t *testing.T) {
+	t.Parallel()
+
+	repository := publish.NewMemoryVersionRepository()
+	errorsChannel := make(chan error, 2)
+	start := make(chan struct{})
+	for _, versionID := range []string{"ver_left", "ver_right"} {
+		versionID := versionID
+		go func() {
+			<-start
+			_, err := repository.Create(context.Background(), publish.CardVersion{
+				VersionID: versionID, CardID: "card_01", UserID: "owner",
+				DisplayVersion: "1.0.1", ArtifactSHA256: versionID,
+			})
+			errorsChannel <- err
+		}()
+	}
+	close(start)
+	successes := 0
+	conflicts := 0
+	for range 2 {
+		err := <-errorsChannel
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, publish.ErrDisplayVersionConflict):
+			conflicts++
+		default:
+			t.Fatalf("Create() error = %v", err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("successes=%d conflicts=%d", successes, conflicts)
+	}
+}
+
 func TestPublisherLoadsOwnedArtifactWithinLimit(t *testing.T) {
 	t.Parallel()
 

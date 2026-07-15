@@ -119,6 +119,9 @@ func NewFromEnvironmentWithLogger(environment map[string]string, logger *slog.Lo
 		NewVersionID: func() string { return randomID("ver_") },
 		Now:          time.Now,
 		Logger:       logger,
+		TrustedArtifactKeys: map[string]ed25519.PublicKey{
+			keyID: privateKey.Public().(ed25519.PublicKey),
+		},
 	})
 	handler := httpapi.NewCloudHandler(httpapi.CloudHandlerConfig{
 		ServiceName:   "agent-card-cloud",

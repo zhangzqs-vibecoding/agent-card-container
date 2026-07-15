@@ -100,18 +100,19 @@
 
 - Modify: `services/cloud/internal/worker/worker.go`
 - Modify: `services/cloud/internal/worker/worker_test.go`
-- Modify: `services/cloud/internal/jobs/store.go`
-- Modify: `services/cloud/internal/jobs/postgres_store.go`
-- Modify: `services/cloud/migrations/008_generation_base_version.sql`
+- Modify: `services/cloud/internal/bootstrap/runtime.go`
+- Modify: `services/cloud/internal/publish/publisher.go`
+- Modify: `services/cloud/internal/publish/publisher_test.go`
 - Modify: `services/cloud/internal/publish/postgres_repository.go`
+- Modify: `services/cloud/internal/publish/postgres_repository_integration_test.go`
 
-- [ ] RED：基于 v1 的迭代 reservation 使用原 `cardId`、新 `versionId`；普通新卡仍分配新 card。
-- [ ] GREEN：worker 在 reservation 前解析快照身份；job reservation 幂等保持第一次选择。
-- [ ] RED：历史 `1.0.0/1.0.1` 生成 `1.0.2`，非法 display version fail closed；并发重复编号由唯一约束拒绝并稳定分类。
-- [ ] GREEN：增加严格 semver patch 计算和 `(user_id, card_id, display_version)` 唯一约束。
-- [ ] RED：基线 runtime/schema/capabilities 被确定性继承，模型不能扩大能力或改变 schema。
-- [ ] 运行 worker race、jobs 和 publish PostgreSQL 测试。
-- [ ] 提交：`feat: publish immutable card iterations`。
+- [x] RED：基于 v1 的迭代 reservation 使用原 `cardId`、新 `versionId`；普通新卡仍分配新 card。
+- [x] GREEN：worker 在 reservation 前解析快照身份；复用既有 job reservation 幂等语义保持第一次选择。
+- [x] RED：历史 `1.0.0/1.0.1` 生成 `1.0.2`，非法 display version fail closed；并发重复编号由唯一约束拒绝并稳定分类。
+- [x] GREEN：增加严格 semver patch 计算，并验证既有 `(user_id, card_id, display_version)` 唯一约束。
+- [x] RED：基线 runtime/schema/capabilities/network policy 被确定性继承，模型不能扩大能力或改变 schema。
+- [x] 运行 worker race、jobs 和 publish PostgreSQL 测试。
+- [x] 提交：`feat: publish immutable card iterations`。
 
 ## Task 7：真实 PostgreSQL/MinIO 恢复闭环
 
