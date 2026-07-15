@@ -121,11 +121,11 @@
 - Modify: `services/cloud/internal/worker/postgres_recovery_integration_test.go`
 - Modify: `tooling/persistence/run-p0b-gate.sh`
 
-- [ ] RED：真实 v1→v2 中任一 publish/complete 故障不能产生新 card、重复 version 或重复模型调用。
-- [ ] GREEN：在现有持久化门中发布 v1，再以它为基线发布 v2；独立下载并验签两份制品。
-- [ ] 断言同 `cardId`、不同 `versionId`、display version 递增，lease 恢复只完成预留版本。
-- [ ] 运行完整 P0-B Docker gate 并确认无容器/volume 残留。
-- [ ] 提交：`test: prove persistent card iteration recovery`。
+- [x] RED：真实 v1→v2 中 publish 后 complete 故障不能产生新 card、重复 version 或重复模型调用。
+- [x] GREEN：在现有持久化门中发布 v1，再以它为基线发布 v2；独立 HTTP 下载并验签两份制品。
+- [x] 断言同 `cardId`、不同 `versionId`、display version 递增，lease 恢复只完成预留版本。
+- [x] 运行完整 P0-B Docker gate 并确认无容器/volume 残留。
+- [x] 提交：`test: prove persistent card iteration recovery`。
 
 ## Task 8：验收与文档
 

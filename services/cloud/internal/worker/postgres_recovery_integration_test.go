@@ -262,6 +262,171 @@ func TestProductionWorkerPublishesAndRecoversSandboxedCodeCard(t *testing.T) {
 	}
 }
 
+func TestProductionWorkerPublishesAndRecoversCardIteration(t *testing.T) {
+	dsn := os.Getenv("AGENTCARD_POSTGRES_TEST_DSN")
+	s3Endpoint := os.Getenv("AGENTCARD_S3_TEST_ENDPOINT")
+	if dsn == "" || s3Endpoint == "" {
+		t.Skip("production persistence test environment is not configured")
+	}
+	ctx := context.Background()
+	database, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if _, err := database.Exec(`DROP SCHEMA public CASCADE; CREATE SCHEMA public`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrations.Apply(ctx, database); err != nil {
+		t.Fatal(err)
+	}
+	objects, err := publish.NewS3ObjectStore(ctx, publish.S3Config{
+		Endpoint: s3Endpoint, AccessKey: os.Getenv("AGENTCARD_S3_TEST_ACCESS_KEY"),
+		SecretKey: os.Getenv("AGENTCARD_S3_TEST_SECRET_KEY"), Bucket: os.Getenv("AGENTCARD_S3_TEST_BUCKET"),
+		Region: "us-east-1", Secure: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	versions := publish.NewPostgresVersionRepository(database)
+	publisher := publish.NewPublisher(artifact.NewBuilder("p1a-iteration-key", privateKey), objects, versions)
+	createdAt := time.Date(2026, 7, 15, 17, 30, 0, 0, time.UTC)
+	baseDefinition := contracts.CardDefinition{
+		FormatVersion: 1, MinHostVersion: "1.0.0", CardID: "card_p1a_iteration", VersionID: "ver_p1a_base",
+		DisplayVersion: "1.0.0", Runtime: contracts.CardRuntimeNative, StateSchemaVersion: 2,
+		Title: "计数器", Entrypoint: "payload/native.json", CatalogVersion: "1",
+		MinSize: contracts.Size{Width: 240, Height: 160}, PreferredSize: contracts.Size{Width: 360, Height: 240},
+		MaxSize: contracts.Size{Width: 900, Height: 700}, Capabilities: []string{"storage"},
+		NetworkPolicy: contracts.NetworkPolicy{Mode: "none", Domains: []string{}}, CreatedAt: createdAt.Add(-time.Hour),
+	}
+	if _, err := publisher.Publish(ctx, publish.Input{
+		UserID: "user", Definition: baseDefinition, CreatedAt: baseDefinition.CreatedAt,
+		Files: map[string][]byte{
+			"payload/native.json": []byte(`{"schemaVersion":1,"initialState":{"count":1},"root":{"id":"root","type":"Text"}}`),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	jobStore := jobs.NewPostgresStore(database, func() string { return "job_p1a_iteration" })
+	service := generation.NewService(
+		generation.NewPostgresRepository(database), func() string { return "gen_p1a_iteration" }, func() time.Time { return createdAt },
+		generation.WithJobQueue(jobs.NewGenerationQueue(jobStore)),
+		generation.WithAtomicJobID(func() string { return "job_p1a_iteration" }),
+		generation.WithBaseVersionCatalog(publisher),
+	)
+	session, err := service.Create(ctx, "user", generation.CreateRequest{
+		Prompt: "增加重置按钮", Target: generation.TargetNative, Locale: "zh-CN",
+		BaseCardID: baseDefinition.CardID, BaseVersionID: baseDefinition.VersionID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Confirm(ctx, "user", session.ID); err != nil {
+		t.Fatal(err)
+	}
+	provider := &captureProvider{}
+	newCardCalls := 0
+	first := worker.New(worker.Config{
+		WorkerID: "worker-p1a-first", Jobs: &completeFailOnceStore{Store: jobStore}, Generations: service,
+		Agent: agent.NewCodingAgent(provider, agent.NewNativeValidator()), Publisher: publisher,
+		TrustedArtifactKeys: map[string]ed25519.PublicKey{"p1a-iteration-key": publicKey},
+		NewCardID:           func() string { newCardCalls++; return "card_wrong" },
+		NewVersionID:        func() string { return "ver_p1a_next" }, Now: func() time.Time { return createdAt },
+	})
+	if _, err := first.RunOnce(ctx); !errors.Is(err, publish.ErrRetryable) {
+		t.Fatalf("first RunOnce() error = %v", err)
+	}
+	if len(provider.requests) != 1 || newCardCalls != 0 {
+		t.Fatalf("first provider calls=%d newCardCalls=%d", len(provider.requests), newCardCalls)
+	}
+	next, err := versions.Find(ctx, "user", baseDefinition.CardID, "ver_p1a_next")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.DisplayVersion != "1.0.1" {
+		t.Fatalf("next version = %#v", next)
+	}
+	for _, version := range []publish.CardVersion{
+		{CardID: baseDefinition.CardID, VersionID: baseDefinition.VersionID, KeyID: "p1a-iteration-key"},
+		next,
+	} {
+		parsed := downloadAndParseBaseArtifact(t, ctx, publisher, version, publicKey)
+		if parsed.Definition.CardID != baseDefinition.CardID || parsed.Definition.StateSchemaVersion != 2 {
+			t.Fatalf("verified definition = %#v", parsed.Definition)
+		}
+	}
+
+	recoveredAt := createdAt.Add(2 * time.Minute)
+	recoveryProvider := &captureProvider{}
+	second := worker.New(worker.Config{
+		WorkerID: "worker-p1a-recovery", Jobs: jobStore, Generations: service,
+		Agent: agent.NewCodingAgent(recoveryProvider, agent.NewNativeValidator()), Publisher: publisher,
+		TrustedArtifactKeys: map[string]ed25519.PublicKey{"p1a-iteration-key": publicKey},
+		NewCardID:           func() string { return "card_other" }, NewVersionID: func() string { return "ver_other" },
+		Now: func() time.Time { return recoveredAt },
+	})
+	if _, err := second.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(recoveryProvider.requests) != 0 {
+		t.Fatalf("recovery provider calls = %d", len(recoveryProvider.requests))
+	}
+	ready, err := service.Get(ctx, "user", session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := jobStore.Get(ctx, "job_p1a_iteration")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cardCount, versionCount int
+	if err := database.QueryRow(`SELECT count(DISTINCT card_id), count(*) FROM card_versions`).Scan(&cardCount, &versionCount); err != nil {
+		t.Fatal(err)
+	}
+	if ready.Status != generation.StatusReady || ready.VersionID != next.VersionID ||
+		completed.Status != jobs.StatusCompleted || cardCount != 1 || versionCount != 2 {
+		t.Fatalf("ready=%#v job=%#v cardCount=%d versionCount=%d", ready, completed, cardCount, versionCount)
+	}
+}
+
+func downloadAndParseBaseArtifact(
+	t *testing.T,
+	ctx context.Context,
+	publisher *publish.Publisher,
+	version publish.CardVersion,
+	publicKey ed25519.PublicKey,
+) agent.BaseArtifact {
+	t.Helper()
+	download, err := publisher.Download(ctx, "user", version.CardID, version.VersionID, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := (&http.Client{Timeout: 10 * time.Second}).Get(download.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	archive, err := io.ReadAll(io.LimitReader(response.Body, 8*1024*1024+1))
+	if err != nil || response.StatusCode != http.StatusOK || len(archive) == 0 || len(archive) > 8*1024*1024 {
+		t.Fatalf("artifact download status=%d size=%d error=%v", response.StatusCode, len(archive), err)
+	}
+	digest := sha256.Sum256(archive)
+	if encoded := hex.EncodeToString(digest[:]); encoded != download.SHA256 {
+		t.Fatalf("artifact digest = %s, want %s", encoded, download.SHA256)
+	}
+	parsed, err := agent.ParseBaseArtifact(archive, agent.BaseArtifactExpectation{
+		CardID: version.CardID, VersionID: version.VersionID, KeyID: version.KeyID,
+	}, map[string]ed25519.PublicKey{version.KeyID: publicKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
+}
+
 type codeCardIntegrationProvider struct {
 	calls int
 }
