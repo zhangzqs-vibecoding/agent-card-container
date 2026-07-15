@@ -161,9 +161,16 @@ type repositorySet struct {
 }
 
 func buildRepositories(environment map[string]string) (repositorySet, error) {
+	persistenceRequired, err := parsePersistenceRequired(environment["AGENTCARD_PERSISTENCE_REQUIRED"])
+	if err != nil {
+		return repositorySet{}, err
+	}
 	databaseURL := strings.TrimSpace(environment["AGENTCARD_DATABASE_URL"])
 	s3Endpoint := strings.TrimSpace(environment["AGENTCARD_S3_ENDPOINT"])
 	if databaseURL == "" && s3Endpoint == "" {
+		if persistenceRequired {
+			return repositorySet{}, fmt.Errorf("AGENTCARD_DATABASE_URL and AGENTCARD_S3_ENDPOINT are required when persistence is required")
+		}
 		return repositorySet{
 			generations: generation.NewMemoryRepository(),
 			jobs:        jobs.NewMemoryStore(func() string { return randomID("job_") }),
@@ -214,6 +221,17 @@ func buildRepositories(environment map[string]string) (repositorySet, error) {
 			objects:  objects.Ready,
 		},
 	}, nil
+}
+
+func parsePersistenceRequired(value string) (bool, error) {
+	switch strings.TrimSpace(value) {
+	case "", "false":
+		return false, nil
+	case "true":
+		return true, nil
+	default:
+		return false, fmt.Errorf("AGENTCARD_PERSISTENCE_REQUIRED must be true or false")
+	}
 }
 
 func buildAuthenticator(environment map[string]string) (httpapi.Authenticator, error) {
