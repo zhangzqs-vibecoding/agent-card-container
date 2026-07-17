@@ -37,7 +37,7 @@
 | 6 | 工作区拖动、缩放、碰撞和布局编辑 | **HEADLESS PASS / DEVICE NOT RUN** | 12 列网格拖缩、first-fit 碰撞避让、300ms 持久化、重启恢复和失败回滚已通过 Flutter/Linux 自动化；Windows DPI、多屏和实际输入仍未执行。 |
 | 7 | 同卡迭代、升级和回滚 | **VERSION LIFECYCLE HEADLESS PASS / WINDOWS DEVICE NOT RUN** | 云端完成可信基线、同卡不可变新版本和故障恢复；客户端完成差异确认、有界状态备份、grant 收缩、原子升级/回滚、runtime 失败补偿和基于版本继续生成。 |
 | 8 | worker heartbeat、事务、重试与发布幂等 | **HEADLESS PASS** | 原子确认/入队、租约 heartbeat/fencing、稳定发布身份、基础设施有限重试及五阶段部分失败恢复已通过 race 与 PostgreSQL/MinIO 门禁；Windows 消费仍属设备范围。 |
-| 9 | CodeCard 正式 builder 和真实生成链路 | **HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL / DEVICE NOT RUN** | 受控 builder、固定评测合同、Linux Chromium 离线/RPC、签名发布及 PostgreSQL/MinIO 恢复已通过；真实 CodeCard run `29466241445` 为 0/20，需完成稳定阶段诊断与修复；Windows WebView2 仍未执行。 |
+| 9 | CodeCard 正式 builder 和真实生成链路 | **HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL / DEVICE NOT RUN** | 受控 builder、固定评测合同、Linux Chromium 离线/RPC、签名发布及 PostgreSQL/MinIO 恢复已通过；稳定阶段 run `29546939570` 为 2/20，其余 18 例全部失败于 TypeScript 严格检查，需完成诊断编号定位与修复；Windows WebView2 仍未执行。 |
 | 10 | Windows/macOS 可信发行 | **开放** | Authenticode、正式安装器、WebView2 缺失引导、macOS 签名和 notarization 归入 P2。 |
 
 因此，当前状态应描述为“自动化骨架和安全边界基本成形，MVP 真实闭环尚未通过”，不能描述为发布就绪。
@@ -51,7 +51,7 @@
 | P0-C Windows NativeCard 闸门 | **未执行** | Windows 构建/便携包和设备门禁脚本 | 在参考设备完成远程下载、验签、安装、三类 Surface、状态保留、DPI/IME/多屏矩阵 | P0-A `HEADLESS PASS`、P0-B `PASS` 和 Windows 11 x64 参考设备 |
 | P1-A 工作区与版本生命周期 | **VERSION LIFECYCLE HEADLESS PASS / INSTANCE LIFECYCLE OPEN** | 布局编辑；可信同卡迭代；能力差异；状态备份；原子升级/回滚；runtime 失败补偿；基于版本继续生成 | 实例复制/删除/卸载与数据选择 | Windows 布局和版本切换体验属设备证据 |
 | P1-B worker 可靠性 | **HEADLESS PASS** | 原子确认/入队、90s/30s lease heartbeat、owner fencing、稳定 card/version、1s/2s 基础设施退避、取消传播及真实 PostgreSQL/MinIO crash recovery | 保持回归稳定；Windows 产品消费证据随 P0-C/P1-C 收集 | Linux/headless 不再有外部依赖 |
-| P1-C CodeCard 生产链路 | **HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL / DEVICE NOT RUN** | 受控 builder、20 例固定质量合同、本地 JS SDK、Linux Chromium 离线/RPC、签名发布和真实 PostgreSQL/MinIO 恢复；首次真实门禁 0/20 | 用稳定阶段分类定位并修复真实质量失败；在 Windows 参考设备完成离线 WebView2 矩阵 | 可访问 DeepSeek/GitHub 的网络；Windows 11 x64 参考设备 |
+| P1-C CodeCard 生产链路 | **HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL / DEVICE NOT RUN** | 受控 builder、20 例固定质量合同、本地 JS SDK、Linux Chromium 离线/RPC、签名发布和真实 PostgreSQL/MinIO 恢复；稳定阶段诊断已定位 TypeScript 层 | 取得 TS 诊断编号分布并修复模板 API/提示偏差；在 Windows 参考设备完成离线 WebView2 矩阵 | 临时模型凭据；Windows 11 x64 参考设备 |
 | P2 可信发行与 macOS | **未开始** | 静态安装器/entitlement 结构和跨平台 CI | Windows 签名发行、干净机升级卸载；macOS 签名、notarization 和设备闸门 | P0/P1 功能链路与 Windows M0 设备闸门通过；M4 完整通过是本阶段退出条件 |
 
 主要事实依据：

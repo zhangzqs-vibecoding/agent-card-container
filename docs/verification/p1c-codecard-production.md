@@ -32,7 +32,9 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 
 上述条目证明质量门是有界且可复核的，不证明真实模型已经达到通过率。2026-07-16 在提交 `9a3bd64` 上通过 GitHub run `29466241445` 执行 `deepseek-v4-pro`：20 个案例全部耗尽三次调用且均失败，汇总为 0/20、60 次模型调用、40,259 输入 tokens、101,763 输出 tokens、1,408,390 ms。该结果为 **LIVE QUALITY FAIL**，不是环境未执行；日志未保存 prompt、生成源码、上游正文或凭据。
 
-第一次运行只产生过粗的 `generation_failed` 类别，无法区分源码信封解析与沙箱构建失败。提交 `cffdb60` 增加了不包含正文的稳定阶段分类；其真实诊断重跑尚未执行，不能据此推断失败根因。
+第一次运行只产生过粗的 `generation_failed` 类别，无法区分源码信封解析与沙箱构建失败。提交 `cffdb60` 和 `bd89e5b` 增加了不包含正文的稳定管线与沙箱阶段分类。2026-07-17 在 `bd89e5b` 上执行 GitHub run `29546939570`：2/20 成功，56 次模型调用、37,419 输入 tokens、88,659 输出 tokens、1,283,935 ms；其余 18 个案例最终全部归类为 `sandbox-typecheck`。这证明系统性失败位于 TypeScript 严格检查层，不是模型 API、源码信封、依赖策略、Vitest、Vite 或 bundle 校验层。
+
+提交 `a674e5c` 进一步只提取 `TS` 加四位数字的稳定诊断编号，不记录文件名、源码行或错误正文；对应真实诊断重跑尚未执行。
 
 ## 自动化证据
 
@@ -59,7 +61,7 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 
 ## 剩余产品闸门
 
-1. 在网络恢复后，以 `cffdb60` 或后续包含稳定阶段分类的提交重跑固定 20 例真实 CodeCard gate，定位系统性失败阶段并修复；保存脱敏汇总，不保存生成正文。
+1. 以 `a674e5c` 或后续提交重跑固定 20 例真实 CodeCard gate，取得 TypeScript 稳定诊断编号分布，据此修复模板 API/模型提示的系统性偏差；保存脱敏汇总，不保存生成正文。
 2. 在 Windows 11 x64 参考设备运行 `packaging/windows/run-codecard-device-gate.ps1`，完成 WebView2、本地 JavaScript、三个 Surface、DPI/IME、离线重启、storage 和单卡崩溃隔离矩阵。
 3. 在 public GitHub 仓库实际触发 builder workflow，记录 GHCR RepoDigest、SBOM 和扫描结果。
 
