@@ -194,9 +194,12 @@ func TestWebPromptDeclaresExactMVPSourceWhitelist(t *testing.T) {
 	request := webModelRequest(promptRequest(), 1, "")
 	if !strings.Contains(
 		request.SystemPrompt,
-		"Only these source paths are allowed: src/card.tsx, src/card.css, src/card.test.tsx.",
+		"Only these generated source paths are allowed: src/card.tsx and src/card.css.",
 	) {
 		t.Fatalf("web system prompt has no exact source whitelist: %q", request.SystemPrompt)
+	}
+	if !strings.Contains(request.SystemPrompt, "Do not generate src/card.test.tsx") {
+		t.Fatalf("web system prompt does not reserve tests for the platform: %q", request.SystemPrompt)
 	}
 }
 
