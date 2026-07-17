@@ -1,14 +1,14 @@
 # P1-C CodeCard 生产链路验收记录
 
 状态：**HEADLESS AUTOMATION PASS / LIVE QUALITY PASS / WINDOWS DEVICE NOT RUN**
-记录日期：2026-07-16（Asia/Shanghai）
-验证提交：`5a6a7fd3f61938c0ce0fbc2e0cf6aef04c16520b`
+记录日期：2026-07-17（Asia/Shanghai）
+验证基线：`3f3123ecf1e0c141c94a37ec4af4b01d4f43705d`
 
 ## 结论
 
 P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受控 builder、CodeCard 源码合同、本地 JavaScript SDK、真实 Chromium 离线/RPC、签名发布以及 PostgreSQL/MinIO 故障恢复均通过。
 
-本记录不是完整 P1-C 产品验收。真实 DeepSeek CodeCard 20 例付费质量门已执行但未达到质量阈值，Windows WebView2 参考设备矩阵也未执行，因此不得标记为 `P1-C PASS` 或发布就绪。
+本记录不是完整 P1-C 产品验收。真实 DeepSeek CodeCard 20 例付费质量门已达到阈值，但 Windows WebView2 参考设备矩阵尚未执行，因此不得标记为完整 `P1-C PASS` 或发布就绪。
 
 ## 实施基线
 
@@ -16,8 +16,8 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 |---|---|---|
 | 固定 20 例 CodeCard 评测合同 | `ae5f339` | PASS（合同） |
 | 有界源码 API 与本地 JS SDK | `1a8129d` | PASS |
-| 固定 builder 供应链与 CI | `a37055d` | PASS（本地及静态策略） |
-| 有界真实模型质量门 | `87d3cc4` | PASS（门禁实现），真实运行 NOT RUN |
+| 固定 builder 供应链与 CI | `35dda9f` | PASS（本地、扫描、SBOM、GHCR digest） |
+| 有界真实模型质量门 | `3f3123e` | PASS（真实运行 19/20） |
 | Linux Chromium 离线运行时 | `aa7cf80` | PASS |
 | PostgreSQL/MinIO 发布恢复 | `005c826` | PASS |
 | Windows 设备执行包 | `5a6a7fd` | PASS（静态），设备 NOT RUN |
@@ -30,7 +30,7 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 - 只有配置可验证的模型单价且总费用不超过 5 美元时，才允许声明费用门通过。
 - CI 为显式 opt-in，并要求受保护环境确认；不保存 prompt、生成源码或上游响应正文。
 
-上述条目证明质量门是有界且可复核的，不证明真实模型已经达到通过率。2026-07-16 在提交 `9a3bd64` 上通过 GitHub run `29466241445` 执行 `deepseek-v4-pro`：20 个案例全部耗尽三次调用且均失败，汇总为 0/20、60 次模型调用、40,259 输入 tokens、101,763 输出 tokens、1,408,390 ms。该结果为 **LIVE QUALITY FAIL**，不是环境未执行；日志未保存 prompt、生成源码、上游正文或凭据。
+质量门是有界且可复核的。2026-07-16 在提交 `9a3bd64` 上通过 GitHub run `29466241445` 首次执行 `deepseek-v4-pro`：20 个案例全部耗尽三次调用且均失败，汇总为 0/20、60 次模型调用、40,259 输入 tokens、101,763 输出 tokens、1,408,390 ms。该次结果为 **LIVE QUALITY FAIL**，不是环境未执行；后续诊断和修复过程如下，所有运行均未保存 prompt、生成源码、上游正文或凭据。
 
 第一次运行只产生过粗的 `generation_failed` 类别，无法区分源码信封解析与沙箱构建失败。提交 `cffdb60` 和 `bd89e5b` 增加了不包含正文的稳定管线与沙箱阶段分类。2026-07-17 在 `bd89e5b` 上执行 GitHub run `29546939570`：2/20 成功，56 次模型调用、37,419 输入 tokens、88,659 输出 tokens、1,283,935 ms；其余 18 个案例最终全部归类为 `sandbox-typecheck`。这证明系统性失败位于 TypeScript 严格检查层，不是模型 API、源码信封、依赖策略、Vitest、Vite 或 bundle 校验层。
 
@@ -50,7 +50,9 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 | 聚合安全门 | PASS | Flutter、Go race、跨语言合同、模板及 Chromium 门均通过 |
 | 持久化发布恢复 | PASS | 真实 Docker builder、PostgreSQL、MinIO、SHA-256、manifest、Ed25519、lease 恢复和独立下载复核通过 |
 
-本地 builder 镜像身份为 `sha256:bda75454bf5477e79d100b74bf498f2c72613c32d02b173a6f154918836101a2`。2026-07-15 的持久化复跑生成备份 `backup-20260715T142632Z`，manifest SHA-256 为 `1761d16f78c5c0a37104169f49b0d2be4a03416793ef75cd7658d52f8a499e1a`。这些值只绑定本地验证；GHCR 远程发布在仓库 workflow 实际运行前保持 `NOT RUN`。
+本地 builder 镜像身份为 `sha256:bda75454bf5477e79d100b74bf498f2c72613c32d02b173a6f154918836101a2`。2026-07-15 的持久化复跑生成备份 `backup-20260715T142632Z`，manifest SHA-256 为 `1761d16f78c5c0a37104169f49b0d2be4a03416793ef75cd7658d52f8a499e1a`。
+
+public GitHub 仓库的 builder run `29456945755` 在提交 `35dda9f` 上实际通过 verify 与 publish：受控候选经过 locked-down sandbox 集成门、Trivy high/critical 拒绝门（0 个漏洞）、CycloneDX SBOM 上传（artifact ID `8359724748`，ZIP SHA-256 `2a846194964b6c796b56f3b22722ef4ce539e0d58c52791f8c3d9d7dbfc7608e`），随后发布为 `ghcr.io/zhangzqs-vibecoding/agent-card-codecard-builder@sha256:1d264ede578c085dd3b3057479c52a9cbd1595060c80c47a0e52a20db38485b1`。
 
 ## 已证明的安全边界
 
@@ -64,6 +66,5 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 ## 剩余产品闸门
 
 1. 在 Windows 11 x64 参考设备运行 `packaging/windows/run-codecard-device-gate.ps1`，完成 WebView2、本地 JavaScript、三个 Surface、DPI/IME、离线重启、storage 和单卡崩溃隔离矩阵。
-2. 在 public GitHub 仓库实际触发 builder workflow，记录 GHCR RepoDigest、SBOM 和扫描结果。
 
 Windows 设备门禁完成前，P1-C 保持 **HEADLESS AUTOMATION PASS / LIVE QUALITY PASS / WINDOWS DEVICE NOT RUN**。

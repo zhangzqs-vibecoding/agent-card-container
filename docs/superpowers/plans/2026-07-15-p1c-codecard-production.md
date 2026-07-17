@@ -114,5 +114,5 @@
 - [x] 设备模板覆盖 WebView2、三个 Surface、DPI/IME、离线重启、storage 和单卡崩溃隔离。
 - [x] 运行 Go race、Flutter analyze/test、Node、安全门、Docker、Chromium 和持久化门禁。
 - [x] 执行敏感信息与构建/容器残留审计。
-- [x] 自动化范围完整通过后标记 `HEADLESS AUTOMATION PASS / LIVE QUALITY NOT RUN / WINDOWS DEVICE NOT RUN`。
+- [x] 自动化范围完整通过后标记 `HEADLESS AUTOMATION PASS / LIVE QUALITY PASS / WINDOWS DEVICE NOT RUN`；真实质量 run `29549396016` 为 19/20，public builder run `29456945755` 已记录 GHCR digest、SBOM 和扫描结果。
 - [x] 提交：`docs: record P1-C headless evidence`，不 push（`b994849`）。
