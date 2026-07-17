@@ -341,8 +341,8 @@ P0-A 已完成 Linux/headless 范围的独立实施计划，状态为 `HEADLESS 
 1. P0-B 已达到 `LOCAL HEADLESS PASS`；在固定测试服务器复跑相同门禁并证明 Windows 参考设备可达后，才更新为远程 `PASS`。
 2. P1-B 已达到 `HEADLESS PASS`；保持扩展后的持久化门禁稳定，Windows 消费证据不反向替代或扩大该结论。
 3. P0-B 为 `PASS` 后，在 Windows 11 x64 参考设备执行 P0-C。此前 Windows 安装、交互、状态保留和断网重启保持 `DEVICE NOT RUN`。
-4. P1-A 的具体修正由 P0-C 设备结果排序；没有 Windows 设备证据时只推进与平台无关的 controller、repository 和布局算法测试。
-5. P1-C 必须等待 P0-A、P0-B 和 P1-B 的关键安全与可靠性边界稳定；P2 的进入与退出条件按第 5.7 节执行。
+4. P1-A 的版本生命周期已达到 headless pass；下一项是在独立确认的数据语义下推进平台无关的实例复制、删除、卸载和数据保留。
+5. P1-C 已达到 `HEADLESS AUTOMATION PASS / LIVE QUALITY PASS / WINDOWS DEVICE NOT RUN`；只保留 Windows WebView2 设备矩阵，P2 的进入与退出条件仍按第 5.7 节执行。
 
 P0-B、P0-C 和所有 P1/P2 工作分别在其前置条件满足后创建独立设计补充或实施计划，不在 P0-A 计划中提前实现。
 

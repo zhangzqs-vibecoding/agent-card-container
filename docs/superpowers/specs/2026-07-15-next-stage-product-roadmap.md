@@ -2,7 +2,8 @@
 
 状态：**执行中，作为后续工作包入口**
 日期：2026-07-15（Asia/Shanghai）  
-适用基线：`develop` / `84b4d33`
+最近核对：2026-07-17（Asia/Shanghai）
+适用基线：`develop` / `52e7422`
 上位设计：`docs/superpowers/specs/2026-07-13-mvp-closure-roadmap-design.md`
 
 ## 1. 目标
@@ -20,7 +21,7 @@
 - NativeCard 真实 DeepSeek 生成、确定性校验、签名、下载和独立复核链路。
 - PostgreSQL/MinIO 持久化、服务重启恢复、成对备份恢复和远程制品下载门禁。
 - worker 原子入队、租约 heartbeat、owner fencing、有限重试、取消传播和发布幂等。
-- CodeCard 受控 builder、固定评测合同、Linux Chromium 离线运行、localhost RPC 和签名发布自动化。
+- CodeCard 受控 builder、固定评测合同、Linux Chromium 离线运行、localhost RPC、签名发布、public GHCR/SBOM/扫描和 DeepSeek 19/20 真实质量门。
 - 工作区 12 列网格、拖动、缩放、碰撞避让、300ms SQLite 持久化、重启恢复和失败回滚。
 - 同卡版本生命周期已完成云端可信基线、同 `cardId` 新版本、严格 display version 和 PostgreSQL/MinIO 恢复，以及客户端差异确认、状态备份、授权收缩、原子升级/回滚和 runtime 失败补偿。
 
@@ -54,19 +55,19 @@
 
 完成标准：P0-C 设备矩阵全部执行；未执行项保持 `NOT RUN`，CI 构建不能替代设备证据。
 
-### P1：完成 CodeCard 真实模型与 Windows 链路
+### P1：CodeCard Linux/Web 已通过，等待 Windows 链路
 
 CodeCard 是产品差异化能力，应作为下一项主要研发工作。
 
-受控 builder 和 Linux/headless 自动化已经完成；剩余交付内容：
+受控 builder、Linux/headless 自动化和真实模型质量门已经完成。以下行为已在 Linux Chromium、Flutter/headless 或真实模型门禁中通过，但仍需由 Windows WebView2 设备矩阵复验：
 
 - Flutter 通过桌面 WebView2 加载本地 Runtime Server 提供的制品。
 - 卡片内部 JavaScript 通过 localhost HTTP RPC 调用 Capability Broker；RPC 使用随机卡片域、短期会话令牌、方法白名单和参数校验。
 - 已安装资源包、本地状态和必要运行时元数据持久化，断网与应用重启后可用。
 - WebView 崩溃只隔离单张卡片，不拖垮主应用。
-- 使用临时模型凭据执行预先冻结的 20 例真实 CodeCard 质量门，并记录质量、调用次数、token 和成本证据。
+- 预先冻结的 20 例真实 CodeCard 质量门已在 run `29549396016` 达到 19/20，并记录调用次数、token 和成本边界。
 
-质量门槛必须在真实模型评测前锁定。建议第一版固定 20 个用例，覆盖自由画板、小游戏、数据可视化、复杂交互、纯离线工具各 4 个；记录首次通过率、修复后通过率、平均调用次数、token 和估算成本。具体通过率应在独立 P1-C 设计评审中确认，不能测试后再调整门槛。
+质量门槛已在评测前锁定为总计至少 16/20、每类至少 3/4，每例最多三次调用；实际运行没有在看到结果后调整门槛。
 
 ### P1：补齐卡片实例和版本生命周期
 
@@ -127,7 +128,7 @@ Agent 应保持以下边界：
 |---:|---|---|---|
 | 1 | P1-A 客户端升级与回滚 | **HEADLESS PASS**：能力差异、状态保护、原子切换和回滚 | 已完成的云端同卡迭代 |
 | 2 | P1-A 实例生命周期 | 复制、删除、卸载及数据保留选择 | 已完成的布局持久化 |
-| 3 | P1-C 真实 CodeCard 质量门 | 20 例真实模型质量和成本证据 | 临时模型凭据与价格配置 |
+| 3 | P1-C 真实 CodeCard 质量门 | **LIVE QUALITY PASS**：20 例中 19 例通过及成本证据 | 已完成 |
 | 4 | P0-C/P1-C Windows 设备闸门 | NativeCard、CodeCard、三类 Surface 和离线证据 | 固定测试服务、Windows 设备 |
 | 5 | 可观测性与配额 | 可运营、可控成本的测试环境 | 真实生成数据 |
 | 6 | P2 Windows 可信发行 | 可供外部测试的签名安装包 | P0/P1 闭环通过 |
@@ -136,9 +137,9 @@ Agent 应保持以下边界：
 
 ## 6. 最近三个可执行动作
 
-1. 完成 Flutter 端同卡升级、能力差异确认、状态备份和失败回滚。
-2. 完成实例复制、删除、卸载及数据保留选择，并复用同一状态备份模型。
-3. 准备固定测试服务和 Windows 候选构建，在同一 commit 上执行 NativeCard 与 CodeCard 的真实设备矩阵；有临时模型凭据和价格配置时同步运行 CodeCard 20 例质量门。
+1. 完成实例复制、删除、卸载及数据保留选择，并复用同一状态备份模型。
+2. 补齐可观测性与配额的独立设计，优先实现不依赖固定服务器的指标和安全查询边界。
+3. 准备固定测试服务和 Windows 候选构建，在同一 commit 上执行 NativeCard 与 CodeCard 的真实设备矩阵。
 
 上述每项都应建立或沿用独立实施计划，先写失败测试，再做最小实现，最后生成与精确 commit 绑定的验证证据。
 
