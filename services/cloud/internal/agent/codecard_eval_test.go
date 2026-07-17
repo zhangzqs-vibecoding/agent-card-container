@@ -247,6 +247,11 @@ func TestCodeCardEvalFailureKindUsesStablePipelineCategories(t *testing.T) {
 		{name: "provider", err: errors.New("upstream response body"), want: "provider"},
 		{name: "source envelope", err: fmt.Errorf("%w: %w", ErrValidationFailed, ErrWebSourceInvalid), want: "source-envelope"},
 		{name: "sandbox", err: fmt.Errorf("%w: %w", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-build"},
+		{name: "sandbox policy", err: fmt.Errorf("%w: %w: $ node scripts/validate-dependencies.mjs", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-policy"},
+		{name: "sandbox typecheck", err: fmt.Errorf("%w: %w: $ tsc --noEmit", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-typecheck"},
+		{name: "sandbox test", err: fmt.Errorf("%w: %w: $ vitest run --passWithNoTests", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-test"},
+		{name: "sandbox vite", err: fmt.Errorf("%w: %w: $ vite build", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-vite"},
+		{name: "sandbox bundle", err: fmt.Errorf("%w: %w: $ node scripts/validate-bundle.mjs", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-bundle"},
 		{name: "artifact", err: fmt.Errorf("%w: %w", ErrValidationFailed, ErrWebArtifactInvalid), want: "artifact"},
 		{name: "validation", err: ErrValidationFailed, want: "validation"},
 	}

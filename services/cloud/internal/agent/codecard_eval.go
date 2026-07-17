@@ -197,7 +197,7 @@ func codeCardEvalFailureKind(err error) string {
 	case errors.Is(err, ErrWebSourceInvalid):
 		return "source-envelope"
 	case errors.Is(err, ErrWebBuildFailed):
-		return "sandbox-build"
+		return codeCardSandboxFailureKind(err.Error())
 	case errors.Is(err, ErrWebArtifactInvalid):
 		return "artifact"
 	case errors.Is(err, ErrValidationFailed):
@@ -205,6 +205,25 @@ func codeCardEvalFailureKind(err error) string {
 	default:
 		return "provider"
 	}
+}
+
+func codeCardSandboxFailureKind(message string) string {
+	stages := []struct {
+		marker string
+		kind   string
+	}{
+		{marker: "$ node scripts/validate-bundle.mjs", kind: "sandbox-bundle"},
+		{marker: "$ vite build", kind: "sandbox-vite"},
+		{marker: "$ vitest run --passWithNoTests", kind: "sandbox-test"},
+		{marker: "$ tsc --noEmit", kind: "sandbox-typecheck"},
+		{marker: "$ node scripts/validate-dependencies.mjs", kind: "sandbox-policy"},
+	}
+	for _, stage := range stages {
+		if strings.Contains(message, stage.marker) {
+			return stage.kind
+		}
+	}
+	return "sandbox-build"
 }
 
 func loadCodeCardEvalCasesFile(path string) ([]codeCardEvalCase, error) {
