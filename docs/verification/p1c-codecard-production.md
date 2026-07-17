@@ -1,14 +1,14 @@
 # P1-C CodeCard 生产链路验收记录
 
-状态：**HEADLESS AUTOMATION PASS / LIVE QUALITY NOT RUN / WINDOWS DEVICE NOT RUN**  
-记录日期：2026-07-15（Asia/Shanghai）  
+状态：**HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL / WINDOWS DEVICE NOT RUN**
+记录日期：2026-07-16（Asia/Shanghai）
 验证提交：`5a6a7fd3f61938c0ce0fbc2e0cf6aef04c16520b`
 
 ## 结论
 
 P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受控 builder、CodeCard 源码合同、本地 JavaScript SDK、真实 Chromium 离线/RPC、签名发布以及 PostgreSQL/MinIO 故障恢复均通过。
 
-本记录不是完整 P1-C 产品验收。真实 DeepSeek CodeCard 20 例付费质量门尚未注入临时凭据执行，Windows WebView2 参考设备矩阵也未执行，因此不得标记为 `P1-C PASS` 或发布就绪。
+本记录不是完整 P1-C 产品验收。真实 DeepSeek CodeCard 20 例付费质量门已执行但未达到质量阈值，Windows WebView2 参考设备矩阵也未执行，因此不得标记为 `P1-C PASS` 或发布就绪。
 
 ## 实施基线
 
@@ -30,7 +30,9 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 - 只有配置可验证的模型单价且总费用不超过 5 美元时，才允许声明费用门通过。
 - CI 为显式 opt-in，并要求受保护环境确认；不保存 prompt、生成源码或上游响应正文。
 
-上述条目证明质量门是有界且可复核的，不证明真实模型已经达到通过率。当前真实 CodeCard 评测结果为 **NOT RUN**。
+上述条目证明质量门是有界且可复核的，不证明真实模型已经达到通过率。2026-07-16 在提交 `9a3bd64` 上通过 GitHub run `29466241445` 执行 `deepseek-v4-pro`：20 个案例全部耗尽三次调用且均失败，汇总为 0/20、60 次模型调用、40,259 输入 tokens、101,763 输出 tokens、1,408,390 ms。该结果为 **LIVE QUALITY FAIL**，不是环境未执行；日志未保存 prompt、生成源码、上游正文或凭据。
+
+第一次运行只产生过粗的 `generation_failed` 类别，无法区分源码信封解析与沙箱构建失败。提交 `cffdb60` 增加了不包含正文的稳定阶段分类；其真实诊断重跑尚未执行，不能据此推断失败根因。
 
 ## 自动化证据
 
@@ -57,8 +59,8 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 
 ## 剩余产品闸门
 
-1. 在明确确认、临时凭据和已配置模型价格的环境中运行固定 20 例真实 CodeCard gate；保存脱敏汇总，不保存生成正文。
+1. 在网络恢复后，以 `cffdb60` 或后续包含稳定阶段分类的提交重跑固定 20 例真实 CodeCard gate，定位系统性失败阶段并修复；保存脱敏汇总，不保存生成正文。
 2. 在 Windows 11 x64 参考设备运行 `packaging/windows/run-codecard-device-gate.ps1`，完成 WebView2、本地 JavaScript、三个 Surface、DPI/IME、离线重启、storage 和单卡崩溃隔离矩阵。
 3. 在 public GitHub 仓库实际触发 builder workflow，记录 GHCR RepoDigest、SBOM 和扫描结果。
 
-三项未完成前，P1-C 只保持 **HEADLESS AUTOMATION PASS**。
+三项未完成前，P1-C 只保持 **HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL**。
