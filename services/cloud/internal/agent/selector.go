@@ -18,6 +18,9 @@ var (
 	ErrForbiddenRequirement   = errors.New("forbidden requirement")
 	ErrUnsupportedRequirement = errors.New("unsupported requirement")
 	ErrValidationFailed       = errors.New("validation failed")
+	ErrWebSourceInvalid       = errors.New("web source invalid")
+	ErrWebBuildFailed         = errors.New("web sandbox build failed")
+	ErrWebArtifactInvalid     = errors.New("web artifact invalid")
 )
 
 type Decision struct {

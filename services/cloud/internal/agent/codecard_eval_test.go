@@ -195,7 +195,7 @@ func TestCodeCardEvalRunnerIsSerialBoundedAndDoesNotLeakContent(t *testing.T) {
 	if report.Total != 20 || report.Successes != 19 || report.ModelCalls != 20 || report.InputTokens != 2000 || report.OutputTokens != 1000 {
 		t.Fatalf("report = %#v", report)
 	}
-	if generator.maxActive != 1 || len(generator.sessions) != 20 || report.FailureKinds["generation_failed"] != 1 {
+	if generator.maxActive != 1 || len(generator.sessions) != 20 || report.FailureKinds["provider"] != 1 {
 		t.Fatalf("generator=%#v failures=%#v", generator, report.FailureKinds)
 	}
 	if !report.CostKnown || report.EstimatedCostUSD <= 0 {
@@ -233,6 +233,29 @@ func TestCodeCardEvalRunnerRequiresKnownPositivePricing(t *testing.T) {
 	)
 	if report.CostKnown || !containsString(report.Failures(), "cost:unknown") {
 		t.Fatalf("report = %#v failures=%v", report, report.Failures())
+	}
+}
+
+func TestCodeCardEvalFailureKindUsesStablePipelineCategories(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{name: "provider", err: errors.New("upstream response body"), want: "provider"},
+		{name: "source envelope", err: fmt.Errorf("%w: %w", ErrValidationFailed, ErrWebSourceInvalid), want: "source-envelope"},
+		{name: "sandbox", err: fmt.Errorf("%w: %w", ErrValidationFailed, ErrWebBuildFailed), want: "sandbox-build"},
+		{name: "artifact", err: fmt.Errorf("%w: %w", ErrValidationFailed, ErrWebArtifactInvalid), want: "artifact"},
+		{name: "validation", err: ErrValidationFailed, want: "validation"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := codeCardEvalFailureKind(test.err); got != test.want {
+				t.Fatalf("codeCardEvalFailureKind() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

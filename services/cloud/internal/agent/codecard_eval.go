@@ -148,7 +148,7 @@ func runCodeCardEvalSuite(
 		case ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
 			kind = "cancelled"
 		case err != nil:
-			kind = "generation_failed"
+			kind = codeCardEvalFailureKind(err)
 		case len(result.Files["index.html"]) == 0:
 			kind = "invalid_artifact"
 		default:
@@ -190,6 +190,21 @@ func runCodeCardEvalSuite(
 		report.Duration.Milliseconds(),
 	)
 	return report
+}
+
+func codeCardEvalFailureKind(err error) string {
+	switch {
+	case errors.Is(err, ErrWebSourceInvalid):
+		return "source-envelope"
+	case errors.Is(err, ErrWebBuildFailed):
+		return "sandbox-build"
+	case errors.Is(err, ErrWebArtifactInvalid):
+		return "artifact"
+	case errors.Is(err, ErrValidationFailed):
+		return "validation"
+	default:
+		return "provider"
+	}
 }
 
 func loadCodeCardEvalCasesFile(path string) ([]codeCardEvalCase, error) {

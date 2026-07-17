@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -164,6 +165,7 @@ func (codingAgent *CodingAgent) generateWeb(
 	}
 	result := Result{Runtime: decision.Runtime, Reason: decision.Reason}
 	var validationError string
+	var validationCause error
 	providerRetries := 0
 	for attempt := 1; attempt <= maxModelAttempts; attempt++ {
 		if contextErr := ctx.Err(); contextErr != nil {
@@ -212,6 +214,7 @@ func (codingAgent *CodingAgent) generateWeb(
 		files, err := decodeWebSource(response.Content)
 		if err != nil {
 			validationError = err.Error()
+			validationCause = fmt.Errorf("%w: %v", ErrWebSourceInvalid, err)
 			continue
 		}
 		buildStartedAt := time.Now()
@@ -228,6 +231,7 @@ func (codingAgent *CodingAgent) generateWeb(
 				"errorKind", observability.ErrorKind(err),
 			)
 			validationError = err.Error()
+			validationCause = fmt.Errorf("%w: %v", ErrWebBuildFailed, err)
 			continue
 		}
 		codingAgent.logger.InfoContext(ctx, "sandbox_build_completed",
@@ -237,13 +241,17 @@ func (codingAgent *CodingAgent) generateWeb(
 		)
 		if len(output) == 0 {
 			validationError = "sandbox produced no files"
+			validationCause = ErrWebArtifactInvalid
 			continue
 		}
 		result.Files = output
 		result.Sources = cloneSourceFiles(files)
 		return result, nil
 	}
-	return result, fmt.Errorf("%w: %s", ErrValidationFailed, validationError)
+	if validationCause == nil {
+		validationCause = errors.New(validationError)
+	}
+	return result, fmt.Errorf("%w: %w", ErrValidationFailed, validationCause)
 }
 
 func iterationDecision(request Request, selected Decision) (Decision, error) {
