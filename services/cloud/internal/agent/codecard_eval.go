@@ -35,6 +35,8 @@ var codeCardEvalCategoryCounts = map[string]int{
 	"offline-tool":  4,
 }
 
+var typeScriptDiagnosticPattern = regexp.MustCompile(`\bTS[0-9]{4}\b`)
+
 type codeCardEvalCase struct {
 	ID                  string   `json:"id"`
 	Category            string   `json:"category"`
@@ -208,6 +210,11 @@ func codeCardEvalFailureKind(err error) string {
 }
 
 func codeCardSandboxFailureKind(message string) string {
+	if strings.Contains(message, "$ tsc --noEmit") {
+		if diagnostic := typeScriptDiagnosticPattern.FindString(message); diagnostic != "" {
+			return "sandbox-typecheck-" + strings.ToLower(diagnostic)
+		}
+	}
 	stages := []struct {
 		marker string
 		kind   string
