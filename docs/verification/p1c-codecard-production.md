@@ -1,6 +1,6 @@
 # P1-C CodeCard 生产链路验收记录
 
-状态：**HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL / WINDOWS DEVICE NOT RUN**
+状态：**HEADLESS AUTOMATION PASS / LIVE QUALITY PASS / WINDOWS DEVICE NOT RUN**
 记录日期：2026-07-16（Asia/Shanghai）
 验证提交：`5a6a7fd3f61938c0ce0fbc2e0cf6aef04c16520b`
 
@@ -34,7 +34,9 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 
 第一次运行只产生过粗的 `generation_failed` 类别，无法区分源码信封解析与沙箱构建失败。提交 `cffdb60` 和 `bd89e5b` 增加了不包含正文的稳定管线与沙箱阶段分类。2026-07-17 在 `bd89e5b` 上执行 GitHub run `29546939570`：2/20 成功，56 次模型调用、37,419 输入 tokens、88,659 输出 tokens、1,283,935 ms；其余 18 个案例最终全部归类为 `sandbox-typecheck`。这证明系统性失败位于 TypeScript 严格检查层，不是模型 API、源码信封、依赖策略、Vitest、Vite 或 bundle 校验层。
 
-提交 `a674e5c` 进一步只提取 `TS` 加四位数字的稳定诊断编号，不记录文件名、源码行或错误正文；对应真实诊断重跑尚未执行。
+提交 `a674e5c` 进一步只提取 `TS` 加四位数字的稳定诊断编号，不记录文件名、源码行或错误正文。run `29548204248` 在 `4a3bcfd` 上为 0/20，全部 20 例稳定归类为 `sandbox-typecheck-ts2307`，确认失败集中于缺失模块。模板自身的 Preact、Vitest 和本地 SDK 依赖在固定 builder 基线中可解析；根因是模型被允许生成 `src/card.test.tsx`，却常规引入模板未声明的测试库。
+
+提交 `3f3123e` 通过 TDD 将模型输出收紧为 `src/card.tsx` 和可选 `src/card.css`，测试继续由平台固定门禁负责，没有新增依赖或放宽 TypeScript。2026-07-17 的验证 run `29549396016` 通过：19/20 成功（门槛 16/20）、25 次模型调用、11,745 输入 tokens、36,916 输出 tokens、654,385 ms；唯一失败为 `sandbox-typecheck-ts2345`。日志仍未保存 prompt、生成源码、上游正文或凭据。
 
 ## 自动化证据
 
@@ -61,8 +63,7 @@ P1-C 的 Linux/headless 自动化范围已经闭环：固定评测合同、受�
 
 ## 剩余产品闸门
 
-1. 以 `a674e5c` 或后续提交重跑固定 20 例真实 CodeCard gate，取得 TypeScript 稳定诊断编号分布，据此修复模板 API/模型提示的系统性偏差；保存脱敏汇总，不保存生成正文。
-2. 在 Windows 11 x64 参考设备运行 `packaging/windows/run-codecard-device-gate.ps1`，完成 WebView2、本地 JavaScript、三个 Surface、DPI/IME、离线重启、storage 和单卡崩溃隔离矩阵。
-3. 在 public GitHub 仓库实际触发 builder workflow，记录 GHCR RepoDigest、SBOM 和扫描结果。
+1. 在 Windows 11 x64 参考设备运行 `packaging/windows/run-codecard-device-gate.ps1`，完成 WebView2、本地 JavaScript、三个 Surface、DPI/IME、离线重启、storage 和单卡崩溃隔离矩阵。
+2. 在 public GitHub 仓库实际触发 builder workflow，记录 GHCR RepoDigest、SBOM 和扫描结果。
 
-三项未完成前，P1-C 只保持 **HEADLESS AUTOMATION PASS / LIVE QUALITY FAIL**。
+Windows 设备门禁完成前，P1-C 保持 **HEADLESS AUTOMATION PASS / LIVE QUALITY PASS / WINDOWS DEVICE NOT RUN**。
